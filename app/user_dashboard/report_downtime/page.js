@@ -1,0 +1,1681 @@
+// app/user_dashboard/report_downtime/page.js
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { 
+  FaCalendarAlt, FaClock, FaExclamationTriangle, FaPaperPlane, 
+  FaSpinner, FaCheckCircle, FaHistory, FaSyncAlt, FaPlus, FaMinus, FaChartBar
+} from 'react-icons/fa';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
+import toast from 'react-hot-toast';
+
+// Force dynamic rendering to bypass prerendering
+export const dynamic = 'force-dynamic';
+
+const ReportDowntime = () => {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    issueTitle: '',
+    categories: [],
+    affectedChannel: 'ALL',
+    affectedPersona: 'ALL',
+    affectedMNO: 'ALL',
+    affectedPortal: 'ALL',
+    affectedType: 'ALL',
+    affectedService: 'ALL',
+    impactType: '',
+    modality: '',
+    reliabilityImpacted: 'NO',
+    startTime: null,
+    endTime: null,
+    duration: '',
+    concern: '',
+    reason: '',
+    resolution: '',
+    ticketId: '',
+    ticketLink: '',
+    systemUnavailability: '',
+    trackedBy: '',
+    remark: ''
+  });
+  
+  const [categoryTimes, setCategoryTimes] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [userInfo, setUserInfo] = useState(null);
+  const [topIssues, setTopIssues] = useState([]);
+  const [predefinedIssues, setPredefinedIssues] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const allCategories = [
+    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+    'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+    'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
+    'DEVICE CHANGE', 'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING',
+    'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
+    'REMITTANCE', 'BANK TO NAGAD'
+  ];
+  
+  const impactTypes = ['FULL', 'PARTIAL'];
+  const modalities = ['PLANNED', 'UNPLANNED'];
+  const concerns = ['INTERNAL', 'EXTERNAL'];
+  const [systemOptions, setSystemOptions] = useState([]);
+
+  // Debug initial state
+  useEffect(() => {
+    console.debug('Initial formData state:', formData);
+  }, []);
+
+  // Update system options when concern changes
+  useEffect(() => {
+    console.debug('Updating system options based on concern:', formData.concern);
+    if (formData.concern === 'INTERNAL') {
+      setSystemOptions(['SYSTEM', 'DATABASE', 'NETWORK', 'MIDDLEWARE', 'SMS GATEWAY']);
+    } else if (formData.concern === 'EXTERNAL') {
+      setSystemOptions(['EXTERNAL', 'SMS GATEWAY']);
+    } else {
+      setSystemOptions([]);
+    }
+    console.debug('Updated system options:', systemOptions);
+  }, [formData.concern]);
+
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      console.debug('Fetching initial data');
+      try {
+        setIsLoading(true);
+        
+        // Fetch user info
+        console.debug('Fetching user info from /api/user_dashboard/user_info');
+        const userResponse = await fetch('/api/user_dashboard/user_info');
+        const userData = await userResponse.json();
+        console.debug('User info response:', userData);
+        
+        if (userResponse.ok) {
+          setUserInfo(userData);
+          setFormData(prev => ({
+            ...prev,
+            trackedBy: userData.shortName || `${userData.firstName} ${userData.lastName}`
+          }));
+          console.debug('Updated formData with user info:', { trackedBy: userData.shortName || `${userData.firstName} ${userData.lastName}` });
+        } else {
+          console.error('Failed to fetch user info:', userData);
+        }
+        
+        // Fetch top issues
+        console.debug('Fetching top issues from /api/user_dashboard/report_downtime');
+        const issuesResponse = await fetch('/api/user_dashboard/report_downtime');
+        const issuesData = await issuesResponse.json();
+        console.debug('Top issues response:', issuesData);
+
+        if (issuesResponse.ok) {
+          setTopIssues(issuesData.topIssues || []);
+        } else {
+          console.error('Failed to fetch top issues:', issuesData);
+        }
+        
+        // Fetch predefined issues
+        console.debug('Fetching predefined issues from /api/user_dashboard/report_downtime/pre_defined_issue');
+        const predefinedResponse = await fetch('/api/user_dashboard/report_downtime/pre_defined_issue');
+        const predefinedData = await predefinedResponse.json();
+        console.debug('Predefined issues response:', predefinedData);
+        
+        if (predefinedResponse.ok) {
+          setPredefinedIssues(predefinedData || []);
+        } else {
+          console.error('Failed to fetch predefined issues:', predefinedData);
+        }
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      } finally {
+        setIsLoading(false);
+        console.debug('Initial data fetch completed, isLoading set to false');
+      }
+    };
+    
+    fetchData();
+  }, []);
+
+  // Update category times
+  useEffect(() => {
+    console.debug('Updating category times based on categories:', formData.categories);
+    const newCategoryTimes = { ...categoryTimes };
+    let hasChanges = false;
+    
+    formData.categories.forEach(category => {
+      if (!newCategoryTimes[category]) {
+        newCategoryTimes[category] = {
+          startTime: formData.startTime,
+          endTime: formData.endTime
+        };
+        hasChanges = true;
+      }
+    });
+    
+    Object.keys(newCategoryTimes).forEach(category => {
+      if (!formData.categories.includes(category)) {
+        delete newCategoryTimes[category];
+        hasChanges = true;
+      }
+    });
+    
+    if (hasChanges) {
+      setCategoryTimes(newCategoryTimes);
+      console.debug('Updated categoryTimes:', newCategoryTimes);
+    }
+  }, [formData.categories, formData.startTime, formData.endTime]);
+
+  const toggleCategory = (category) => {
+    console.debug('Toggling category:', category);
+    setFormData(prev => {
+      const newCategories = prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category];
+      console.debug('Updated categories:', newCategories);
+      return { ...prev, categories: newCategories };
+    });
+  };
+
+  const applyIssueTemplate = (issue) => {
+    console.debug('Applying issue template:', issue);
+    setFormData(prev => ({
+      ...prev,
+      issueTitle: issue.title,
+      categories: issue.categories,
+      affectedService: issue.template.affectedService,
+      impactType: issue.template.impactType,
+      modality: issue.template.modality,
+      reliabilityImpacted: issue.template.reliabilityImpacted,
+      systemUnavailability: issue.template.systemUnavailability,
+      reason: issue.template.reason,
+      resolution: issue.template.resolution
+    }));
+    
+    toast.success(`"${issue.title}" template applied`, {
+      id: 'template-applied',
+      icon: <FaSyncAlt className="text-blue-500" />,
+      duration: 3000,
+    });
+    console.debug('Applied issue template, updated formData:', formData);
+  };
+
+  useEffect(() => {
+    console.debug('Recalculating duration and reliability:', { 
+      startTime: formData.startTime, 
+      endTime: formData.endTime,
+      impactType: formData.impactType,
+      modality: formData.modality,
+      concern: formData.concern
+    });
+    
+    if (formData.startTime && formData.endTime) {
+      const start = new Date(formData.startTime);
+      const end = new Date(formData.endTime);
+      
+      if (start > end) {
+        setErrors(prev => ({ ...prev, endTime: 'End time cannot be before start time' }));
+        console.debug('Time validation failed:', { start, end });
+        return;
+      }
+      
+      const diffMs = end - start;
+      const diffHrs = Math.floor(diffMs / 3600000);
+      const diffMins = Math.floor((diffMs % 3600000) / 60000);
+      
+      setFormData(prev => ({
+        ...prev,
+        duration: `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`
+      }));
+      console.debug('Updated duration:', { duration: `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}` });
+    }
+
+    // Automatically set reliabilityImpacted based on conditions
+    if (formData.impactType === 'FULL' && formData.modality === 'UNPLANNED' && formData.concern === 'INTERNAL') {
+      setFormData(prev => ({ ...prev, reliabilityImpacted: 'YES' }));
+      console.debug('Set reliabilityImpacted to YES');
+    } else {
+      setFormData(prev => ({ ...prev, reliabilityImpacted: 'NO' }));
+      console.debug('Set reliabilityImpacted to NO');
+    }
+  }, [formData.startTime, formData.endTime, formData.impactType, formData.modality, formData.concern]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    console.debug('Handling input change:', { name, value });
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+      console.debug('Cleared error for:', name);
+    }
+  };
+
+  const handleDateTimeChange = (name, date) => {
+    console.debug('Handling datetime change:', { name, date });
+    setFormData(prev => ({ ...prev, [name]: date }));
+    
+    if (name === 'startTime' || name === 'endTime') {
+      const newCategoryTimes = { ...categoryTimes };
+      Object.keys(newCategoryTimes).forEach(category => {
+        newCategoryTimes[category][name] = date;
+      });
+      setCategoryTimes(newCategoryTimes);
+      console.debug('Updated categoryTimes with new datetime:', newCategoryTimes);
+    }
+    
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+      console.debug('Cleared error for:', name);
+    }
+  };
+
+  const handleCategoryTimeChange = (category, name, date) => {
+    console.debug('Handling category time change:', { category, name, date });
+    setCategoryTimes(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [name]: date
+      }
+    }));
+    
+    if (errors[`${category}-${name}`]) {
+      setErrors(prev => ({ ...prev, [`${category}-${name}`]: '' }));
+      console.debug('Cleared error for:', `${category}-${name}`);
+    }
+  };
+
+  useEffect(() => {
+    console.debug('Affected Channel changed:', formData.affectedChannel);
+    
+    if (formData.affectedChannel === 'ALL') {
+      setFormData(prev => ({
+        ...prev,
+        affectedService: 'ALL',
+        affectedPersona: 'ALL',
+        affectedMNO: 'ALL',
+        affectedPortal: 'ALL',
+        affectedType: 'ALL'
+      }));
+    } else {
+      const resetFields = {
+        affectedPersona: null,
+        affectedMNO: null,
+        affectedPortal: null,
+        affectedType: null
+      };
+
+      if (formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') {
+        setFormData(prev => ({
+          ...prev,
+          ...resetFields,
+          affectedPersona: 'ALL'
+        }));
+      } else if (formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') {
+        setFormData(prev => ({
+          ...prev,
+          ...resetFields,
+          affectedMNO: 'ALL'
+        }));
+      } else if (formData.affectedChannel === 'WEB') {
+        setFormData(prev => ({
+          ...prev,
+          ...resetFields,
+          affectedPortal: 'ALL'
+        }));
+      } else if (formData.affectedChannel === 'INWARD SERVICE') {
+        setFormData(prev => ({
+          ...prev,
+          ...resetFields,
+          affectedType: 'ALL'
+        }));
+      }
+    }
+  }, [formData.affectedChannel]);
+
+  const validateForm = () => {
+    console.debug('Validating form');
+    const newErrors = {};
+    
+    const alwaysRequired = [
+      'issueTitle', 'impactType', 'modality', 
+      'startTime', 'endTime', 'concern', 
+      'reason', 'resolution', 'systemUnavailability'
+    ];
+    
+    alwaysRequired.forEach(field => {
+      if (!formData[field]) {
+        newErrors[field] = 'This field is required';
+      }
+    });
+
+    if (formData.categories.length === 0) {
+      newErrors.categories = 'At least one category is required';
+    }
+
+    if (formData.startTime && formData.endTime) {
+      const start = new Date(formData.startTime);
+      const end = new Date(formData.endTime);
+      
+      if (start > end) {
+        newErrors.endTime = 'End time cannot be before start time';
+      }
+    }
+
+    if (formData.affectedChannel !== 'ALL') {
+      if (!formData.affectedService) {
+        newErrors.affectedService = 'This field is required';
+      }
+
+      if ((formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') && !formData.affectedPersona) {
+        newErrors.affectedPersona = 'This field is required';
+      }
+      if ((formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') && !formData.affectedMNO) {
+        newErrors.affectedMNO = 'This field is required';
+      }
+      if (formData.affectedChannel === 'WEB' && !formData.affectedPortal) {
+        newErrors.affectedPortal = 'This field is required';
+      }
+      if (formData.affectedChannel === 'INWARD SERVICE' && !formData.affectedType) {
+        newErrors.affectedType = 'This field is required';
+      }
+    }
+
+    setErrors(newErrors);
+    console.debug('Validation result:', { errors: newErrors, isValid: Object.keys(newErrors).length === 0 });
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    console.debug('Form submission initiated');
+    
+    if (!validateForm()) {
+      console.debug('Form validation failed, submission aborted');
+      toast.error('Please fix validation errors before submitting', {
+        duration: 4000,
+        position: 'top-right',
+        icon: <FaExclamationTriangle className="text-red-500" />
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    console.debug('Setting isSubmitting to true');
+    
+    try {
+      const submissionData = {
+        ...formData,
+        ...(formData.affectedChannel === 'ALL' && {
+          affectedService: 'ALL',
+          affectedPersona: 'ALL',
+          affectedMNO: 'ALL',
+          affectedPortal: 'ALL',
+          affectedType: 'ALL'
+        }),
+        categoryTimes
+      };
+      
+      console.debug('Submitting downtime data:', submissionData);
+      
+      const response = await fetch('/api/user_dashboard/report_downtime', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submissionData),
+      });
+      
+      console.debug('API response received:', { status: response.status });
+      const result = await response.json();
+      console.debug('API response data:', result);
+      
+      if (response.ok) {
+        const message = formData.categories.length > 1
+          ? `Downtime reported for ${formData.categories.length} categories! ID: ${result.downtimeId}`
+          : `Downtime reported successfully! ID: ${result.downtimeId}`;
+        
+        toast.success(message, {
+          duration: 5000,
+          position: 'top-right',
+          icon: <FaCheckCircle className="text-green-500" />,
+          style: {
+            background: '#f0fdf4',
+            color: '#15803d',
+            padding: '16px',
+            border: '1px solid #bbf7d0',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          }
+        });
+        console.debug('Submission successful:', { message });
+        
+        setFormData({
+          issueTitle: '',
+          categories: [],
+          affectedChannel: 'ALL',
+          affectedPersona: 'ALL',
+          affectedMNO: 'ALL',
+          affectedPortal: 'ALL',
+          affectedType: 'ALL',
+          affectedService: 'ALL',
+          impactType: '',
+          modality: '',
+          reliabilityImpacted: 'NO',
+          startTime: null,
+          endTime: null,
+          duration: '',
+          concern: '',
+          reason: '',
+          resolution: '',
+          ticketId: '',
+          ticketLink: '',
+          systemUnavailability: '',
+          trackedBy: userInfo?.shortName || `${userInfo?.firstName} ${userInfo?.lastName}`,
+          remark: ''
+        });
+        setCategoryTimes({});
+        console.debug('Form and categoryTimes reset');
+        
+        setTimeout(() => {
+          console.debug('Redirecting to /user_dashboard/downtime_log');
+          router.push('/user_dashboard/downtime_log');
+        }, 3000);
+      } else {
+        throw new Error(result.message || 'Failed to report downtime');
+      }
+    } catch (error) {
+      console.error('Submission error:', { message: error.message, stack: error.stack });
+      toast.error(error.message || 'Failed to report downtime. Please try again.', {
+        id: 'downtime-error',
+        duration: 4000,
+        position: 'top-right',
+        style: {
+          background: '#fef2f2',
+          color: '#b91c1c',
+          padding: '16px',
+          border: '1px solid #fecaca',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+        }
+      });
+    } finally {
+      setIsSubmitting(false);
+      console.debug('Setting isSubmitting to false');
+    }
+  };
+
+  const CustomDateTimeInput = ({ value, onClick, placeholder }) => (
+    <div 
+      onClick={onClick}
+      className={`w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400 cursor-pointer flex items-center ${
+        !value ? 'text-gray-400' : ''
+      }`}
+    >
+      <FaCalendarAlt className="mr-3 text-blue-500" />
+      <span className="flex-grow">{value || placeholder}</span>
+      <FaClock className="ml-auto text-blue-500" />
+    </div>
+  );
+
+  const formatDateTime = (date) => {
+    if (!date) return 'Not set';
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Dhaka' // User is in +06 timezone
+    });
+    const formatted = formatter.format(new Date(date));
+    console.debug('Formatted datetime:', { input: date, output: formatted });
+    return formatted;
+  };
+
+  const CategoryBadge = ({ category, selected }) => (
+    <div 
+      onClick={() => toggleCategory(category)}
+      className={`px-3 py-2 rounded-full cursor-pointer transition-all flex items-center ${
+        selected 
+          ? 'bg-blue-600 text-white' 
+          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+      }`}
+    >
+      <span className="mr-2">{category}</span>
+      {selected ? <FaMinus size={12} /> : <FaPlus size={12} />}
+    </div>
+  );
+
+  const getAffectedServices = () => {
+    console.debug('Getting affected services:', { affectedChannel: formData.affectedChannel, affectedPersona: formData.affectedPersona, affectedPortal: formData.affectedPortal });
+    
+    if (formData.affectedChannel === 'ALL') {
+      return ['ALL'];
+    }
+    
+    if (formData.affectedChannel === 'APP') {
+      if (['CU', 'AG'].includes(formData.affectedPersona)) {
+        return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION'];
+      } else if (['DSO', 'DH'].includes(formData.affectedPersona)) {
+        return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY'];
+      }
+      return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION'];
+    }
+    if (formData.affectedChannel === 'USSD') {
+      return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY'];
+    }
+    if (formData.affectedChannel === 'SMS') {
+      return ['ALL', 'E-COM PAYMENT', 'REGISTRATION', 'KYC'];
+    }
+    if (formData.affectedChannel === 'WEB') {
+      if (formData.affectedPortal === 'CC') {
+        return ['ALL', 'PROFILE VISIBILITY', 'BLOCK OPERATION'];
+      }
+      if (formData.affectedPortal === 'SYS') {
+        return ['ALL', 'LIFTING', 'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION'];
+      }
+      if (formData.affectedPortal === 'DMS') {
+        return ['ALL', 'LIFTING', 'REFUND', 'DISBURSEMENT'];
+      }
+      return ['ALL'];
+    }
+    if (formData.affectedChannel === 'MIDDLEWARE') {
+      return ['ALL', 'BILL-PAYMENT'];
+    }
+    if (formData.affectedChannel === 'INWARD SERVICE') {
+      return ['ALL', 'REMITTANCE', 'BANK TO NAGAD'];
+    }
+    return [];
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-8 px-4 sm:px-6">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="p-3 rounded bg-white/20 mr-4">
+                    <FaExclamationTriangle className="text-2xl text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Downtime Report Form</h2>
+                    <p className="text-blue-100 text-sm">Fill all required fields accurately</p>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => {
+                    console.debug('Resetting form');
+                    setFormData({
+                      issueTitle: '',
+                      categories: [],
+                      affectedChannel: 'ALL',
+                      affectedPersona: 'ALL',
+                      affectedMNO: 'ALL',
+                      affectedPortal: 'ALL',
+                      affectedType: 'ALL',
+                      affectedService: 'ALL',
+                      impactType: '',
+                      modality: '',
+                      reliabilityImpacted: 'NO',
+                      startTime: null,
+                      endTime: null,
+                      duration: '',
+                      concern: '',
+                      reason: '',
+                      resolution: '',
+                      ticketId: '',
+                      ticketLink: '',
+                      systemUnavailability: '',
+                      trackedBy: userInfo?.shortName || `${userInfo?.firstName} ${userInfo?.lastName}`,
+                      remark: ''
+                    });
+                    setCategoryTimes({});
+                    setErrors({});
+                    toast.success('Form reset successfully!', {
+                      id: 'form-reset',
+                      icon: '🔄',
+                      duration: 3000,
+                    });
+                    console.debug('Form reset completed');
+                  }}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 transition-all group"
+                  aria-label="Reset form"
+                >
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    viewBox="0 0 24 24" 
+                    className="w-5 h-5 text-white group-hover:rotate-[-45deg] transition-transform"
+                  >
+                    <path 
+                      fill="currentColor" 
+                      d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 border border-blue-200 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mr-3 border-2 border-blue-300 shadow-inner">
+                        <FaCalendarAlt className="text-blue-600" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Downtime Date
+                        </label>
+                        <p className="text-xs text-blue-600">
+                          Based on start time selection
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="relative">
+                      <div className={`w-full px-4 py-5 rounded ${
+                        formData.startTime 
+                          ? "bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-300 text-blue-800 font-bold" 
+                          : "bg-white border-2 border-dashed border-gray-300 text-gray-400"
+                      } text-center text-lg shadow-inner`}>
+                        {formData.startTime 
+                          ? new Date(formData.startTime).toLocaleDateString('en-GB', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                              timeZone: 'Asia/Dhaka'
+                            })
+                          : 'Select start time to see date'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded p-5 border border-indigo-200 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mr-3 border-2 border-indigo-300 shadow-inner">
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          className="h-5 w-5 text-indigo-600" 
+                          viewBox="0 0 20 20" 
+                          fill="currentColor"
+                        >
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Tracked By
+                        </label>
+                        <p className="text-xs text-indigo-600">
+                          Automatically detected user
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="relative">
+                      <div className={`w-full px-4 py-5 rounded ${
+                        formData.trackedBy 
+                          ? "bg-gradient-to-r from-indigo-50 to-indigo-100 border border-indigo-300 text-indigo-800 font-bold" 
+                          : "bg-white border-2 border-dashed border-gray-300 text-gray-400"
+                      } text-center text-lg shadow-inner`}>
+                        {formData.trackedBy || 'User information will appear here'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Issue Title *
+                    </label>
+                    <input
+                      type="text"
+                      name="issueTitle"
+                      value={formData.issueTitle}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.issueTitle ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400`}
+                      placeholder="e.g., Delayed App Response"
+                    />
+                    {errors.issueTitle && (
+                      <p className="mt-1 text-sm text-red-600">{errors.issueTitle}</p>
+                    )}
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Affected Channel *
+                    </label>
+                    <select
+                      name="affectedChannel"
+                      value={formData.affectedChannel}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                    >
+                      <option value="ALL">ALL</option>
+                      <option value="APP">APP</option>
+                      <option value="USSD">USSD</option>
+                      <option value="WEB">WEB</option>
+                      <option value="SMS">SMS</option>
+                      <option value="MIDDLEWARE">MIDDLEWARE</option>
+                      <option value="INWARD SERVICE">INWARD SERVICE</option>
+                    </select>
+                  </div>
+
+                  {formData.affectedChannel !== 'ALL' && (
+                    <>
+                      {(formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Affected Persona
+                          </label>
+                          <select
+                            name="affectedPersona"
+                            value={formData.affectedPersona || 'ALL'}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                          >
+                            <option value="ALL">ALL</option>
+                            <option value="CU">CU</option>
+                            <option value="AG">AG</option>
+                            {formData.affectedChannel === 'APP' && (
+                              <>
+                                <option value="DSO">DSO</option>
+                                <option value="DH">DH</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+                      )}
+
+                      {(formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select MNO
+                          </label>
+                          <select
+                            name="affectedMNO"
+                            value={formData.affectedMNO || 'ALL'}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                          >
+                            <option value="ALL">ALL</option>
+                            <option value="GRAMEENPHONE">GRAMEENPHONE</option>
+                            <option value="BANGLALINK">BANGLALINK</option>
+                            <option value="ROBI/AIRTEL">ROBI/AIRTEL</option>
+                            <option value="TELETALK">TELETALK</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.affectedChannel === 'WEB' && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select Portal
+                          </label>
+                          <select
+                            name="affectedPortal"
+                            value={formData.affectedPortal || 'ALL'}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                          >
+                            <option value="ALL">ALL</option>
+                            <option value="CC">CC</option>
+                            <option value="SYS">SYS</option>
+                            <option value="DMS">DMS</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.affectedChannel === 'INWARD SERVICE' && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select Type
+                          </label>
+                          <select
+                            name="affectedType"
+                            value={formData.affectedType || 'ALL'}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                          >
+                            <option value="ALL">ALL</option>
+                            <option value="REMITTANCE">REMITTANCE</option>
+                            <option value="BANK TO NAGAD">BANK TO NAGAD</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Select Affected Service
+                        </label>
+                        <select
+                          name="affectedService"
+                          value={formData.affectedService}
+                          onChange={handleChange}
+                          className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+                        >
+                          {getAffectedServices().map(service => (
+                            <option key={service} value={service}>{service}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  
+                  <div className="md:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 bg-gray-50 rounded border border-gray-200">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 w-8 h-8 rounded bg-indigo-500 flex items-center justify-center mr-2 shadow-sm">
+                          <svg 
+                            xmlns="http://www.w3.org/2000/svg" 
+                            className="h-4 w-4 text-white" 
+                            viewBox="0 0 20 20" 
+                            fill="currentColor"
+                          >
+                            <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900">Affected Categories</h3>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            Select impacted services <span className="text-red-500">*</span>
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => {
+                            console.debug('Selecting all categories');
+                            setFormData(prev => ({
+                              ...prev,
+                              categories: [...allCategories]
+                            }));
+                            toast.success('All categories selected', {
+                              icon: '✅',
+                              position: 'top-right',
+                              duration: 2000
+                            });
+                          }}
+                          className="flex items-center bg-green-100 text-green-800 text-xs px-3 py-1.5 rounded hover:bg-green-200 transition-colors"
+                        >
+                          <FaPlus className="mr-1 text-[0.6rem]" />
+                          Select All
+                        </button>
+                        
+                        <div className="flex items-center bg-white border border-indigo-200 rounded-full px-2.5 py-0.5 shadow-inner">
+                          <span className="text-xs font-bold text-indigo-700">{formData.categories.length}</span>
+                          <span className="text-xs text-gray-500 ml-1">/{allCategories.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
+                      {allCategories.map(category => {
+                        const isSelected = formData.categories.includes(category);
+                        return (
+                          <div
+                            key={category}
+                            onClick={() => toggleCategory(category)}
+                            className={`
+                              relative p-2 rounded border cursor-pointer transition-colors
+                              flex items-center justify-center
+                              min-h-[40px] whitespace-nowrap overflow-hidden
+                              ${isSelected
+                                ? "border-indigo-500 bg-indigo-50 shadow-indigo-xs"
+                                : "border-gray-200 bg-white hover:border-indigo-300"
+                              }`
+                            }
+                          >
+                            {isSelected && (
+                              <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                <svg 
+                                  xmlns="http://www.w3.org/2000/svg" 
+                                  className="h-2.5 w-2.5 text-white" 
+                                  viewBox="0 0 20 20" 
+                                  fill="currentColor"
+                                >
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            )}
+                            
+                            <span className={`text-xs font-medium ${
+                              isSelected ? "text-indigo-700" : "text-gray-700"
+                            } truncate max-w-full px-1`}>
+                              {category}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {errors.categories && (
+                      <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded flex items-center animate-pulse">
+                        <FaExclamationTriangle className="text-red-500 text-sm mr-2 flex-shrink-0" />
+                        <p className="text-red-700 text-sm">{errors.categories}</p>
+                      </div>
+                    )}
+                    
+                    {formData.categories.length > 0 && (
+                      <div className="bg-indigo-50 rounded p-4 border border-indigo-100 mt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <FaCheckCircle className="text-indigo-600 text-sm mr-1.5" />
+                            <span className="text-sm font-medium text-indigo-700">Selected:</span>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              console.debug('Clearing all categories');
+                              setFormData(prev => ({...prev, categories: []}));
+                              setErrors(prev => ({...prev, categories: ""}));
+                            }}
+                            className="text-xs text-red-600 hover:text-red-800 flex items-center"
+                          >
+                            <FaMinus className="mr-1 text-[0.6rem]" />
+                            Clear all
+                          </button>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1.5">
+                          {formData.categories.map(category => (
+                            <div 
+                              key={category} 
+                              className="flex items-center bg-white px-2.5 py-1 rounded-full text-xs border border-indigo-100 whitespace-nowrap"
+                            >
+                              <span className="text-indigo-700 font-medium truncate max-w-[120px]">{category}</span>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleCategory(category);
+                                }}
+                                className="ml-1.5 text-gray-400 hover:text-red-500"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="md:col-span-2 border-t border-gray-200 pt-6 mt-6">
+                    <h3 className="font-semibold text-gray-900 mb-5 flex items-center text-lg">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                        <FaClock className="text-blue-600" />
+                      </div>
+                      Main Downtime Period
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-blue-50 rounded p-5 border border-blue-100">
+                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+                          <FaCalendarAlt className="mr-2 text-blue-500" />
+                          Start Date & Time *
+                        </label>
+                        
+                        <div className="relative">
+                          <DatePicker
+                            selected={formData.startTime}
+                            onChange={(date) => handleDateTimeChange('startTime', date)}
+                            showTimeSelect
+                            timeFormat="HH:mm"
+                            timeIntervals={1}
+                            timeCaption="Time"
+                            dateFormat="dd/MM/yyyy HH:mm"
+                            customInput={
+                              <div className={`relative cursor-pointer ${errors.startTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
+                                <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
+                                  <FaCalendarAlt className="text-blue-500 mr-3" />
+                                  <span className="flex-grow">
+                                    {formData.startTime 
+                                      ? formatDateTime(formData.startTime) 
+                                      : 'Select start date & time'}
+                                  </span>
+                                </div>
+                              </div>
+                            }
+                            className="w-full"
+                          />
+                          
+                          {formData.startTime && (
+                            <button 
+                              onClick={() => handleDateTimeChange('startTime', null)}
+                              className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
+                              aria-label="Clear date"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                        
+                        {errors.startTime && (
+                          <p className="mt-2 text-sm text-red-600 flex items-center">
+                            <FaExclamationTriangle className="mr-1" /> {errors.startTime}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="bg-blue-50 rounded p-5 border border-blue-100">
+                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+                          <FaCalendarAlt className="mr-2 text-blue-500" />
+                          End Date & Time *
+                        </label>
+                        
+                        <div className="relative">
+                          <DatePicker
+                            selected={formData.endTime}
+                            onChange={(date) => handleDateTimeChange('endTime', date)}
+                            showTimeSelect
+                            timeFormat="HH:mm"
+                            timeIntervals={1}
+                            timeCaption="Time"
+                            dateFormat="dd/MM/yyyy HH:mm"
+                            customInput={
+                              <div className={`relative cursor-pointer ${errors.endTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
+                                <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
+                                  <FaCalendarAlt className="text-blue-500 mr-3" />
+                                  <span className="flex-grow">
+                                    {formData.endTime 
+                                      ? formatDateTime(formData.endTime) 
+                                      : 'Select end date & time'}
+                                  </span>
+                                </div>
+                              </div>
+                            }
+                            className="w-full"
+                          />
+                          
+                          {formData.endTime && (
+                            <button 
+                              onClick={() => handleDateTimeChange('endTime', null)}
+                              className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
+                              aria-label="Clear date"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                        
+                        {errors.endTime && (
+                          <p className="mt-2 text-sm text-red-600 flex items-center">
+                            <FaExclamationTriangle className="mr-1" /> {errors.endTime}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="bg-indigo-50 rounded p-5 border border-indigo-100">
+                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+                          <FaClock className="mr-2 text-indigo-500" />
+                          Duration (HH:MM)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            name="duration"
+                            value={formData.duration || '00:00'}
+                            readOnly
+                            className="w-full px-4 py-3 rounded border border-indigo-200 bg-white text-gray-800 font-mono shadow-sm"
+                          />
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            <span className="text-gray-500">HRS</span>
+                          </div>
+                        </div>
+                        {formData.duration && (
+                          <p className="mt-2 text-sm text-indigo-600">
+                            Total downtime duration
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className={`rounded p-5 border ${
+                        formData.reliabilityImpacted === 'YES' 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-green-50 border-green-200'
+                      }`}>
+                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+                          <FaExclamationTriangle className={`mr-2 ${
+                            formData.reliabilityImpacted === 'YES' 
+                              ? 'text-red-500' 
+                              : 'text-green-500'
+                          }`} />
+                          Reliability Impacted
+                        </label>
+                        
+                        <div className="flex items-center">
+                          <div className={`text-lg font-bold px-4 py-2 rounded ${
+                            formData.reliabilityImpacted === 'YES' 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {formData.reliabilityImpacted}
+                          </div>
+                          
+                          <div className="ml-4">
+                            {formData.reliabilityImpacted === 'YES' ? (
+                              <div className="flex items-center text-red-600">
+                                <FaExclamationTriangle className="mr-1" />
+                                <span className="text-sm">Will affect reliability metrics</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center text-green-600">
+                                <FaCheckCircle className="mr-1" />
+                                <span className="text-sm">No impact on reliability</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <p className="mt-2 text-xs text-gray-500">
+                          Auto-calculated based on impact type and modality
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {formData.categories.length > 0 && (
+                    <div className="md:col-span-2 border-t border-gray-200 pt-4 mt-4">
+                      <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <FaClock className="mr-2 text-blue-600" />
+                        Per-Category Downtime Periods
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Defaults to main downtime period. Edit individual categories if needed.
+                      </p>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Category
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Start Time
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                End Time
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Duration (HH:MM)
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {formData.categories.map(category => {
+                              const catTime = categoryTimes[category] || {};
+                              const startTime = catTime.startTime ? new Date(catTime.startTime) : null;
+                              const endTime = catTime.endTime ? new Date(catTime.endTime) : null;
+                              let duration = '';
+                              if (startTime && endTime) {
+                                const diffMs = endTime - startTime;
+                                if (diffMs > 0) {
+                                  const diffHrs = Math.floor(diffMs / 3600000);
+                                  const diffMins = Math.floor((diffMs % 3600000) / 60000);
+                                  duration = `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`;
+                                }
+                              }
+                              return (
+                                <tr key={category}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {category}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <DatePicker
+                                      selected={startTime}
+                                      onChange={(date) => handleCategoryTimeChange(category, 'startTime', date)}
+                                      showTimeSelect
+                                      timeFormat="HH:mm"
+                                      timeIntervals={1}
+                                      timeCaption="Time"
+                                      dateFormat="dd/MM/yyyy HH:mm"
+                                      customInput={<CustomDateTimeInput placeholder="Select start" />}
+                                      className="w-full"
+                                    />
+                                    {startTime && (
+                                      <p className="mt-1 text-xs text-gray-500">
+                                        {formatDateTime(startTime)}
+                                      </p>
+                                    )}
+                                    {errors[`${category}-startTime`] && (
+                                      <p className="mt-1 text-xs text-red-600">{errors[`${category}-startTime`]}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <DatePicker
+                                      selected={endTime}
+                                      onChange={(date) => handleCategoryTimeChange(category, 'endTime', date)}
+                                      showTimeSelect
+                                      timeFormat="HH:mm"
+                                      timeIntervals={1}
+                                      timeCaption="Time"
+                                      dateFormat="dd/MM/yyyy HH:mm"
+                                      customInput={<CustomDateTimeInput placeholder="Select end" />}
+                                      className="w-full"
+                                    />
+                                    {endTime && (
+                                      <p className="mt-1 text-xs text-gray-500">
+                                        {formatDateTime(endTime)}
+                                      </p>
+                                    )}
+                                    {errors[`${category}-endTime`] && (
+                                      <p className="mt-1 text-xs text-red-600">{errors[`${category}-endTime`]}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <div className="bg-gray-100 px-3 py-2 rounded">
+                                      {duration || 'N/A'}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Impact Type *
+                    </label>
+                    <select
+                      name="impactType"
+                      value={formData.impactType}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.impactType ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800`}
+                    >
+                      <option value="">Select Impact Type</option>
+                      {impactTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                    {errors.impactType && (
+                      <p className="mt-1 text-sm text-red-600">{errors.impactType}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Modality *
+                    </label>
+                    <select
+                      name="modality"
+                      value={formData.modality}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.modality ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800`}
+                    >
+                      <option value="">Select Modality</option>
+                      {modalities.map(mod => (
+                        <option key={mod} value={mod}>{mod}</option>
+                      ))}
+                    </select>
+                    {errors.modality && (
+                      <p className="mt-1 text-sm text-red-600">{errors.modality}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Concern *
+                    </label>
+                    <select
+                      name="concern"
+                      value={formData.concern}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.concern ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800`}
+                    >
+                      <option value="">Select Concern</option>
+                      {concerns.map(concern => (
+                        <option key={concern} value={concern}>{concern}</option>
+                      ))}
+                    </select>
+                    {errors.concern && (
+                      <p className="mt-1 text-sm text-red-600">{errors.concern}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      System Unavailability *
+                    </label>
+                    <select
+                      name="systemUnavailability"
+                      value={formData.systemUnavailability}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.systemUnavailability ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800`}
+                    >
+                      <option value="">Select System Issue</option>
+                      {systemOptions.map(sys => (
+                        <option key={sys} value={sys}>{sys}</option>
+                      ))}
+                    </select>
+                    {errors.systemUnavailability && (
+                      <p className="mt-1 text-sm text-red-600">{errors.systemUnavailability}</p>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 rounded p-5 border border-gray-200">
+                      <div className="flex items-center mb-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
+                          <svg 
+                            xmlns="http://www.w3.org/2000/svg" 
+                            className="h-5 w-5 text-gray-600" 
+                            viewBox="0 0 20 20" 
+                            fill="currentColor"
+                          >
+                            <path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6a2 2 0 012-2V6zm3 2h10V6H5v2zm10 4H5v2h10v-2z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Service Desk Ticket ID
+                          </label>
+                          <p className="text-xs text-gray-500">
+                            Optional - for tracking purposes
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="ticketId"
+                          value={formData.ticketId}
+                          onChange={handleChange}
+                          className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400"
+                          placeholder="NAGAD-XXXX"
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                          {formData.ticketId ? (
+                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                              ID Entered
+                            </span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
+                              Optional
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        Format: NAGAD-XXXX (e.g., NAGAD-1709)
+                      </p>
+                    </div>
+                    
+                    {formData.ticketId && (
+                      <div className="bg-blue-50 rounded p-5 border border-blue-200 animate-fadeIn">
+                        <div className="flex items-center mb-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                            <svg 
+                              xmlns="http://www.w3.org/2000/svg" 
+                              className="h-5 w-5 text-blue-600" 
+                              viewBox="0 0 20 20" 
+                              fill="currentColor"
+                            >
+                              <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                              <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Ticket Link
+                            </label>
+                            <p className="text-xs text-gray-500">
+                              Direct link to the service desk ticket
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="relative">
+                          <input
+                            type="text"
+                            name="ticketLink"
+                            value={formData.ticketLink}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3 rounded border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400"
+                            placeholder="https://servicedesk.example.com/tickets/NAGAD-1234"
+                          />
+                          <div className="absolute inset-y-0 right-0-strain flex items-center pr-3">
+                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                              Required
+                            </span>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-xs text-blue-600">
+                          <FaExclamationTriangle className="inline mr-1" />
+                          Please provide the direct link to this ticket
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reason *
+                    </label>
+                    <textarea
+                      name="reason"
+                      value={formData.reason}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.reason ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400 min-h-[100px]`}
+                      placeholder="Explain the cause of the downtime"
+                    />
+                    {errors.reason && (
+                      <p className="mt-1 text-sm text-red-600">{errors.reason}</p>
+                    )}
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Resolution *
+                    </label>
+                    <textarea
+                      name="resolution"
+                      value={formData.resolution}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded border ${
+                        errors.resolution ? 'border-red-400' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400 min-h-[100px]`}
+                      placeholder="Describe how the issue was resolved"
+                    />
+                    {errors.resolution && (
+                      <p className="mt-1 text-sm text-red-600">{errors.resolution}</p>
+                    )}
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      REMARK
+                    </label>
+                    <textarea
+                      name="remark"
+                      value={formData.remark}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400 min-h-[100px]"
+                      placeholder="Additional remarks or notes"
+                    />
+                  </div>
+                </div>
+                
+                {formData.categories.length > 1 && (
+                  <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <FaExclamationTriangle className="h-5 w-5 text-blue-400" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-blue-700">
+                          <strong>Note:</strong> You are reporting downtime for {formData.categories.length} categories. 
+                          This will create separate records for each category under the same downtime ID.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="mt-8 flex flex-col-reverse sm:flex-row sm:justify-end gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      console.debug('Cancel button clicked, redirecting to /user_dashboard');
+                      router.push('/user_dashboard');
+                    }}
+                    className="px-6 py-3 border border-gray-300 text-base font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button
+                    type="submit"
+                    className="px-6 py-3 border border-transparent text-base font-medium rounded text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all flex items-center justify-center min-w-[180px] shadow-md"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <FaSpinner className="animate-spin mr-2" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <FaPaperPlane className="mr-2" />
+                        Report Downtime
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="bg-white rounded shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+              <div className="flex items-center">
+                <div className="p-3 rounded bg-white/20 mr-4">
+                  <FaChartBar className="text-2xl text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Top Issues</h2>
+                  <p className="text-blue-100 text-sm">Most frequent incidents</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {isLoading ? (
+                <div className="flex justify-center py-4">
+                  <FaSpinner className="animate-spin text-2xl text-blue-500" />
+                </div>
+              ) : topIssues.length > 0 ? (
+                <div className="space-y-3">
+                  {topIssues.map((issue, index) => (
+                    <div 
+                      key={`top-${index}`}
+                      className="p-3 border border-gray-200 rounded bg-white"
+                    >
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-medium text-gray-800 text-sm truncate pr-2">
+                          {issue.issue_title}
+                        </h3>
+                        <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded whitespace-nowrap">
+                          {issue.incident_count} times
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-600 text-sm">No frequent issues found</p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="bg-white rounded shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+              <div className="flex items-center">
+                <div className="p-3 rounded bg-white/20 mr-4">
+                  <FaExclamationTriangle className="text-2xl text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Predefined Issues</h2>
+                  <p className="text-blue-100 text-sm">Select to apply full template</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <FaSpinner className="animate-spin text-2xl text-blue-500" />
+                </div>
+              ) : predefinedIssues.length > 0 ? (
+                <div className="space-y-4">
+                  {predefinedIssues.map((issue, index) => (
+                    <div 
+                      key={index}
+                      onClick={() => applyIssueTemplate(issue)}
+                      className="p-4 border border-gray-200 rounded cursor-pointer hover:bg-blue-50 transition-colors group bg-blue-50 border-blue-200"
+                    >
+                      <h3 className="font-medium text-blue-800 group-hover:text-blue-900">
+                        {issue.title}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {issue.description}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {issue.categories.slice(0, 3).map(cat => (
+                          <span key={cat} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                            {cat}
+                          </span>
+                        ))}
+                        {issue.categories.length > 3 && (
+                          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                            +{issue.categories.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">No predefined issues found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ReportDowntime;
