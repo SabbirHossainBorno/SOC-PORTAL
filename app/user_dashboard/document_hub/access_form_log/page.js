@@ -184,6 +184,11 @@ export default function AccessFormLog() {
   const searchTimeoutRef = useRef(null);
   const router = useRouter();
 
+  const [uploadingVersion, setUploadingVersion] = useState(null);
+const [uploadFile, setUploadFile] = useState(null);
+const [uploadRemark, setUploadRemark] = useState('');
+const [isUploading, setIsUploading] = useState(false);
+
   // Filter states
   const [filters, setFilters] = useState({
     portal_name: [],
@@ -459,35 +464,33 @@ export default function AccessFormLog() {
     }
   };
 
-const handleDocumentUpload = async (e, version, auditId) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  if (file.type !== 'application/pdf') {
-    toast.error('Only PDF files are allowed');
+const handleDocumentUpload = async (version) => {
+  if (!uploadFile) {
+    toast.error('Please select a PDF file to upload');
     return;
   }
-  
+
+  setIsUploading(true);
   try {
     const formData = new FormData();
     formData.append('version', version);
-    formData.append('document', file);
-    
-    // Get audit remark from user
-    const remark = prompt('Please enter a remark for this document upload:');
-    if (remark !== null) {
-      formData.append('audit_remark', remark);
-    }
-    
+    formData.append('document', uploadFile);
+    formData.append('audit_remark', uploadRemark);
+
     const response = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/upload_document`, {
       method: 'POST',
       body: formData
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       toast.success('Document uploaded successfully');
+      // Reset upload state
+      setUploadFile(null);
+      setUploadRemark('');
+      setUploadingVersion(null);
+      
       // Refresh audit trail
       const auditResponse = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/audit`);
       const auditResult = await auditResponse.json();
@@ -495,12 +498,37 @@ const handleDocumentUpload = async (e, version, auditId) => {
       if (auditResult.success) {
         setAuditTrail(auditResult.audit_trail);
       }
+
+      // Optional: Reset modal state
+      setShowDetailsModal(false);
+      setSelectedForm(null);
+
+      // Redirect to access_form_log page after a short delay
+      setTimeout(() => {
+        router.push('/user_dashboard/document_hub/access_form_log');
+      }, 1500);
     } else {
       toast.error(result.message || 'Failed to upload document');
     }
   } catch (error) {
     console.error('Error uploading document:', error);
     toast.error('Failed to upload document');
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+const handleFileChange = (e, version, currentRemark) => {
+  const file = e.target.files[0];
+  if (file && file.type !== 'application/pdf') {
+    toast.error('Only PDF files are allowed');
+    return;
+  }
+  setUploadFile(file);
+  setUploadingVersion(version);
+  // Pre-fill the remark with the current value if it exists
+  if (currentRemark && !uploadRemark) {
+    setUploadRemark(currentRemark);
   }
 };
 
@@ -1224,35 +1252,136 @@ const handleDocumentUpload = async (e, version, auditId) => {
         )}
         
         {/* Document Action */}
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-3">
           {audit.document_location ? (
             <button
               onClick={() => openDocument(audit.document_location)}
-              className="flex items-center text-blue-600 hover:text-blue-800 text-sm"
+              className="flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
             >
               <FaFilePdf className="mr-1" />
               View Document
             </button>
           ) : (
-            <div className="flex items-center">
-              <span className="text-sm text-gray-500 mr-2">No document</span>
-              <label className="cursor-pointer flex items-center text-blue-600 hover:text-blue-800 text-sm">
-                <FaUpload className="mr-1" />
-                Upload Document
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={(e) => handleDocumentUpload(e, audit.version, audit.serial)}
-                  className="hidden"
-                />
-              </label>
+            <div className="mt-3">
+              {uploadingVersion === audit.version ? (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
+                  <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
+                    <FaUpload className="mr-2" />
+                    Upload Document for Version {audit.version}
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">
+                        Select PDF File
+                      </label>
+                      <div className="flex items-center">
+                        <label className="flex-1 cursor-pointer">
+                          <div className="px-4 py-3 bg-white border-2 border-dashed border-blue-400 rounded flex items-center justify-between hover:border-blue-600 transition-colors">
+                            <span className={`text-sm font-medium ${uploadFile ? 'text-gray-900' : 'text-gray-600'}`}>
+                              {uploadFile ? uploadFile.name : 'Choose PDF file...'}
+                            </span>
+                            <FaUpload className="text-blue-600" />
+                          </div>
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={(e) => handleFileChange(e, audit.version, audit.audit_remark)}
+                            className="hidden"
+                          />
+                        </label>
+                        {uploadFile && (
+                          <button
+                            onClick={() => setUploadFile(null)}
+                            className="ml-3 p-2 text-red-600 hover:text-red-800 transition-colors"
+                            title="Remove file"
+                          >
+                            <FaTimes />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">Only PDF files are accepted</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">
+                        Audit Remark
+                      </label>
+                      <textarea
+                        value={uploadRemark}
+                        onChange={(e) => setUploadRemark(e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-3 text-gray-900 border border-gray-300 rounded focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
+                        placeholder="Add a remark for this document upload"
+                      />
+                      {audit.audit_remark && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Current remark: <span className="font-medium">{audit.audit_remark}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end space-x-3 mt-4 pt-3 border-t border-blue-200">
+                    <button
+                      onClick={() => {
+                        setUploadingVersion(null);
+                        setUploadFile(null);
+                        setUploadRemark('');
+                      }}
+                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDocumentUpload(audit.version)}
+                      disabled={isUploading || !uploadFile}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium flex items-center"
+                    >
+                      {isUploading ? (
+                        <>
+                          <FaSpinner className="animate-spin mr-2" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <FaUpload className="mr-2" />
+                          Upload Document
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 bg-amber-50 rounded border border-amber-200">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-amber-100 rounded-full mr-3">
+                      <FaFilePdf className="text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">No document attached</p>
+                      <p className="text-xs text-amber-600">Upload a PDF to complete this record</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUploadingVersion(audit.version);
+                      setUploadRemark(audit.audit_remark || '');
+                    }}
+                    className="flex items-center px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors font-medium"
+                  >
+                    <FaUpload className="mr-2" />
+                    Upload Document
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
+        </div>
       </div>
-    </div>
-  );
-})}
+    );
+  })}
                   </div>
                 )}
               </div>

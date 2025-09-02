@@ -396,7 +396,6 @@ const handleSubmit = async (e) => {
     submitData.append('access_form_type', formData.access_form_type);
     submitData.append('additional_info', formData.additional_info);
     submitData.append('audit_remark', formData.audit_remark || '');
-    console.log('Submitting with audit remark:', formData.audit_remark || '');
     
     // Process portal names
     const portalNames = formData.portal_name.map(p => 
@@ -437,8 +436,14 @@ const handleSubmit = async (e) => {
       // Refresh document history
       await fetchDocumentHistory(af_tracking_id);
       
-      // Reset document file
+      // Reset document file and audit remark
       setDocumentFile(null);
+      setFormData(prev => ({ ...prev, audit_remark: '' }));
+      
+      // Redirect to access_form_log page after a short delay to show toast
+      setTimeout(() => {
+        router.push('/user_dashboard/document_hub/access_form_log');
+      }, 1500);
     } else {
       toast.error(result.message || 'Failed to update access form');
     }
