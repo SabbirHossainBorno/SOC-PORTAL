@@ -46,6 +46,20 @@ const formatDateTime = (date) => {
   }
 };
 
+// Process multiple selection fields - convert arrays to comma-separated strings
+const processMultiSelectField = (fieldValue) => {
+  if (!fieldValue) return 'ALL';
+  if (Array.isArray(fieldValue)) {
+    // If array is empty, return 'ALL'
+    if (fieldValue.length === 0) return 'ALL';
+    // If array contains 'ALL', return 'ALL'
+    if (fieldValue.includes('ALL')) return 'ALL';
+    // Otherwise return comma-separated values
+    return fieldValue.join(',');
+  }
+  return fieldValue;
+};
+
 // Format Telegram alert message for downtime
 const formatDowntimeAlert = (downtimeId, issueTitle, issueDate, startTime, endTime, duration, categories, ipAddress, userAgent, additionalInfo = {}) => {
   const time = getCurrentDateTime();
@@ -274,6 +288,19 @@ export async function POST(request) {
       }
     });
 
+    // Process multiple selection fields
+    const processedData = {
+  ...formData,
+  affectedChannel: processMultiSelectField(formData.affectedChannel),
+  affectedPersona: processMultiSelectField(formData.affectedPersona),
+  affectedMNO: processMultiSelectField(formData.affectedMNO),
+  affectedPortal: processMultiSelectField(formData.affectedPortal),
+  affectedType: processMultiSelectField(formData.affectedType),
+  affectedService: processMultiSelectField(formData.affectedService)
+};
+
+    console.debug('Processed form data:', { processedData });
+
     // Validate required fields
     const requiredFields = [
       'issueTitle', 'impactType', 'modality', 'startTime', 
@@ -281,15 +308,10 @@ export async function POST(request) {
       'systemUnavailability', 'trackedBy'
     ];
     
-    const missingFields = requiredFields.filter(field => !formData[field]);
+    const missingFields = requiredFields.filter(field => !processedData[field]);
     
-    if (!formData.categories || formData.categories.length === 0) {
+    if (!processedData.categories || processedData.categories.length === 0) {
       missingFields.push('categories');
-    }
-    
-    // Add validation for affectedMNO when affectedChannel is USSD or SMS
-    if (['USSD', 'SMS'].includes(formData.affectedChannel) && !formData.affectedMNO) {
-      missingFields.push('affectedMNO');
     }
     
     console.debug('Validation check:', { requiredFields, missingFields });
@@ -319,15 +341,26 @@ export async function POST(request) {
       });
     }
 
-    // Set affected_mno based on form data or channel
-    const affectedMno = ['USSD', 'SMS'].includes(formData.affectedChannel) 
-      ? (formData.affectedMNO || 'ALL') 
-      : null;
-    console.debug('Processed affected_mno:', { affectedChannel: formData.affectedChannel, affectedMno });
+    // Set affected_mno based on channels
+const affectedChannels = processedData.affectedChannel.split(',');
+let affectedMno = 'N/A'; // Default to N/A
+
+if (affectedChannels.includes('ALL')) {
+  // If channel is ALL, set MNO to ALL
+  affectedMno = 'ALL';
+  console.debug('Channel is ALL, setting affectedMno to ALL');
+} else {
+  // Check if selected channels require MNO (USSD or SMS)
+  const isUSSDOrSMS = affectedChannels.some(ch => ['USSD', 'SMS'].includes(ch));
+  affectedMno = isUSSDOrSMS ? processedData.affectedMNO : 'N/A';
+  console.debug('Channel is not ALL, processing MNO:', { isUSSDOrSMS, affectedMno });
+}
+
+console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
 
     // Validate main time range
-    const start = DateTime.fromJSDate(new Date(formData.startTime), { zone: 'utc' });
-    const end = DateTime.fromJSDate(new Date(formData.endTime), { zone: 'utc' });
+    const start = DateTime.fromJSDate(new Date(processedData.startTime), { zone: 'utc' });
+    const end = DateTime.fromJSDate(new Date(processedData.endTime), { zone: 'utc' });
     console.debug('Validating time range:', { start: start.toISO(), end: end.toISO() });
     
     if (start >= end) {
@@ -340,8 +373,8 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: message,
-          startTime: formData.startTime,
-          endTime: formData.endTime
+          startTime: processedData.startTime,
+          endTime: processedData.endTime
         }
       });
       
@@ -397,17 +430,17 @@ export async function POST(request) {
       console.debug('Calculated main duration:', { duration, diffMs, diffHrs, diffMins });
 
       // Process each category
-      for (const category of formData.categories) {
+      for (const category of processedData.categories) {
         console.debug('Processing category:', { category });
-        const categoryTime = formData.categoryTimes[category] || {};
+        const categoryTime = processedData.categoryTimes[category] || {};
         
         // Convert UTC times to Dhaka time
-        const catStartDateTime = convertToDhakaTime(categoryTime.startTime || formData.startTime);
-        const catEndDateTime = convertToDhakaTime(categoryTime.endTime || formData.endTime);
+        const catStartDateTime = convertToDhakaTime(categoryTime.startTime || processedData.startTime);
+        const catEndDateTime = convertToDhakaTime(categoryTime.endTime || processedData.endTime);
         console.debug('Category times converted:', { category, catStartDateTime, catEndDateTime });
 
         // Extract date from Dhaka time string
-        const issueDate = catStartDateTime ? catStartDateTime.substring(0, 10) : formatDate(formData.startTime);
+        const issueDate = catStartDateTime ? catStartDateTime.substring(0, 10) : formatDate(processedData.startTime);
         console.debug('Extracted issue date:', { issueDate });
         
         // Validate category times
@@ -458,28 +491,28 @@ export async function POST(request) {
         const params = [
           downtimeId,
           issueDate,
-          formData.issueTitle,
+          processedData.issueTitle,
           category,
-          formData.affectedChannel,
-          formData.affectedPersona || null,
-          affectedMno,
-          formData.affectedPortal || null,
-          formData.affectedType || null,
-          formData.affectedService,
-          formData.impactType,
-          formData.modality,
-          formData.reliabilityImpacted,
+          processedData.affectedChannel, // Now contains comma-separated values
+          processedData.affectedPersona, // Now contains comma-separated values
+          affectedMno || 'N/A', // Processed MNO
+          processedData.affectedPortal, // Now contains comma-separated values
+          processedData.affectedType, // Now contains comma-separated values
+          processedData.affectedService, // Now contains comma-separated values
+          processedData.impactType,
+          processedData.modality,
+          processedData.reliabilityImpacted,
           catStartDateTime,
           catEndDateTime,
           catDuration,
-          formData.concern,
-          formData.reason,
-          formData.resolution,
-          formData.ticketId || null,
-          formData.systemUnavailability,
-          formData.trackedBy,
-          formData.ticketLink || null,
-          formData.remark || null,
+          processedData.concern,
+          processedData.reason,
+          processedData.resolution,
+          processedData.ticketId || null,
+          processedData.systemUnavailability,
+          processedData.trackedBy,
+          processedData.ticketLink || null,
+          processedData.remark || null,
           currentDhakaTimeTz,
           currentDhakaTimeTz
         ];
@@ -498,21 +531,25 @@ export async function POST(request) {
             category,
             startDateTime: catStartDateTime,
             endDateTime: catEndDateTime,
-            ticketId: formData.ticketId || null,
-            ticketLink: formData.ticketLink || null
+            ticketId: processedData.ticketId || null,
+            ticketLink: processedData.ticketLink || null,
+            affectedChannel: processedData.affectedChannel,
+            affectedService: processedData.affectedService
           }
         });
       }
       
-      console.debug('Completed processing all categories:', { categories: formData.categories });
+      console.debug('Completed processing all categories:', { categories: processedData.categories });
       logger.info('All records inserted', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Database',
-          details: `Inserted ${formData.categories.length} records`,
+          details: `Inserted ${processedData.categories.length} records`,
           downtimeId,
-          categories: formData.categories
+          categories: processedData.categories,
+          affectedChannel: processedData.affectedChannel,
+          affectedService: processedData.affectedService
         }
       });
 
@@ -526,7 +563,7 @@ export async function POST(request) {
 
       const adminNotifParams = [
         adminNotificationId,
-        `New Downtime Reported: ${formData.issueTitle} By ${formData.trackedBy}`,
+        `New Downtime Reported: ${processedData.issueTitle} By ${processedData.trackedBy}`,
         'Unread'
       ];
 
@@ -543,7 +580,7 @@ export async function POST(request) {
 
       const userNotifParams = [
         userNotificationId,
-        `Added New Downtime Report: ${formData.issueTitle}`,
+        `Added New Downtime Report: ${processedData.issueTitle}`,
         'Unread',
         socPortalId
       ];
@@ -575,7 +612,7 @@ export async function POST(request) {
       const activityParams = [
         socPortalId,
         'REPORT_DOWNTIME',
-        `Reported downtime for ${formData.issueTitle} (${formData.categories.length} categories)`,
+        `Reported downtime for ${processedData.issueTitle} (${processedData.categories.length} categories) - Channels: ${processedData.affectedChannel}, Services: ${processedData.affectedService}`,
         eid,
         sessionId,
         ipAddress,
@@ -614,48 +651,53 @@ export async function POST(request) {
       // Send Telegram alert
       const successMessage = formatDowntimeAlert(
         downtimeId,
-        formData.issueTitle,
-        formatDate(formData.startTime),
-        formatDateTime(formData.startTime),
-        formatDateTime(formData.endTime),
+        processedData.issueTitle,
+        formatDate(processedData.startTime),
+        formatDateTime(processedData.startTime),
+        formatDateTime(processedData.endTime),
         duration,
-        formData.categories,
+        processedData.categories,
         ipAddress,
         userAgent,
         { 
           eid,
           status: 'Successful',
           userId: socPortalId,
-          affectedChannel: formData.affectedChannel,
-          affectedService: formData.affectedService,
-          affectedPersona: formData.affectedPersona || 'N/A',
+          affectedChannel: processedData.affectedChannel,
+          affectedService: processedData.affectedService,
+          affectedPersona: processedData.affectedPersona || 'N/A',
           affectedMno: affectedMno || 'N/A',
-          affectedPortal: formData.affectedPortal || 'N/A',
-          affectedType: formData.affectedType || 'N/A',
-          impactType: formData.impactType,
-          modality: formData.modality,
-          reliabilityImpacted: formData.reliabilityImpacted || 'N/A',
-          concern: formData.concern,
-          reason: formData.reason,
-          resolution: formData.resolution,
-          systemUnavailability: formData.systemUnavailability,
-          trackedBy: formData.trackedBy,
-          serviceDeskTicketId: formData.ticketId || 'N/A',
-          serviceDeskTicketLink: formData.ticketLink || 'N/A',
-          remark: formData.remark || 'N/A'
+          affectedPortal: processedData.affectedPortal || 'N/A',
+          affectedType: processedData.affectedType || 'N/A',
+          impactType: processedData.impactType,
+          modality: processedData.modality,
+          reliabilityImpacted: processedData.reliabilityImpacted || 'N/A',
+          concern: processedData.concern,
+          reason: processedData.reason,
+          resolution: processedData.resolution,
+          systemUnavailability: processedData.systemUnavailability,
+          trackedBy: processedData.trackedBy,
+          serviceDeskTicketId: processedData.ticketId || 'N/A',
+          serviceDeskTicketLink: processedData.ticketLink || 'N/A',
+          remark: processedData.remark || 'N/A'
         }
       );
       
       console.debug('Sending Telegram alert:', { successMessage });
       await sendTelegramAlert(successMessage);
       
-      console.debug('Downtime report processed successfully:', { downtimeId, categoriesCount: formData.categories.length });
+      console.debug('Downtime report processed successfully:', { 
+        downtimeId, 
+        categoriesCount: processedData.categories.length,
+        affectedChannel: processedData.affectedChannel,
+        affectedService: processedData.affectedService
+      });
       logger.info('Downtime reported successfully', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'ReportSuccess',
-          details: `Report ID: ${downtimeId} | Categories: ${formData.categories.length}`,
+          details: `Report ID: ${downtimeId} | Categories: ${processedData.categories.length} | Channels: ${processedData.affectedChannel} | Services: ${processedData.affectedService}`,
           userId: socPortalId,
           downtimeId,
           telegramMessage: successMessage
@@ -666,7 +708,7 @@ export async function POST(request) {
         success: true,
         message: 'Downtime reported successfully',
         downtimeId,
-        categoriesCount: formData.categories.length
+        categoriesCount: processedData.categories.length
       }), {
         status: 200,
         headers: {
@@ -709,35 +751,35 @@ export async function POST(request) {
       // Send error Telegram alert
       const errorMessage = formatDowntimeAlert(
         'N/A',
-        formData?.issueTitle || 'No title',
-        formData?.startTime ? formatDate(formData.startTime) : 'N/A',
-        formData?.startTime ? formatDateTime(formData.startTime) : 'N/A',
-        formData?.endTime ? formatDateTime(formData.endTime) : 'N/A',
-        formData?.duration || 'N/A',
-        formData?.categories || [],
+        processedData?.issueTitle || 'No title',
+        processedData?.startTime ? formatDate(processedData.startTime) : 'N/A',
+        processedData?.startTime ? formatDateTime(processedData.startTime) : 'N/A',
+        processedData?.endTime ? formatDateTime(processedData.endTime) : 'N/A',
+        processedData?.duration || 'N/A',
+        processedData?.categories || [],
         ipAddress,
         userAgent,
         { 
           eid,
           status: `Failed: ${error.message}`,
           userId: socPortalId,
-          affectedChannel: formData?.affectedChannel || 'N/A',
-          affectedService: formData?.affectedService || 'N/A',
-          affectedPersona: formData?.affectedPersona || 'N/A',
+          affectedChannel: processedData?.affectedChannel || 'N/A',
+          affectedService: processedData?.affectedService || 'N/A',
+          affectedPersona: processedData?.affectedPersona || 'N/A',
           affectedMno: affectedMno || 'N/A',
-          affectedPortal: formData?.affectedPortal || 'N/A',
-          affectedType: formData?.affectedType || 'N/A',
-          impactType: formData?.impactType || 'N/A',
-          modality: formData?.modality || 'N/A',
-          reliabilityImpacted: formData?.reliabilityImpacted || 'N/A',
-          concern: formData?.concern || 'N/A',
-          reason: formData?.reason || 'N/A',
-          resolution: formData?.resolution || 'N/A',
-          systemUnavailability: formData?.systemUnavailability || 'N/A',
-          trackedBy: formData?.trackedBy || 'N/A',
-          serviceDeskTicketId: formData?.ticketId || 'N/A',
-          serviceDeskTicketLink: formData?.ticketLink || 'N/A',
-          remark: formData?.remark || 'N/A'
+          affectedPortal: processedData?.affectedPortal || 'N/A',
+          affectedType: processedData?.affectedType || 'N/A',
+          impactType: processedData?.impactType || 'N/A',
+          modality: processedData?.modality || 'N/A',
+          reliabilityImpacted: processedData?.reliabilityImpacted || 'N/A',
+          concern: processedData?.concern || 'N/A',
+          reason: processedData?.reason || 'N/A',
+          resolution: processedData?.resolution || 'N/A',
+          systemUnavailability: processedData?.systemUnavailability || 'N/A',
+          trackedBy: processedData?.trackedBy || 'N/A',
+          serviceDeskTicketId: processedData?.ticketId || 'N/A',
+          serviceDeskTicketLink: processedData?.ticketLink || 'N/A',
+          remark: processedData?.remark || 'N/A'
         }
       );
       

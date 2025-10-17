@@ -99,7 +99,7 @@ const generateDatesForMonth = (month, year) => {
 const isHeaderRow = (row) => {
   if (!row || row.length === 0) return false;
   
-  const teamMembers = ['Tanvir', 'Sizan', 'Nazmul', 'Maruf', 'Bishwajit', 'Borno', 'Anupom', 'Nafiz', 'Prattay', 'Siam'];
+  const teamMembers = ['Tanvir', 'Sizan', 'Nazmul', 'Maruf', 'Bishwajit', 'Borno', 'Anupom', 'Nafiz', 'Prattay', 'Siam', 'Minhadul'];
   const firstCell = String(row[0]).toUpperCase();
   
   // Check if the first cell matches any team member name
@@ -370,6 +370,7 @@ export async function POST(request) {
           nafiz: row[7],
           prattay: row[8],
           siam: row[9],
+          minhadul: row[10],
           upload_by: userId
         });
         
@@ -387,13 +388,14 @@ export async function POST(request) {
       console.warn(`Warning: Only ${rosterData.length} rows processed for ${dates.length} dates in month`);
     }
     
+
     // Insert data into database
     console.log('Inserting roster data...');
     for (const item of rosterData) {
       const insertQuery = `
         INSERT INTO roster_schedule 
-        (roster_id, date, day, tanvir, sizan, nazmul, maruf, bishwajit, borno, anupom, nafiz, prattay, siam, upload_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        (roster_id, date, day, tanvir, sizan, nazmul, maruf, bishwajit, borno, anupom, nafiz, prattay, siam, minhadul, upload_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       `;
       
       console.log('Inserting row:', item);
@@ -401,7 +403,7 @@ export async function POST(request) {
       await client.query(insertQuery, [
         item.roster_id, item.date, item.day, item.tanvir, item.sizan, item.nazmul,
         item.maruf, item.bishwajit, item.borno, item.anupom, item.nafiz,
-        item.prattay, item.siam, item.upload_by
+        item.prattay, item.siam, item.minhadul, item.upload_by
       ]);
     }
     

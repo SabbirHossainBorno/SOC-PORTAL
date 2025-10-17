@@ -6,6 +6,7 @@ import logger from '../../../lib/logger';
 import sendTelegramAlert from '../../../lib/telegramAlert';
 import { DateTime } from 'luxon';
 import bcrypt from 'bcryptjs';
+import { getClientIP } from '../../../lib/utils/ipUtils';
 
 // Get current time in Asia/Dhaka
 const getCurrentDateTime = () => {
@@ -148,6 +149,8 @@ const createLoginResponse = async (user, userType, sessionId, email, ipAddress, 
   const eid = `SOC-${Math.floor(100000 + Math.random() * 900000)}`;
   const socPortalId = user.soc_portal_id;
   const roleType = user.role_type;
+  const isProduction = process.env.NODE_ENV === 'production';
+const baseDomain = '167.88.38.114';
 
   logger.info('Generated execution ID', {
     meta: {
@@ -209,22 +212,21 @@ const createLoginResponse = async (user, userType, sessionId, email, ipAddress, 
     }
   });
 
-  // Cookie configuration
   const sessionCookieConfig = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    maxAge: 60 * 60 * 24 * 7,
+    secure: false, // Set to false for HTTP, will be true when you use HTTPS
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
-  };
+};
 
-  const clientCookieConfig = {
+const clientCookieConfig = {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    maxAge: 60 * 60 * 24 * 7,
+    secure: false, // Set to false for HTTP
+    sameSite: 'lax', 
+    maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
-  };
+};
 
   // Set cookies
   response.cookies.set('sessionId', sessionId, sessionCookieConfig);
@@ -242,8 +244,13 @@ const createLoginResponse = async (user, userType, sessionId, email, ipAddress, 
 export async function POST(request) {
   const { email, password } = await request.json();
   const sessionId = uuidv4();
-  const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
+  const ipAddress = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
+
+  console.log('Login API called - Debug Info:', {
+        ipAddress,
+        headers: Object.fromEntries(request.headers)
+    });
 
   // Send Telegram alert for all login attempts
   const attemptMessage = formatAlertMessage(

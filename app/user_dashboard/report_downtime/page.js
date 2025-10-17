@@ -1,7 +1,7 @@
 // app/user_dashboard/report_downtime/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   FaCalendarAlt, FaClock, FaExclamationTriangle, FaPaperPlane, 
@@ -14,17 +14,167 @@ import toast from 'react-hot-toast';
 // Force dynamic rendering to bypass prerendering
 export const dynamic = 'force-dynamic';
 
+// Custom MultiSelectDropdown Component
+const MultiSelectDropdown = ({ 
+  label, 
+  name, 
+  options, 
+  selectedValues, 
+  errors,
+  required = false,
+  onSelectChange,
+  onSelectAll,
+  onClearAll
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleOptionClick = (option) => {
+    const isCurrentlySelected = selectedValues.includes(option);
+    onSelectChange(name, option, !isCurrentlySelected);
+  };
+
+  const toggleDropdown = () => {
+    setIsOpen(!isOpen);
+  };
+
+  const handleSelectAll = () => {
+    onSelectAll(name, options);
+  };
+
+  const handleClearAll = () => {
+    onClearAll(name);
+  };
+
+  const removeOption = (option, e) => {
+    e.stopPropagation();
+    onSelectChange(name, option, false);
+  };
+
+  return (
+    <div className="space-y-2" ref={dropdownRef}>
+      <label className="block text-sm font-medium text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      
+      <div className="relative">
+        <div 
+          onClick={toggleDropdown}
+          className={`min-h-[48px] p-3 border rounded bg-white cursor-pointer ${
+            errors[name] ? 'border-red-400' : 'border-gray-300'
+          } ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+        >
+          <div className="flex flex-wrap gap-1">
+            {selectedValues.map(value => (
+              <span 
+                key={value}
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800"
+              >
+                {value}
+                <button
+                  type="button"
+                  onClick={(e) => removeOption(value, e)}
+                  className="ml-1 text-blue-600 hover:text-blue-800 text-xs w-3 h-3 flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {selectedValues.length === 0 && (
+              <span className="text-gray-400 text-sm">Select options...</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <svg 
+            className={`h-5 w-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        {/* Dropdown options */}
+        {isOpen && (
+          <div className="absolute z-50 w-full mt-1 border border-gray-200 rounded bg-white shadow-lg max-h-60 overflow-y-auto">
+            <div className="p-2 border-b border-gray-100 bg-gray-50">
+              <div className="flex justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="text-red-600 hover:text-red-800 font-medium"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-2 space-y-1">
+              {options.map(option => {
+                const isSelected = selectedValues.includes(option);
+                return (
+                  <div 
+                    key={option} 
+                    onClick={() => handleOptionClick(option)}
+                    className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}} // Handled by parent div click
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                    />
+                    <span className="text-sm text-gray-700 flex-1">{option}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {errors[name] && (
+        <p className="text-sm text-red-600">{errors[name]}</p>
+      )}
+    </div>
+  );
+};
+
 const ReportDowntime = () => {
   const router = useRouter();
   const [formData, setFormData] = useState({
     issueTitle: '',
     categories: [],
-    affectedChannel: 'ALL',
-    affectedPersona: 'ALL',
-    affectedMNO: 'ALL',
-    affectedPortal: 'ALL',
-    affectedType: 'ALL',
-    affectedService: 'ALL',
+    affectedChannel: ['ALL'],
+    affectedPersona: ['ALL'],
+    affectedMNO: ['ALL'],
+    affectedPortal: ['ALL'],
+    affectedType: ['ALL'],
+    affectedService: ['ALL'],
     impactType: '',
     modality: '',
     reliabilityImpacted: 'NO',
@@ -48,30 +198,58 @@ const ReportDowntime = () => {
   const [topIssues, setTopIssues] = useState([]);
   const [predefinedIssues, setPredefinedIssues] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCategoriesManuallyModified, setIsCategoriesManuallyModified] = useState(false);
 
+  // All categories
   const allCategories = [
     'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
     'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
     'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
     'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
     'DEVICE CHANGE', 'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING',
-    'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
+    'REFUND', 'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
     'REMITTANCE', 'BANK TO NAGAD'
   ];
+
+  // Category mappings for automatic selection
+const serviceToCategoriesMap = {
+  'ALL TRANSACTIONS': [
+    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+    'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+    'E-COM PAYMENT', 'REMITTANCE', 'BANK TO NAGAD'
+  ],
+  'TRANSACTION HISTORY': ['TRANSACTION HISTORY'],
+  'RE-SUBMIT KYC': ['RE-SUBMIT KYC'],
+  'REGISTRATION': ['REGISTRATION'],
+  'PROFILE VISIBILITY': ['PROFILE VISIBILITY'],
+  'BLOCK OPERATION': ['BLOCK OPERATION'],
+  'LIFTING': ['LIFTING'],
+  'REFUND': ['REFUND'],
+  'DISBURSEMENT': ['DISBURSEMENT'],
+  'REVERSAL': ['REVERSAL'],
+  'KYC OPERATIONS': ['KYC OPERATIONS'],
+  'PARTNER REGISTRATION': ['PARTNER REGISTRATION'],
+  'DEVICE CHANGE': ['DEVICE CHANGE'],
+  // SMS Channel specific mappings
+  'E-COM PAYMENT': ['E-COM PAYMENT'],
+  'KYC': ['RE-SUBMIT KYC']
+};
   
   const impactTypes = ['FULL', 'PARTIAL'];
   const modalities = ['PLANNED', 'UNPLANNED'];
   const concerns = ['INTERNAL', 'EXTERNAL'];
   const [systemOptions, setSystemOptions] = useState([]);
 
-  // Debug initial state
-  useEffect(() => {
-    console.debug('Initial formData state:', formData);
-  }, []);
+  // All available options for dropdowns
+  const allChannels = ['ALL', 'APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
+  const allPersonas = ['ALL', 'CU', 'AG', 'DSO', 'DH'];
+  const allMNOs = ['ALL', 'GRAMEENPHONE', 'BANGLALINK', 'ROBI/AIRTEL', 'TELETALK'];
+  const allPortals = ['ALL', 'CC', 'SYS', 'DMS'];
+  const allTypes = ['ALL', 'REMITTANCE', 'BANK TO NAGAD'];
 
   // Update system options when concern changes
   useEffect(() => {
-    console.debug('Updating system options based on concern:', formData.concern);
     if (formData.concern === 'INTERNAL') {
       setSystemOptions(['SYSTEM', 'DATABASE', 'NETWORK', 'MIDDLEWARE', 'SMS GATEWAY']);
     } else if (formData.concern === 'EXTERNAL') {
@@ -79,21 +257,17 @@ const ReportDowntime = () => {
     } else {
       setSystemOptions([]);
     }
-    console.debug('Updated system options:', systemOptions);
   }, [formData.concern]);
 
   // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
-      console.debug('Fetching initial data');
       try {
         setIsLoading(true);
         
         // Fetch user info
-        console.debug('Fetching user info from /api/user_dashboard/user_info');
         const userResponse = await fetch('/api/user_dashboard/user_info');
         const userData = await userResponse.json();
-        console.debug('User info response:', userData);
         
         if (userResponse.ok) {
           setUserInfo(userData);
@@ -101,48 +275,98 @@ const ReportDowntime = () => {
             ...prev,
             trackedBy: userData.shortName || `${userData.firstName} ${userData.lastName}`
           }));
-          console.debug('Updated formData with user info:', { trackedBy: userData.shortName || `${userData.firstName} ${userData.lastName}` });
-        } else {
-          console.error('Failed to fetch user info:', userData);
         }
         
         // Fetch top issues
-        console.debug('Fetching top issues from /api/user_dashboard/report_downtime');
         const issuesResponse = await fetch('/api/user_dashboard/report_downtime');
         const issuesData = await issuesResponse.json();
-        console.debug('Top issues response:', issuesData);
 
         if (issuesResponse.ok) {
           setTopIssues(issuesData.topIssues || []);
-        } else {
-          console.error('Failed to fetch top issues:', issuesData);
         }
         
         // Fetch predefined issues
-        console.debug('Fetching predefined issues from /api/user_dashboard/report_downtime/pre_defined_issue');
         const predefinedResponse = await fetch('/api/user_dashboard/report_downtime/pre_defined_issue');
         const predefinedData = await predefinedResponse.json();
-        console.debug('Predefined issues response:', predefinedData);
         
         if (predefinedResponse.ok) {
           setPredefinedIssues(predefinedData || []);
-        } else {
-          console.error('Failed to fetch predefined issues:', predefinedData);
         }
       } catch (error) {
         console.error('Error fetching initial data:', error);
       } finally {
         setIsLoading(false);
-        console.debug('Initial data fetch completed, isLoading set to false');
       }
     };
     
     fetchData();
   }, []);
 
+  // Auto-select categories when affected service changes
+  useEffect(() => {
+  if (isCategoriesManuallyModified) return;
+
+  const selectedServices = formData.affectedService;
+  const selectedChannels = formData.affectedChannel;
+  
+  console.log('Auto-select triggered:', {
+    selectedServices,
+    selectedChannels,
+    isCategoriesManuallyModified
+  });
+
+  // If ALL is selected, select all categories
+  if (selectedServices.includes('ALL')) {
+    setFormData(prev => ({
+      ...prev,
+      categories: [...allCategories]
+    }));
+    return;
+  }
+
+  // Auto-select based on service mappings
+  const autoCategories = new Set();
+  
+  selectedServices.forEach(service => {
+    if (serviceToCategoriesMap[service]) {
+      serviceToCategoriesMap[service].forEach(category => {
+        autoCategories.add(category);
+      });
+    }
+    
+    // Special handling for SMS channel services
+    if (selectedChannels.includes('SMS')) {
+      if (service === 'E-COM PAYMENT') {
+        autoCategories.add('E-COM PAYMENT');
+      }
+      if (service === 'REGISTRATION') {
+        autoCategories.add('REGISTRATION');
+      }
+      if (service === 'KYC') {
+        autoCategories.add('RE-SUBMIT KYC');
+      }
+    }
+  });
+
+  // If specific services are selected, use auto-selected categories
+  if (autoCategories.size > 0) {
+    console.log('Auto-selected categories:', Array.from(autoCategories));
+    setFormData(prev => ({
+      ...prev,
+      categories: Array.from(autoCategories)
+    }));
+  } else if (selectedServices.length > 0 && !selectedServices.includes('ALL')) {
+    // If services are selected but no auto-mapping, clear categories
+    console.log('No auto-mapping found, clearing categories');
+    setFormData(prev => ({
+      ...prev,
+      categories: []
+    }));
+  }
+}, [formData.affectedService, formData.affectedChannel, isCategoriesManuallyModified]);
+
   // Update category times
   useEffect(() => {
-    console.debug('Updating category times based on categories:', formData.categories);
     const newCategoryTimes = { ...categoryTimes };
     let hasChanges = false;
     
@@ -165,60 +389,148 @@ const ReportDowntime = () => {
     
     if (hasChanges) {
       setCategoryTimes(newCategoryTimes);
-      console.debug('Updated categoryTimes:', newCategoryTimes);
     }
   }, [formData.categories, formData.startTime, formData.endTime]);
 
+  // Handle multiple selection for dropdowns
+  const handleMultiSelectChange = (name, value, isSelected) => {
+  console.log(`MultiSelect Change: ${name}, ${value}, ${isSelected}`);
+  
+  setFormData(prev => {
+    const currentValues = prev[name] || [];
+    
+    if (isSelected) {
+      // If selecting "ALL", clear other selections and select only "ALL"
+      if (value === 'ALL') {
+        console.log('Selecting ALL, clearing others');
+        return {
+          ...prev,
+          [name]: ['ALL']
+        };
+      }
+      
+      // If selecting other options and "ALL" was selected, remove "ALL"
+      let newValues;
+      if (currentValues.includes('ALL')) {
+        newValues = [value];
+        console.log('Removing ALL, selecting:', value);
+      } else {
+        newValues = [...currentValues.filter(item => item !== 'ALL'), value];
+        console.log('Adding to selection:', value, 'Current:', currentValues, 'New:', newValues);
+      }
+      
+      return {
+        ...prev,
+        [name]: newValues
+      };
+    } else {
+      // Remove value
+      const newValues = currentValues.filter(item => item !== value);
+      console.log('Removing:', value, 'Current:', currentValues, 'New:', newValues);
+      
+      // If no values left, select "ALL"
+      const finalValues = newValues.length === 0 ? ['ALL'] : newValues;
+      return {
+        ...prev,
+        [name]: finalValues
+      };
+    }
+  });
+
+  // Reset manual modification flag when ALL is selected in affected service
+  if (name === 'affectedService' && value === 'ALL' && isSelected) {
+    setIsCategoriesManuallyModified(false);
+  }
+};
+
+  // Handle select all for dropdowns
+  const handleSelectAll = (name, allOptions) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: [...allOptions]
+    }));
+
+    if (name === 'affectedService') {
+      setIsCategoriesManuallyModified(false);
+    }
+  };
+
+  // Handle clear all for dropdowns
+  const handleClearAll = (name) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: ['ALL']
+    }));
+  };
+
   const toggleCategory = (category) => {
-    console.debug('Toggling category:', category);
+    setIsCategoriesManuallyModified(true);
+    
     setFormData(prev => {
       const newCategories = prev.categories.includes(category)
         ? prev.categories.filter(c => c !== category)
         : [...prev.categories, category];
-      console.debug('Updated categories:', newCategories);
       return { ...prev, categories: newCategories };
     });
   };
 
-  const applyIssueTemplate = (issue) => {
-    console.debug('Applying issue template:', issue);
+  // Handle select all categories
+  const handleSelectAllCategories = () => {
+    setIsCategoriesManuallyModified(true);
     setFormData(prev => ({
       ...prev,
-      issueTitle: issue.title,
-      categories: issue.categories,
-      affectedService: issue.template.affectedService,
-      impactType: issue.template.impactType,
-      modality: issue.template.modality,
-      reliabilityImpacted: issue.template.reliabilityImpacted,
-      systemUnavailability: issue.template.systemUnavailability,
-      reason: issue.template.reason,
-      resolution: issue.template.resolution
+      categories: [...allCategories]
     }));
-    
-    toast.success(`"${issue.title}" template applied`, {
-      id: 'template-applied',
-      icon: <FaSyncAlt className="text-blue-500" />,
-      duration: 3000,
+    toast.success('All categories selected', {
+      icon: '✅',
+      position: 'top-right',
+      duration: 2000
     });
-    console.debug('Applied issue template, updated formData:', formData);
   };
 
-  useEffect(() => {
-    console.debug('Recalculating duration and reliability:', { 
-      startTime: formData.startTime, 
-      endTime: formData.endTime,
-      impactType: formData.impactType,
-      modality: formData.modality,
-      concern: formData.concern
-    });
+  // Handle clear all categories
+  const handleClearAllCategories = () => {
+    setIsCategoriesManuallyModified(true);
+    setFormData(prev => ({ ...prev, categories: [] }));
+    setErrors(prev => ({ ...prev, categories: "" }));
+  };
+
+  const applyIssueTemplate = (issue) => {
+    setIsCategoriesManuallyModified(true);
     
+    setFormData(prev => ({
+    ...prev,
+    issueTitle: issue.title,
+    categories: issue.categories,
+    affectedChannel: issue.template.affectedChannel || ['ALL'],
+    affectedPersona: issue.template.affectedPersona || ['ALL'],
+    affectedMNO: issue.template.affectedMNO || ['ALL'],
+    affectedPortal: issue.template.affectedPortal || ['ALL'],
+    affectedType: issue.template.affectedType || ['ALL'],
+    affectedService: issue.template.affectedService || ['ALL'],
+    impactType: issue.template.impactType || '',
+    modality: issue.template.modality || '',
+    reliabilityImpacted: issue.template.reliabilityImpacted || 'NO',
+    systemUnavailability: issue.template.systemUnavailability || '',
+    reason: issue.template.reason || '',
+    resolution: issue.template.resolution || ''
+  }));
+  
+  toast.success(`"${issue.title}" template applied`, {
+    id: 'template-applied',
+    icon: <FaSyncAlt className="text-blue-500" />,
+    duration: 3000,
+  });
+};
+
+  // Update duration and reliability when times change
+  useEffect(() => {
     if (formData.startTime && formData.endTime) {
       const start = new Date(formData.startTime);
       const end = new Date(formData.endTime);
       
       if (start > end) {
         setErrors(prev => ({ ...prev, endTime: 'End time cannot be before start time' }));
-        console.debug('Time validation failed:', { start, end });
         return;
       }
       
@@ -230,32 +542,26 @@ const ReportDowntime = () => {
         ...prev,
         duration: `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`
       }));
-      console.debug('Updated duration:', { duration: `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}` });
     }
 
     // Automatically set reliabilityImpacted based on conditions
     if (formData.impactType === 'FULL' && formData.modality === 'UNPLANNED' && formData.concern === 'INTERNAL') {
       setFormData(prev => ({ ...prev, reliabilityImpacted: 'YES' }));
-      console.debug('Set reliabilityImpacted to YES');
     } else {
       setFormData(prev => ({ ...prev, reliabilityImpacted: 'NO' }));
-      console.debug('Set reliabilityImpacted to NO');
     }
   }, [formData.startTime, formData.endTime, formData.impactType, formData.modality, formData.concern]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    console.debug('Handling input change:', { name, value });
     setFormData(prev => ({ ...prev, [name]: value }));
     
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
-      console.debug('Cleared error for:', name);
     }
   };
 
   const handleDateTimeChange = (name, date) => {
-    console.debug('Handling datetime change:', { name, date });
     setFormData(prev => ({ ...prev, [name]: date }));
     
     if (name === 'startTime' || name === 'endTime') {
@@ -264,17 +570,14 @@ const ReportDowntime = () => {
         newCategoryTimes[category][name] = date;
       });
       setCategoryTimes(newCategoryTimes);
-      console.debug('Updated categoryTimes with new datetime:', newCategoryTimes);
     }
     
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
-      console.debug('Cleared error for:', name);
     }
   };
 
   const handleCategoryTimeChange = (category, name, date) => {
-    console.debug('Handling category time change:', { category, name, date });
     setCategoryTimes(prev => ({
       ...prev,
       [category]: {
@@ -282,63 +585,9 @@ const ReportDowntime = () => {
         [name]: date
       }
     }));
-    
-    if (errors[`${category}-${name}`]) {
-      setErrors(prev => ({ ...prev, [`${category}-${name}`]: '' }));
-      console.debug('Cleared error for:', `${category}-${name}`);
-    }
   };
 
-  useEffect(() => {
-    console.debug('Affected Channel changed:', formData.affectedChannel);
-    
-    if (formData.affectedChannel === 'ALL') {
-      setFormData(prev => ({
-        ...prev,
-        affectedService: 'ALL',
-        affectedPersona: 'ALL',
-        affectedMNO: 'ALL',
-        affectedPortal: 'ALL',
-        affectedType: 'ALL'
-      }));
-    } else {
-      const resetFields = {
-        affectedPersona: null,
-        affectedMNO: null,
-        affectedPortal: null,
-        affectedType: null
-      };
-
-      if (formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') {
-        setFormData(prev => ({
-          ...prev,
-          ...resetFields,
-          affectedPersona: 'ALL'
-        }));
-      } else if (formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') {
-        setFormData(prev => ({
-          ...prev,
-          ...resetFields,
-          affectedMNO: 'ALL'
-        }));
-      } else if (formData.affectedChannel === 'WEB') {
-        setFormData(prev => ({
-          ...prev,
-          ...resetFields,
-          affectedPortal: 'ALL'
-        }));
-      } else if (formData.affectedChannel === 'INWARD SERVICE') {
-        setFormData(prev => ({
-          ...prev,
-          ...resetFields,
-          affectedType: 'ALL'
-        }));
-      }
-    }
-  }, [formData.affectedChannel]);
-
   const validateForm = () => {
-    console.debug('Validating form');
     const newErrors = {};
     
     const alwaysRequired = [
@@ -357,6 +606,11 @@ const ReportDowntime = () => {
       newErrors.categories = 'At least one category is required';
     }
 
+    // Validate affected fields
+    if (formData.affectedChannel.length === 0) {
+      newErrors.affectedChannel = 'At least one channel is required';
+    }
+
     if (formData.startTime && formData.endTime) {
       const start = new Date(formData.startTime);
       const end = new Date(formData.endTime);
@@ -366,36 +620,14 @@ const ReportDowntime = () => {
       }
     }
 
-    if (formData.affectedChannel !== 'ALL') {
-      if (!formData.affectedService) {
-        newErrors.affectedService = 'This field is required';
-      }
-
-      if ((formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') && !formData.affectedPersona) {
-        newErrors.affectedPersona = 'This field is required';
-      }
-      if ((formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') && !formData.affectedMNO) {
-        newErrors.affectedMNO = 'This field is required';
-      }
-      if (formData.affectedChannel === 'WEB' && !formData.affectedPortal) {
-        newErrors.affectedPortal = 'This field is required';
-      }
-      if (formData.affectedChannel === 'INWARD SERVICE' && !formData.affectedType) {
-        newErrors.affectedType = 'This field is required';
-      }
-    }
-
     setErrors(newErrors);
-    console.debug('Validation result:', { errors: newErrors, isValid: Object.keys(newErrors).length === 0 });
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.debug('Form submission initiated');
     
     if (!validateForm()) {
-      console.debug('Form validation failed, submission aborted');
       toast.error('Please fix validation errors before submitting', {
         duration: 4000,
         position: 'top-right',
@@ -405,18 +637,10 @@ const ReportDowntime = () => {
     }
     
     setIsSubmitting(true);
-    console.debug('Setting isSubmitting to true');
     
     try {
       const submissionData = {
         ...formData,
-        ...(formData.affectedChannel === 'ALL' && {
-          affectedService: 'ALL',
-          affectedPersona: 'ALL',
-          affectedMNO: 'ALL',
-          affectedPortal: 'ALL',
-          affectedType: 'ALL'
-        }),
         categoryTimes
       };
       
@@ -430,38 +654,27 @@ const ReportDowntime = () => {
         body: JSON.stringify(submissionData),
       });
       
-      console.debug('API response received:', { status: response.status });
       const result = await response.json();
-      console.debug('API response data:', result);
       
       if (response.ok) {
-        const message = formData.categories.length > 1
-          ? `Downtime reported for ${formData.categories.length} categories! ID: ${result.downtimeId}`
-          : `Downtime reported successfully! ID: ${result.downtimeId}`;
+        const message = `Downtime reported successfully! ID: ${result.downtimeId}`;
         
         toast.success(message, {
           duration: 5000,
           position: 'top-right',
           icon: <FaCheckCircle className="text-green-500" />,
-          style: {
-            background: '#f0fdf4',
-            color: '#15803d',
-            padding: '16px',
-            border: '1px solid #bbf7d0',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }
         });
-        console.debug('Submission successful:', { message });
         
+        // Reset form
         setFormData({
           issueTitle: '',
           categories: [],
-          affectedChannel: 'ALL',
-          affectedPersona: 'ALL',
-          affectedMNO: 'ALL',
-          affectedPortal: 'ALL',
-          affectedType: 'ALL',
-          affectedService: 'ALL',
+          affectedChannel: ['ALL'],
+          affectedPersona: ['ALL'],
+          affectedMNO: ['ALL'],
+          affectedPortal: ['ALL'],
+          affectedType: ['ALL'],
+          affectedService: ['ALL'],
           impactType: '',
           modality: '',
           reliabilityImpacted: 'NO',
@@ -478,47 +691,24 @@ const ReportDowntime = () => {
           remark: ''
         });
         setCategoryTimes({});
-        console.debug('Form and categoryTimes reset');
+        setIsCategoriesManuallyModified(false);
         
         setTimeout(() => {
-          console.debug('Redirecting to /user_dashboard/downtime_log');
           router.push('/user_dashboard/downtime_log');
         }, 3000);
       } else {
         throw new Error(result.message || 'Failed to report downtime');
       }
     } catch (error) {
-      console.error('Submission error:', { message: error.message, stack: error.stack });
+      console.error('Submission error:', error);
       toast.error(error.message || 'Failed to report downtime. Please try again.', {
-        id: 'downtime-error',
         duration: 4000,
         position: 'top-right',
-        style: {
-          background: '#fef2f2',
-          color: '#b91c1c',
-          padding: '16px',
-          border: '1px solid #fecaca',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-        }
       });
     } finally {
       setIsSubmitting(false);
-      console.debug('Setting isSubmitting to false');
     }
   };
-
-  const CustomDateTimeInput = ({ value, onClick, placeholder }) => (
-    <div 
-      onClick={onClick}
-      className={`w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400 cursor-pointer flex items-center ${
-        !value ? 'text-gray-400' : ''
-      }`}
-    >
-      <FaCalendarAlt className="mr-3 text-blue-500" />
-      <span className="flex-grow">{value || placeholder}</span>
-      <FaClock className="ml-auto text-blue-500" />
-    </div>
-  );
 
   const formatDateTime = (date) => {
     if (!date) return 'Not set';
@@ -529,71 +719,122 @@ const ReportDowntime = () => {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: 'Asia/Dhaka' // User is in +06 timezone
+      timeZone: 'Asia/Dhaka'
     });
-    const formatted = formatter.format(new Date(date));
-    console.debug('Formatted datetime:', { input: date, output: formatted });
-    return formatted;
+    return formatter.format(new Date(date));
   };
 
-  const CategoryBadge = ({ category, selected }) => (
-    <div 
-      onClick={() => toggleCategory(category)}
-      className={`px-3 py-2 rounded-full cursor-pointer transition-all flex items-center ${
-        selected 
-          ? 'bg-blue-600 text-white' 
-          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-      }`}
-    >
-      <span className="mr-2">{category}</span>
-      {selected ? <FaMinus size={12} /> : <FaPlus size={12} />}
+  // Get affected services based on selected channels, personas, and portals
+const getAffectedServices = () => {
+  const services = new Set(['ALL', 'ALL TRANSACTIONS']);
+  
+  console.log('Calculating services for:', {
+    channels: formData.affectedChannel,
+    personas: formData.affectedPersona,
+    portals: formData.affectedPortal
+  });
+
+  // Process each selected channel
+  formData.affectedChannel.forEach(channel => {
+    console.log(`Processing channel: ${channel}`);
+    
+    if (channel === 'APP') {
+      // APP channel services based on persona
+      if (formData.affectedPersona.includes('ALL') || 
+          formData.affectedPersona.some(p => ['CU', 'AG'].includes(p))) {
+        // Show all APP services for CU/AG or when ALL personas selected
+        services.add('TRANSACTION HISTORY');
+        services.add('RE-SUBMIT KYC');
+        services.add('REGISTRATION');
+      }
+
+      // Add MOBILE RECHARGE only if CU is specifically included
+      if (formData.affectedPersona.includes('CU')) {
+        services.add('MOBILE RECHARGE');
+      }
+      
+      if (formData.affectedPersona.includes('ALL') || 
+          formData.affectedPersona.some(p => ['DSO', 'DH'].includes(p))) {
+        // Show transaction history for DSO/DH
+        services.add('TRANSACTION HISTORY');
+      }
+      
+      services.add('ALL TRANSACTIONS');
+      
+    } else if (channel === 'USSD') {
+      // USSD channel services
+      services.add('ALL TRANSACTIONS');
+      services.add('TRANSACTION HISTORY');
+      
+    } else if (channel === 'SMS') {
+      // SMS channel services
+      services.add('E-COM PAYMENT');
+      services.add('REGISTRATION');
+      services.add('KYC');
+      services.add('ALL TRANSACTIONS');
+      
+    } else if (channel === 'WEB') {
+      // WEB channel services based on portal selection
+      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('CC')) {
+        services.add('PROFILE VISIBILITY');
+        services.add('BLOCK OPERATION');
+      }
+      
+      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('SYS')) {
+        services.add('LIFTING');
+        services.add('REFUND');
+        services.add('DISBURSEMENT');
+        services.add('REVERSAL');
+        services.add('KYC OPERATIONS');
+        services.add('PARTNER REGISTRATION');
+        services.add('CLAWBACK');
+      }
+      
+      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('DMS')) {
+        services.add('LIFTING');
+        services.add('REFUND');
+        services.add('DISBURSEMENT');
+      }
+      
+      services.add('ALL TRANSACTIONS');
+      
+    } else if (channel === 'MIDDLEWARE') {
+      // MIDDLEWARE channel services
+      services.add('BILL-PAYMENT');
+      services.add('ALL TRANSACTIONS');
+      
+    } else if (channel === 'INWARD SERVICE') {
+      // INWARD SERVICE channel services
+      services.add('REMITTANCE');
+      services.add('BANK TO NAGAD');
+      services.add('ALL TRANSACTIONS');
+    }
+  });
+
+  const result = Array.from(services).sort();
+  console.log('Final available services:', result);
+  return result;
+};
+
+  // Auto-select indicator component
+  const AutoSelectIndicator = () => (
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center text-sm text-green-600">
+        <FaCheckCircle className="mr-1 text-xs" />
+        <span>Categories are auto-selected based on affected services</span>
+      </div>
+      <button
+        type="button"
+        onClick={() => setIsCategoriesManuallyModified(true)}
+        className="text-xs text-blue-600 hover:text-blue-800 underline"
+      >
+        Edit manually
+      </button>
     </div>
   );
 
-  const getAffectedServices = () => {
-    console.debug('Getting affected services:', { affectedChannel: formData.affectedChannel, affectedPersona: formData.affectedPersona, affectedPortal: formData.affectedPortal });
-    
-    if (formData.affectedChannel === 'ALL') {
-      return ['ALL'];
-    }
-    
-    if (formData.affectedChannel === 'APP') {
-      if (['CU', 'AG'].includes(formData.affectedPersona)) {
-        return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION'];
-      } else if (['DSO', 'DH'].includes(formData.affectedPersona)) {
-        return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY'];
-      }
-      return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION'];
-    }
-    if (formData.affectedChannel === 'USSD') {
-      return ['ALL', 'ALL TRANSACTIONS', 'TRANSACTION HISTORY'];
-    }
-    if (formData.affectedChannel === 'SMS') {
-      return ['ALL', 'E-COM PAYMENT', 'REGISTRATION', 'KYC'];
-    }
-    if (formData.affectedChannel === 'WEB') {
-      if (formData.affectedPortal === 'CC') {
-        return ['ALL', 'PROFILE VISIBILITY', 'BLOCK OPERATION'];
-      }
-      if (formData.affectedPortal === 'SYS') {
-        return ['ALL', 'LIFTING', 'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION'];
-      }
-      if (formData.affectedPortal === 'DMS') {
-        return ['ALL', 'LIFTING', 'REFUND', 'DISBURSEMENT'];
-      }
-      return ['ALL'];
-    }
-    if (formData.affectedChannel === 'MIDDLEWARE') {
-      return ['ALL', 'BILL-PAYMENT'];
-    }
-    if (formData.affectedChannel === 'INWARD SERVICE') {
-      return ['ALL', 'REMITTANCE', 'BANK TO NAGAD'];
-    }
-    return [];
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-8 px-4 sm:px-6">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-8 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <div className="bg-white rounded shadow-lg overflow-hidden">
@@ -611,39 +852,38 @@ const ReportDowntime = () => {
                 
                 <button 
                   onClick={() => {
-                    console.debug('Resetting form');
                     setFormData({
-                      issueTitle: '',
-                      categories: [],
-                      affectedChannel: 'ALL',
-                      affectedPersona: 'ALL',
-                      affectedMNO: 'ALL',
-                      affectedPortal: 'ALL',
-                      affectedType: 'ALL',
-                      affectedService: 'ALL',
-                      impactType: '',
-                      modality: '',
-                      reliabilityImpacted: 'NO',
-                      startTime: null,
-                      endTime: null,
-                      duration: '',
-                      concern: '',
-                      reason: '',
-                      resolution: '',
-                      ticketId: '',
-                      ticketLink: '',
-                      systemUnavailability: '',
-                      trackedBy: userInfo?.shortName || `${userInfo?.firstName} ${userInfo?.lastName}`,
-                      remark: ''
-                    });
-                    setCategoryTimes({});
-                    setErrors({});
+  issueTitle: '',
+  categories: [],
+  affectedChannel: ['ALL'],
+  affectedPersona: ['ALL'],
+  affectedMNO: ['ALL'],
+  affectedPortal: ['ALL'],
+  affectedType: ['ALL'],
+  affectedService: ['ALL'],
+  impactType: '',
+  modality: '',
+  reliabilityImpacted: 'NO',
+  startTime: null,
+  endTime: null,
+  duration: '',
+  concern: '',
+  reason: '',
+  resolution: '',
+  ticketId: '',
+  ticketLink: '',
+  systemUnavailability: '',
+  trackedBy: userInfo?.shortName || `${userInfo?.firstName} ${userInfo?.lastName}`,
+  remark: ''
+});
+setCategoryTimes({});
+setErrors({});
+setIsCategoriesManuallyModified(false);
                     toast.success('Form reset successfully!', {
                       id: 'form-reset',
                       icon: '🔄',
                       duration: 3000,
                     });
-                    console.debug('Form reset completed');
                   }}
                   className="flex items-center justify-center w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 transition-all group"
                   aria-label="Reset form"
@@ -665,6 +905,7 @@ const ReportDowntime = () => {
             <div className="p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Date and Tracked By sections */}
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 border border-blue-200 shadow-sm">
                     <div className="flex items-center mb-3">
                       <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mr-3 border-2 border-blue-300 shadow-inner">
@@ -752,122 +993,93 @@ const ReportDowntime = () => {
                   </div>
                   
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Affected Channel *
-                    </label>
-                    <select
+                    <MultiSelectDropdown
+                      label="Affected Channel"
                       name="affectedChannel"
-                      value={formData.affectedChannel}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                    >
-                      <option value="ALL">ALL</option>
-                      <option value="APP">APP</option>
-                      <option value="USSD">USSD</option>
-                      <option value="WEB">WEB</option>
-                      <option value="SMS">SMS</option>
-                      <option value="MIDDLEWARE">MIDDLEWARE</option>
-                      <option value="INWARD SERVICE">INWARD SERVICE</option>
-                    </select>
+                      options={allChannels}
+                      selectedValues={formData.affectedChannel}
+                      errors={errors}
+                      required={true}
+                      onSelectChange={handleMultiSelectChange}
+                      onSelectAll={handleSelectAll}
+                      onClearAll={handleClearAll}
+                    />
                   </div>
 
-                  {formData.affectedChannel !== 'ALL' && (
+                  {/* Show additional fields only if ALL is not selected or other channels are selected */}
+                  {(formData.affectedChannel.length > 0 && !formData.affectedChannel.includes('ALL')) && (
                     <>
-                      {(formData.affectedChannel === 'APP' || formData.affectedChannel === 'MIDDLEWARE') && (
+                      {(formData.affectedChannel.includes('APP') || formData.affectedChannel.includes('MIDDLEWARE')) && (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Affected Persona
-                          </label>
-                          <select
+                          <MultiSelectDropdown
+                            label="Affected Persona"
                             name="affectedPersona"
-                            value={formData.affectedPersona || 'ALL'}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                          >
-                            <option value="ALL">ALL</option>
-                            <option value="CU">CU</option>
-                            <option value="AG">AG</option>
-                            {formData.affectedChannel === 'APP' && (
-                              <>
-                                <option value="DSO">DSO</option>
-                                <option value="DH">DH</option>
-                              </>
-                            )}
-                          </select>
+                            options={allPersonas}
+                            selectedValues={formData.affectedPersona}
+                            errors={errors}
+                            onSelectChange={handleMultiSelectChange}
+                            onSelectAll={handleSelectAll}
+                            onClearAll={handleClearAll}
+                          />
                         </div>
                       )}
 
-                      {(formData.affectedChannel === 'USSD' || formData.affectedChannel === 'SMS') && (
+                      {(formData.affectedChannel.includes('USSD') || formData.affectedChannel.includes('SMS')) && (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select MNO
-                          </label>
-                          <select
+                          <MultiSelectDropdown
+                            label="Select MNO"
                             name="affectedMNO"
-                            value={formData.affectedMNO || 'ALL'}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                          >
-                            <option value="ALL">ALL</option>
-                            <option value="GRAMEENPHONE">GRAMEENPHONE</option>
-                            <option value="BANGLALINK">BANGLALINK</option>
-                            <option value="ROBI/AIRTEL">ROBI/AIRTEL</option>
-                            <option value="TELETALK">TELETALK</option>
-                          </select>
+                            options={allMNOs}
+                            selectedValues={formData.affectedMNO}
+                            errors={errors}
+                            onSelectChange={handleMultiSelectChange}
+                            onSelectAll={handleSelectAll}
+                            onClearAll={handleClearAll}
+                          />
                         </div>
                       )}
 
-                      {formData.affectedChannel === 'WEB' && (
+                      {formData.affectedChannel.includes('WEB') && (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Portal
-                          </label>
-                          <select
+                          <MultiSelectDropdown
+                            label="Select Portal"
                             name="affectedPortal"
-                            value={formData.affectedPortal || 'ALL'}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                          >
-                            <option value="ALL">ALL</option>
-                            <option value="CC">CC</option>
-                            <option value="SYS">SYS</option>
-                            <option value="DMS">DMS</option>
-                          </select>
+                            options={allPortals}
+                            selectedValues={formData.affectedPortal}
+                            errors={errors}
+                            onSelectChange={handleMultiSelectChange}
+                            onSelectAll={handleSelectAll}
+                            onClearAll={handleClearAll}
+                          />
                         </div>
                       )}
 
-                      {formData.affectedChannel === 'INWARD SERVICE' && (
+                      {formData.affectedChannel.includes('INWARD SERVICE') && (
                         <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Type
-                          </label>
-                          <select
+                          <MultiSelectDropdown
+                            label="Select Type"
                             name="affectedType"
-                            value={formData.affectedType || 'ALL'}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                          >
-                            <option value="ALL">ALL</option>
-                            <option value="REMITTANCE">REMITTANCE</option>
-                            <option value="BANK TO NAGAD">BANK TO NAGAD</option>
-                          </select>
+                            options={allTypes}
+                            selectedValues={formData.affectedType}
+                            errors={errors}
+                            onSelectChange={handleMultiSelectChange}
+                            onSelectAll={handleSelectAll}
+                            onClearAll={handleClearAll}
+                          />
                         </div>
                       )}
 
                       <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Affected Service
-                        </label>
-                        <select
+                        <MultiSelectDropdown
+                          label="Select Affected Service"
                           name="affectedService"
-                          value={formData.affectedService}
-                          onChange={handleChange}
-                          className="w-full px-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
-                        >
-                          {getAffectedServices().map(service => (
-                            <option key={service} value={service}>{service}</option>
-                          ))}
-                        </select>
+                          options={getAffectedServices()}
+                          selectedValues={formData.affectedService}
+                          errors={errors}
+                          onSelectChange={handleMultiSelectChange}
+                          onSelectAll={handleSelectAll}
+                          onClearAll={handleClearAll}
+                        />
                       </div>
                     </>
                   )}
@@ -889,24 +1101,17 @@ const ReportDowntime = () => {
                           <h3 className="text-base font-semibold text-gray-900">Affected Categories</h3>
                           <p className="text-xs text-gray-600 mt-0.5">
                             Select impacted services <span className="text-red-500">*</span>
+                            {!isCategoriesManuallyModified && (
+                              <span className="text-green-600 ml-2">(Auto-selected based on services)</span>
+                            )}
                           </p>
                         </div>
                       </div>
                       
                       <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => {
-                            console.debug('Selecting all categories');
-                            setFormData(prev => ({
-                              ...prev,
-                              categories: [...allCategories]
-                            }));
-                            toast.success('All categories selected', {
-                              icon: '✅',
-                              position: 'top-right',
-                              duration: 2000
-                            });
-                          }}
+                          type="button"
+                          onClick={handleSelectAllCategories}
                           className="flex items-center bg-green-100 text-green-800 text-xs px-3 py-1.5 rounded hover:bg-green-200 transition-colors"
                         >
                           <FaPlus className="mr-1 text-[0.6rem]" />
@@ -919,6 +1124,11 @@ const ReportDowntime = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Auto-select indicator */}
+                    {!isCategoriesManuallyModified && formData.affectedService.length > 0 && (
+                      <AutoSelectIndicator />
+                    )}
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
                       {allCategories.map(category => {
@@ -975,11 +1185,8 @@ const ReportDowntime = () => {
                             <span className="text-sm font-medium text-indigo-700">Selected:</span>
                           </div>
                           <button 
-                            onClick={() => {
-                              console.debug('Clearing all categories');
-                              setFormData(prev => ({...prev, categories: []}));
-                              setErrors(prev => ({...prev, categories: ""}));
-                            }}
+                            type="button"
+                            onClick={handleClearAllCategories}
                             className="text-xs text-red-600 hover:text-red-800 flex items-center"
                           >
                             <FaMinus className="mr-1 text-[0.6rem]" />
@@ -995,6 +1202,7 @@ const ReportDowntime = () => {
                             >
                               <span className="text-indigo-700 font-medium truncate max-w-[120px]">{category}</span>
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   toggleCategory(category);
@@ -1010,6 +1218,7 @@ const ReportDowntime = () => {
                     )}
                   </div>
                   
+                  {/* Rest of the form components (time selection, impact type, etc.) remain the same */}
                   <div className="md:col-span-2 border-t border-gray-200 pt-6 mt-6">
                     <h3 className="font-semibold text-gray-900 mb-5 flex items-center text-lg">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
@@ -1051,6 +1260,7 @@ const ReportDowntime = () => {
                           
                           {formData.startTime && (
                             <button 
+                              type="button"
                               onClick={() => handleDateTimeChange('startTime', null)}
                               className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
                               aria-label="Clear date"
@@ -1099,6 +1309,7 @@ const ReportDowntime = () => {
                           
                           {formData.endTime && (
                             <button 
+                              type="button"
                               onClick={() => handleDateTimeChange('endTime', null)}
                               className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
                               aria-label="Clear date"
@@ -1240,17 +1451,16 @@ const ReportDowntime = () => {
                                       timeIntervals={1}
                                       timeCaption="Time"
                                       dateFormat="dd/MM/yyyy HH:mm"
-                                      customInput={<CustomDateTimeInput placeholder="Select start" />}
+                                      customInput={
+                                        <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
+                                          <FaCalendarAlt className="text-blue-500 mr-2" />
+                                          <span className="flex-grow">
+                                            {startTime ? formatDateTime(startTime) : 'Select start'}
+                                          </span>
+                                        </div>
+                                      }
                                       className="w-full"
                                     />
-                                    {startTime && (
-                                      <p className="mt-1 text-xs text-gray-500">
-                                        {formatDateTime(startTime)}
-                                      </p>
-                                    )}
-                                    {errors[`${category}-startTime`] && (
-                                      <p className="mt-1 text-xs text-red-600">{errors[`${category}-startTime`]}</p>
-                                    )}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <DatePicker
@@ -1261,17 +1471,16 @@ const ReportDowntime = () => {
                                       timeIntervals={1}
                                       timeCaption="Time"
                                       dateFormat="dd/MM/yyyy HH:mm"
-                                      customInput={<CustomDateTimeInput placeholder="Select end" />}
+                                      customInput={
+                                        <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
+                                          <FaCalendarAlt className="text-blue-500 mr-2" />
+                                          <span className="flex-grow">
+                                            {endTime ? formatDateTime(endTime) : 'Select end'}
+                                          </span>
+                                        </div>
+                                      }
                                       className="w-full"
                                     />
-                                    {endTime && (
-                                      <p className="mt-1 text-xs text-gray-500">
-                                        {formatDateTime(endTime)}
-                                      </p>
-                                    )}
-                                    {errors[`${category}-endTime`] && (
-                                      <p className="mt-1 text-xs text-red-600">{errors[`${category}-endTime`]}</p>
-                                    )}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <div className="bg-gray-100 px-3 py-2 rounded">
@@ -1457,7 +1666,7 @@ const ReportDowntime = () => {
                             className="w-full px-4 py-3 rounded border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400"
                             placeholder="https://servicedesk.example.com/tickets/NAGAD-1234"
                           />
-                          <div className="absolute inset-y-0 right-0-strain flex items-center pr-3">
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                             <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
                               Required
                             </span>
@@ -1540,10 +1749,7 @@ const ReportDowntime = () => {
                 <div className="mt-8 flex flex-col-reverse sm:flex-row sm:justify-end gap-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      console.debug('Cancel button clicked, redirecting to /user_dashboard');
-                      router.push('/user_dashboard');
-                    }}
+                    onClick={() => router.push('/user_dashboard')}
                     className="px-6 py-3 border border-gray-300 text-base font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
                     disabled={isSubmitting}
                   >
@@ -1573,6 +1779,7 @@ const ReportDowntime = () => {
           </div>
         </div>
         
+        {/* Sidebar components (Top Issues and Predefined Issues) remain the same */}
         <div className="space-y-6">
           <div className="bg-white rounded shadow-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600">

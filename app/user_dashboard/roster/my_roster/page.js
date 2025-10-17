@@ -808,27 +808,27 @@ export default function MyRosterPage() {
                           <>
                             {/* Check if selected user's shift is OFFDAY */}
                             {selectedUser && dateRoster && dateRoster[selectedUser.toLowerCase()] !== 'OFFDAY' && (
-  <div className="mb-4 md:mb-5 p-3 md:p-4 bg-blue-50 rounded border border-blue-100">
-    <label className="block text-sm font-semibold text-gray-800 mb-1 md:mb-2">Shift Exchange Details</label>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <div className="text-sm font-medium text-gray-700">Your Shift</div>
-        <div className="text-base font-semibold text-blue-800">
-          {dateRoster[userName.toLowerCase()]} → {dateRoster[selectedUser.toLowerCase()]}
-        </div>
-        <div className="text-xs text-blue-600 mt-1">{userName}</div>
-      </div>
-      <div>
-        <div className="text-sm font-medium text-gray-700">{selectedUser}'s Shift</div>
-        <div className="text-base font-semibold text-blue-800">
-          {dateRoster[selectedUser.toLowerCase()]} → {dateRoster[userName.toLowerCase()]}
-        </div>
-        <div className="text-xs text-blue-600 mt-1">{selectedUser}</div>
-      </div>
-    </div>
-    <p className="text-xs md:text-sm text-blue-600 mt-2">Shifts will be exchanged between you and {selectedUser}</p>
-  </div>
-)}
+                              <div className="mb-4 md:mb-5 p-3 md:p-4 bg-blue-50 rounded border border-blue-100">
+                                <label className="block text-sm font-semibold text-gray-800 mb-1 md:mb-2">Shift Exchange Details</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-700">Your Shift</div>
+                                    <div className="text-base font-semibold text-blue-800">
+                                      {dateRoster[userName.toLowerCase()]} → {dateRoster[selectedUser.toLowerCase()]}
+                                    </div>
+                                    <div className="text-xs text-blue-600 mt-1">{userName}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-700">{selectedUser}&apos;s Shift</div>
+                                    <div className="text-base font-semibold text-blue-800">
+                                      {dateRoster[selectedUser.toLowerCase()]} → {dateRoster[userName.toLowerCase()]}
+                                    </div>
+                                    <div className="text-xs text-blue-600 mt-1">{selectedUser}</div>
+                                  </div>
+                                </div>
+                                <p className="text-xs md:text-sm text-blue-600 mt-2">Shifts will be exchanged between you and {selectedUser}</p>
+                              </div>
+                            )}
                           </>
                         )}
 
@@ -1018,27 +1018,27 @@ export default function MyRosterPage() {
                         </div>
 
                         {selectedUser && selectedUser !== 'None' && dateRoster && dateRoster[selectedUser.toLowerCase()] !== 'OFFDAY' && (
-  <div className="mb-4 md:mb-5 p-3 md:p-4 bg-red-50 rounded border border-red-100">
-    <label className="block text-sm font-semibold text-gray-800 mb-1 md:mb-2">Shift Assignment Details</label>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <div className="text-sm font-medium text-gray-700">Your Shift</div>
-        <div className="text-base font-semibold text-red-800">
-          {dateRoster[userName.toLowerCase()]} → LEAVE
-        </div>
-        <div className="text-xs text-red-600 mt-1">{userName}</div>
-      </div>
-      <div>
-        <div className="text-sm font-medium text-gray-700">{selectedUser}'s Shift</div>
-        <div className="text-base font-semibold text-red-800">
-          {dateRoster[selectedUser.toLowerCase()]} → {dateRoster[userName.toLowerCase()]}
-        </div>
-        <div className="text-xs text-red-600 mt-1">{selectedUser}</div>
-      </div>
-    </div>
-    <p className="text-xs md:text-sm text-red-600 mt-2">{selectedUser} will take your shift</p>
-  </div>
-)}
+                            <div className="mb-4 md:mb-5 p-3 md:p-4 bg-red-50 rounded border border-red-100">
+                              <label className="block text-sm font-semibold text-gray-800 mb-1 md:mb-2">Shift Assignment Details</label>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-700">Your Shift</div>
+                                  <div className="text-base font-semibold text-red-800">
+                                    {dateRoster[userName.toLowerCase()]} → LEAVE
+                                  </div>
+                                  <div className="text-xs text-red-600 mt-1">{userName}</div>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-700">{selectedUser}&apos;s Shift</div>
+                                  <div className="text-base font-semibold text-red-800">
+                                    {dateRoster[selectedUser.toLowerCase()]} → {dateRoster[userName.toLowerCase()]}
+                                  </div>
+                                  <div className="text-xs text-red-600 mt-1">{selectedUser}</div>
+                                </div>
+                              </div>
+                              <p className="text-xs md:text-sm text-red-600 mt-2">{selectedUser} will take your shift</p>
+                            </div>
+                          )}
 
                         <div className="mb-4 md:mb-5">
                           <label className="block text-sm font-semibold text-gray-800 mb-1 md:mb-2">Leave Reason</label>

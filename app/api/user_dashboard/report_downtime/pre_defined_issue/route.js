@@ -24,102 +24,318 @@ export async function GET(request) {
   try {
     const predefinedIssues = [
       {
-        id: "delayed-app",
-        title: "Delayed App Response",
-        description: "Slow response times across multiple services",
+        id: "delay-app-login",
+        title: "Delay in APP Login Response Time",
+        description: "Slow login response times affecting all APP services",
         categories: [
-          'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT',
-          'TRANSFER MONEY', 'ADD MONEY', 'MOBILE RECHARGE',
-          'MERCHANT PAYMENT', 'B2B', 'B2M', 'CASHIN',
-          'TRANSACTION HISTORY', 'KYC', 'REGISTRATION',
-          'DEVICE CHANGE', 'E-COM PAYMENT'
+          'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+          'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+          'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+          'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE'
         ],
         template: {
-          affectedChannel: "APP",
-          affectedPersona: "ALL",
-          affectedService: "ALL",
+          issueTitle: "Delay in APP Login Response Time",
+          affectedChannel: ["APP"],
+          affectedPersona: ["ALL"],
+          affectedService: ["ALL"],
           impactType: "PARTIAL",
           modality: "UNPLANNED",
+          reliabilityImpacted: "NO",
+          concern: "INTERNAL",
+          systemUnavailability: "SYSTEM",
+          reason: "High server load causing delayed response times in APP login",
+          resolution: "Server resources optimized and load balanced"
+        }
+      },
+      {
+        id: "sms-otp-all-mno",
+        title: "SMS/OTP Outage For All MNO",
+        description: "Complete SMS/OTP service outage affecting all mobile operators",
+        categories: [
+          'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "SMS/OTP Outage For All MNO",
+          affectedChannel: ["SMS"],
+          affectedMNO: ["ALL"],
+          affectedService: ["E-COM PAYMENT", "REGISTRATION", "KYC"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "INTERNAL",
+          systemUnavailability: "SMS GATEWAY",
+          reason: "SMS gateway service disruption affecting all MNOs",
+          resolution: "SMS gateway service restored and failover implemented"
+        }
+      },
+      {
+        id: "sms-otp-robi",
+        title: "SMS/OTP Outage For Robi/Airtel",
+        description: "SMS/OTP service outage specific to Robi/Airtel network",
+        categories: [
+          'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "SMS/OTP Outage For Robi/Airtel",
+          affectedChannel: ["SMS"],
+          affectedMNO: ["ROBI/AIRTEL"],
+          affectedService: ["E-COM PAYMENT", "REGISTRATION", "KYC"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Robi/Airtel network issues causing SMS delivery failure",
+          resolution: "Robi/Airtel network issues resolved"
+        }
+      },
+      {
+        id: "sms-otp-gp",
+        title: "SMS/OTP Outage For Grameenphone",
+        description: "SMS/OTP service outage specific to Grameenphone network",
+        categories: [
+          'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "SMS/OTP Outage For Grameenphone",
+          affectedChannel: ["SMS"],
+          affectedMNO: ["GRAMEENPHONE"],
+          affectedService: ["E-COM PAYMENT", "REGISTRATION", "KYC"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Grameenphone network issues causing SMS delivery failure",
+          resolution: "Grameenphone network issues resolved"
+        }
+      },
+      {
+        id: "sms-otp-banglalink",
+        title: "SMS/OTP Outage For Banglalink",
+        description: "SMS/OTP service outage specific to Banglalink network",
+        categories: [
+          'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "SMS/OTP Outage For Banglalink",
+          affectedChannel: ["SMS"],
+          affectedMNO: ["BANGLALINK"],
+          affectedService: ["E-COM PAYMENT", "REGISTRATION", "KYC"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Banglalink network issues causing SMS delivery failure",
+          resolution: "Banglalink network issues resolved"
+        }
+      },
+      {
+        id: "sms-otp-teletalk",
+        title: "SMS/OTP Outage For Teletalk",
+        description: "SMS/OTP service outage specific to Teletalk network",
+        categories: [
+          'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "SMS/OTP Outage For Teletalk",
+          affectedChannel: ["SMS"],
+          affectedMNO: ["TELETALK"],
+          affectedService: ["E-COM PAYMENT", "REGISTRATION", "KYC"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Teletalk network issues causing SMS delivery failure",
+          resolution: "Teletalk network issues resolved"
         }
       },
       {
         id: "db-maintenance",
-        title: "DB Maintenance Activity",
-        description: "Planned database maintenance affecting all services",
+        title: "Database Maintenance Activity(Full DFS System Down)",
+        description: "Planned database maintenance affecting all DFS services",
         categories: [
-          'SEND MONEY',
-          'CASHOUT',
-          'BILL PAYMENT',
-          'EMI PAYMENT',
-          'TRANSFER MONEY',
-          'TRANSACTION HISTORY',
-          'E-COM PAYMENT',
-          'DEVICE CHANGE',
-          'CASHIN',
-          'ADD MONEY',
-          'MOBILE RECHARGE',
-          'B2M',
-          'REGISTRATION',
-          'KYC',
-          'B2B',
-          'MERCHANT PAYMENT',
-          'PROFILE VISIBILITY',
-          'BLOCK OPERATION',
-          'LIFTING',
-          'REFUND',
-          'PARTNER REGISTRATION',
-          'KYC OPERATIONS',
-          'REVERSAL',
-          'DISBURSEMENT',
-          'REMITTANCE',
-          'BANK TO NAGAD'
+          'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+          'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+          'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+          'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
+          'DEVICE CHANGE', 'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING',
+          'REFUND', 'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
+          'REMITTANCE', 'BANK TO NAGAD'
         ],
         template: {
-          affectedChannel: "ALL",
+          issueTitle: "Database Maintenance Activity(Full DFS System Down)",
+          affectedChannel: ["ALL"],
           impactType: "FULL",
           modality: "PLANNED",
+          reliabilityImpacted: "NO",
           concern: "INTERNAL",
           systemUnavailability: "DATABASE",
-          reason: `LIVE DB ACTIVITY - Database Purging ${currentMonthYear}`,
-          resolution: "Maintenance Activity Successful"
+          reason: `Planned database maintenance activity for ${currentMonthYear}`,
+          resolution: "Database maintenance completed successfully"
         }
       },
       {
-        id: "network-outage",
-        title: "Network Outage",
-        description: "Complete network failure affecting all services",
+        id: "nagad-deployment",
+        title: "Nagad End Deployment Activity(Full DFS System Down)",
+        description: "Planned deployment activity affecting all DFS services",
         categories: [
-          'APP', 'USSD', 'WEB', 'ADD MONEY', 'BILL PAYMENT', 
-          'E-COM PAYMENT', 'MOBILE RECHARGE', 'SMS', 
-          'TRANSFER MONEY', 'REMITTANCE', 'REGISTRATION', 'RESUBMIT KYC'
+          'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+          'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+          'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+          'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
+          'DEVICE CHANGE', 'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING',
+          'REFUND', 'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
+          'REMITTANCE', 'BANK TO NAGAD'
         ],
         template: {
-          impactedService: "All Services",
+          issueTitle: "Nagad End Deployment Activity(Full DFS System Down)",
+          affectedChannel: ["ALL"],
           impactType: "FULL",
-          modality: "UNPLANNED",
-          reliabilityImpacted: "YES",
-          systemUnavailability: "NETWORK",
-          reason: "Fiber cut in main data center",
-          resolution: "Failover to backup network connection"
+          modality: "PLANNED",
+          reliabilityImpacted: "NO",
+          concern: "INTERNAL",
+          systemUnavailability: "SYSTEM",
+          reason: "Planned system deployment and update activity",
+          resolution: "Deployment activity completed successfully"
         }
       },
       {
-        id: "payment-gateway",
-        title: "Payment Gateway Failure",
-        description: "Failure in third-party payment gateway",
+        id: "mobile-recharge-all-mno",
+        title: "Outage Mobile Recharge For ALL MNO",
+        description: "Mobile recharge service outage affecting all operators",
         categories: [
-          'ADD MONEY', 'BILL PAYMENT', 
-          'E-COM PAYMENT', 'MOBILE RECHARGE', 
-          'TRANSFER MONEY', 'REMITTANCE'
+          'MOBILE RECHARGE', 'E-COM PAYMENT'
         ],
         template: {
-          impactedService: "Payment Processing",
+          issueTitle: "Outage Mobile Recharge For ALL MNO",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["CU"],
+          affectedMNO: ["ALL"],
+          affectedService: ["MOBILE RECHARGE"],
           impactType: "FULL",
           modality: "UNPLANNED",
           reliabilityImpacted: "YES",
+          concern: "INTERNAL",
+          systemUnavailability: "SYSTEM",
+          reason: "Mobile recharge gateway service disruption",
+          resolution: "Recharge gateway service restored"
+        }
+      },
+      {
+        id: "mobile-recharge-robi",
+        title: "Outage In Robi/Airtel Mobile Recharge",
+        description: "Mobile recharge service outage for Robi/Airtel customers",
+        categories: [
+          'MOBILE RECHARGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "Outage In Robi/Airtel Mobile Recharge",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["CU"],
+          affectedMNO: ["ROBI/AIRTEL"],
+          affectedService: ["MOBILE RECHARGE"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
           systemUnavailability: "EXTERNAL",
-          reason: "Third-party payment gateway API failure",
-          resolution: "Gateway provider resolved the issue"
+          reason: "Robi/Airtel recharge API service disruption",
+          resolution: "Robi/Airtel recharge API service restored"
+        }
+      },
+      {
+        id: "mobile-recharge-gp",
+        title: "Outage In Grameenphone Mobile Recharge",
+        description: "Mobile recharge service outage for Grameenphone customers",
+        categories: [
+          'MOBILE RECHARGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "Outage In Grameenphone Mobile Recharge",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["CU"],
+          affectedMNO: ["GRAMEENPHONE"],
+          affectedService: ["MOBILE RECHARGE"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Grameenphone recharge API service disruption",
+          resolution: "Grameenphone recharge API service restored"
+        }
+      },
+      {
+        id: "mobile-recharge-banglalink",
+        title: "Outage In Banglalink Mobile Recharge",
+        description: "Mobile recharge service outage for Banglalink customers",
+        categories: [
+          'MOBILE RECHARGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "Outage In Banglalink Mobile Recharge",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["CU"],
+          affectedMNO: ["BANGLALINK"],
+          affectedService: ["MOBILE RECHARGE"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Banglalink recharge API service disruption",
+          resolution: "Banglalink recharge API service restored"
+        }
+      },
+      {
+        id: "mobile-recharge-teletalk",
+        title: "Outage In Teletalk Mobile Recharge",
+        description: "Mobile recharge service outage for Teletalk customers",
+        categories: [
+          'MOBILE RECHARGE', 'E-COM PAYMENT'
+        ],
+        template: {
+          issueTitle: "Outage In Teletalk Mobile Recharge",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["CU"],
+          affectedMNO: ["TELETALK"],
+          affectedService: ["MOBILE RECHARGE"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "EXTERNAL",
+          systemUnavailability: "EXTERNAL",
+          reason: "Teletalk recharge API service disruption",
+          resolution: "Teletalk recharge API service restored"
+        }
+      },
+      {
+        id: "app-ussd-outage",
+        title: "Outage In APP & USSD Services",
+        description: "Complete service outage affecting both APP and USSD channels",
+        categories: [
+          'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+          'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+          'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+          'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
+          'DEVICE CHANGE', 'REMITTANCE', 'BANK TO NAGAD'
+        ],
+        template: {
+          issueTitle: "Outage In APP & USSD Services",
+          affectedChannel: ["APP", "USSD"],
+          affectedPersona: ["ALL"],
+          affectedMNO: ["ALL"],
+          affectedService: ["ALL"],
+          impactType: "FULL",
+          modality: "UNPLANNED",
+          reliabilityImpacted: "YES",
+          concern: "INTERNAL",
+          systemUnavailability: "SYSTEM",
+          reason: "Core banking system outage affecting APP and USSD services",
+          resolution: "Core banking system restored and services normalized"
         }
       }
     ];

@@ -5,6 +5,7 @@ import logger from '../../../lib/logger';
 import sendTelegramAlert from '../../../lib/telegramAlert';
 import { DateTime } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
+import { getClientIP } from '../../../lib/utils/ipUtils';
 
 // Get current time in Asia/Dhaka
 const getCurrentDateTime = () => {
@@ -134,7 +135,7 @@ const logActivity = async (userType, socPortalId, action, description, ipAddress
 };
 
 export async function POST(request) {
-  const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
+  const ipAddress = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
   
   // Extract cookies

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import logger from '../../../lib/logger';
 import sendTelegramAlert from '../../../lib/telegramAlert';
 import { query } from '../../../lib/db';
+import { getClientIP } from '../../../lib/utils/ipUtils';
 
 // Security headers
 const securityHeaders = {
@@ -21,10 +22,21 @@ const formatAlertMessage = (title, email, ipAddress, additionalInfo = '') => {
 export async function GET(request) {
   const sessionId = request.cookies.get('sessionId')?.value;
   const eid = request.cookies.get('eid')?.value || '';
-  const ip = request.headers.get('x-forwarded-for') || 'Unknown IP';
+  const ip = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown UA';
   const email = request.cookies.get('email')?.value;
   const socPortalId = request.cookies.get('socPortalId')?.value;
+
+  console.log('Check Auth API called - Debug Info:', {
+        ip,
+        headers: Object.fromEntries(request.headers),
+        cookies: {
+            sessionId: sessionId ? 'present' : 'missing',
+            email: email ? 'present' : 'missing',
+            eid: eid ? 'present' : 'missing',
+            socPortalId: socPortalId ? 'present' : 'missing'
+        }
+    });
 
   console.log('Check Auth API called');
   console.log('Cookies received:', {

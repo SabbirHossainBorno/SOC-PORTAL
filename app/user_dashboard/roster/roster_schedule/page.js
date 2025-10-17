@@ -46,7 +46,7 @@ export default function RosterSchedulePage() {
   ];
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
-  const teamMembers = ['Tanvir', 'Sizan', 'Nazmul', 'Maruf', 'Bishwajit', 'Borno', 'Anupom', 'Nafiz', 'Prattay', 'Siam'];
+  const teamMembers = ['Tanvir', 'Sizan', 'Nazmul', 'Maruf', 'Bishwajit', 'Borno', 'Anupom', 'Nafiz', 'Prattay', 'Siam', 'Minhadul'];
   const shiftTypes = ['REGULAR', 'MORNING', 'NOON', 'EVENING', 'NIGHT', 'OFFDAY', 'LEAVE'];
   const shiftColors = {
     'REGULAR': 'bg-green-100 text-green-800 border border-green-200',
@@ -360,7 +360,7 @@ export default function RosterSchedulePage() {
   };
 
   return (
-    <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-medium ${colorClasses[color]}`}>
+    <span className={`inline-flex items-center justify-center w-5 h-5 rounded text-xs font-sm ${colorClasses[color]}`}>
       {count}
     </span>
   );
@@ -369,7 +369,7 @@ export default function RosterSchedulePage() {
 const GapBadge = ({ gap }) => {
   if (gap === 0) {
     return (
-      <span className="inline-flex items-center justify-center w-6 h-6 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+      <span className="inline-flex items-center justify-center w-6 h-6 bg-gray-100 text-gray-800 rounded-full text-xs font-sm">
         0
       </span>
     );
@@ -380,7 +380,7 @@ const GapBadge = ({ gap }) => {
   const symbol = isPositive ? '+' : '';
   
   return (
-    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${bgColor}`}>
+    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-sm ${bgColor}`}>
       {symbol}{gap}
     </span>
   );
@@ -392,14 +392,14 @@ const GapBadge = ({ gap }) => {
       return (
         <div className="flex items-center text-blue-600">
           <FaExchangeAlt className="mr-1 text-xs" />
-          <span className="text-xs font-medium">Shift Exchange</span>
+          <span className="text-xs font-sm">Shift Exchange</span>
         </div>
       );
     } else if (type === 'Take Leave') {
       return (
         <div className="flex items-center text-red-600">
           <FaSignOutAlt className="mr-1 text-xs" />
-          <span className="text-xs font-medium">Leave</span>
+          <span className="text-xs font-sm">Leave</span>
         </div>
       );
     }
@@ -428,7 +428,7 @@ const GapBadge = ({ gap }) => {
                 console.debug('Navigating back');
                 router.back();
               }}
-              className="flex items-center text-indigo-600 hover:text-indigo-800 transition-colors font-medium text-sm"
+              className="flex items-center text-indigo-600 hover:text-indigo-800 transition-colors font-sm text-sm"
             >
               <FaArrowLeft className="mr-1" />
               Back to Roster
@@ -436,7 +436,7 @@ const GapBadge = ({ gap }) => {
             
             <div className="flex items-center">
               <FaCalendarAlt className="text-indigo-500 mr-2" />
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-sm text-gray-700">
                 {months.find(m => m.value === filters.month)?.label} {filters.year}
               </span>
             </div>
@@ -456,7 +456,7 @@ const GapBadge = ({ gap }) => {
             <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
               {/* Month Selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                <label className="block text-sm font-sm text-gray-700 mb-2">Month</label>
                 <select
                   value={filters.month}
                   onChange={(e) => {
@@ -475,7 +475,7 @@ const GapBadge = ({ gap }) => {
               
               {/* Year Selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                <label className="block text-sm font-sm text-gray-700 mb-2">Year</label>
                 <select
                   value={filters.year}
                   onChange={(e) => {
@@ -494,7 +494,7 @@ const GapBadge = ({ gap }) => {
               
               {/* File Upload */}
               <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Upload Excel</label>
+                <label className="block text-sm font-sm text-gray-700 mb-2">Upload Excel</label>
                 <div className="relative">
                   <input
                     type="file"
@@ -523,10 +523,10 @@ const GapBadge = ({ gap }) => {
 
               {/* Download Base Format */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Base Format</label>
+                <label className="block text-sm font-sm text-gray-700 mb-2">Base Format</label>
                 <button
                   onClick={downloadBaseFormat}
-                  className="w-full h-12 px-4 flex items-center justify-center gap-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-colors"
+                  className="w-full h-12 px-4 flex items-center justify-center gap-2 bg-green-600 text-white rounded font-sm hover:bg-green-700 transition-colors"
                 >
                   <FaDownload className="text-sm" />
                   Download Format
@@ -538,7 +538,7 @@ const GapBadge = ({ gap }) => {
                 <button
                   onClick={handleUpload}
                   disabled={!selectedFile || uploading || rosterExists}
-                  className={`w-full h-12 px-6 rounded font-medium transition-all flex items-center justify-center ${
+                  className={`w-full h-12 px-6 rounded font-sm transition-all flex items-center justify-center ${
                     !selectedFile || uploading || rosterExists
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-indigo-600 text-white hover:bg-indigo-700'
@@ -564,7 +564,7 @@ const GapBadge = ({ gap }) => {
             <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200 flex items-center">
               <FaFileExcel className="text-blue-600 mr-2" />
               <p className="text-sm text-blue-800 truncate flex-1">
-                Selected: <span className="font-medium">{selectedFile.name}</span>
+                Selected: <span className="font-sm">{selectedFile.name}</span>
               </p>
               <button 
                 onClick={() => {
@@ -591,14 +591,14 @@ const GapBadge = ({ gap }) => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-                    <th className="p-2 text-left font-medium border-r border-indigo-500">Date</th>
-                    <th className="p-2 text-left font-medium border-r border-indigo-500">Day</th>
+                    <th className="p-1 text-left font-sm border-r border-indigo-500">Date</th>
+                    <th className="p-1 text-left font-sm border-r border-indigo-500">Day</th>
                     {teamMembers.map(member => (
-                      <th key={member} className="p-2 text-center font-medium border-r border-indigo-500 last:border-r-0">
+                      <th key={member} className="p-1 text-center font-sm border-r border-indigo-500 last:border-r-0">
                         {member}
                       </th>
                     ))}
-                    <th className="p-2 text-center font-medium border-r border-indigo-500">Actions</th>
+                    <th className="p-1 text-center font-sm border-r border-indigo-500">Info</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -607,13 +607,13 @@ const GapBadge = ({ gap }) => {
                       key={index} 
                       className={`border-b border-gray-200 ${getDayClass(row.day, row.date)}`}
                     >
-                      <td className="p-2 whitespace-nowrap font-medium text-gray-900 border-r border-gray-200">
+                      <td className="p-1 whitespace-nowrap font-sm text-gray-900 border-r border-gray-200">
                         {formatDate(row.date)}
                         {isToday(row.date) && (
                           <span className="ml-1 text-xs text-yellow-700">(Today)</span>
                         )}
                       </td>
-                      <td className={`p-2 whitespace-nowrap border-r border-gray-200 text-center ${
+                      <td className={`p-1 whitespace-nowrap border-r border-gray-200 text-center ${
                         row.day === 'Friday' || row.day === 'Saturday' 
                           ? 'bg-blue-200 text-blue-800 border border-blue-300' 
                           : 'bg-gray-200 text-gray-800 border border-gray-300'
@@ -621,15 +621,15 @@ const GapBadge = ({ gap }) => {
                         {row.day}
                       </td>
                       {teamMembers.map(member => (
-                        <td key={member} className="p-2 text-center border-r border-gray-200 last:border-r-0">
-                          <span className={`inline-flex items-center justify-center w-full px-2 py-1 rounded text-xs font-medium ${
+                        <td key={member} className="p-1 text-center border-r border-gray-200 last:border-r-0">
+                          <span className={`inline-flex items-center justify-center w-full px-2 py-1 rounded text-xs font-sm ${
                             shiftColors[row[member.toLowerCase()]] || 'bg-gray-100 text-gray-800 border border-gray-200'
                           }`}>
                             {row[member.toLowerCase()] || '-'}
                           </span>
                         </td>
                       ))}
-                      <td className="p-2 text-center border-r border-gray-200">
+                      <td className="p-1 text-center border-r border-gray-200">
                         <button
                           onClick={() => showDayDetails(row)}
                           className="text-indigo-600 hover:text-indigo-800 transition-colors"
@@ -654,7 +654,7 @@ const GapBadge = ({ gap }) => {
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <FaCalendarAlt className="text-gray-400 text-xl" />
             </div>
-            <h3 className="text-lg font-medium text-gray-700 mb-2">No Roster Found</h3>
+            <h3 className="text-lg font-sm text-gray-700 mb-2">No Roster Found</h3>
             <p className="text-gray-500 text-sm mb-4">
               No roster schedule found for {months.find(m => m.value === filters.month)?.label} {filters.year}.
             </p>
@@ -703,23 +703,23 @@ const GapBadge = ({ gap }) => {
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="p-2 text-left font-medium text-gray-700 sticky left-0 bg-gray-50 z-10 min-w-[80px]">
+            <th className="p-2 text-left font-sm text-gray-700 sticky left-0 bg-gray-50 z-10 min-w-[80px]">
               Member
             </th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Regular">REGULAR</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Morning">MORNING</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Noon">NOON</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Evening">EVENING</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Night">NIGHT</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Off Day">OFF-DAY</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Leave">LEAVE</th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[50px]" title="Total Work Days (REGULAR+MORNING+NOON+EVENING+NIGHT)">
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Regular">REGULAR</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Morning">MORNING</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Noon">NOON</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Evening">EVENING</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Night">NIGHT</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Off Day">OFF-DAY</th>
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Leave">LEAVE</th>
+            <th className="text-center font-sm text-gray-700 min-w-[50px]" title="Total Work Days (REGULAR+MORNING+NOON+EVENING+NIGHT)">
               <div className="flex items-center justify-center">
                 <FaBusinessTime className="mr-0.5 text-gray-500" />
                 <span>Work Day</span>
               </div>
             </th>
-            <th className="p-1 text-center font-medium text-gray-700 min-w-[40px]" title="Gap (Work Days vs Month Work Days)">
+            <th className="text-center font-sm text-gray-700 min-w-[40px]" title="Gap (Work Days vs Month Work Days)">
               Gap
             </th>
           </tr>
@@ -742,36 +742,37 @@ const GapBadge = ({ gap }) => {
                   index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                 }`}
               >
-                <td className="p-2 font-medium text-gray-800 sticky left-0 bg-inherit z-10 min-w-[80px]">
+                <td className="p-1 text-sm font-sm text-gray-800 sticky left-0 bg-inherit z-10 min-w-[80px]">
+
                   {member}
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.REGULAR} color="green" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.MORNING} color="blue" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.NOON} color="amber" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.EVENING} color="purple" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.NIGHT} color="indigo" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.OFFDAY} color="gray" />
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <CountBadge count={memberData.LEAVE} color="red" />
                 </td>
-                <td className="p-1 text-center">
-                  <div className="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-800 rounded font-medium">
+                <td className="text-center">
+                  <div className="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-800 rounded font-sm">
                     {workdays}
                   </div>
                 </td>
-                <td className="p-1 text-center">
+                <td className="text-center">
                   <GapBadge gap={gap} />
                 </td>
               </tr>
@@ -786,7 +787,7 @@ const GapBadge = ({ gap }) => {
         {/* Day Details Modal */}
         <AnimatePresence>
           {showModal && selectedDay && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -842,7 +843,7 @@ const GapBadge = ({ gap }) => {
                               <span className={`text-sm font-semibold ${getShiftTextColor(shift)}`}>
                                 {shift}
                               </span>
-                              <span className="text-sm font-medium text-gray-600">
+                              <span className="text-sm font-sm text-gray-600">
                                 {membersWithShift.length} {membersWithShift.length === 1 ? 'MEMBER' : 'MEMBERS'}
                               </span>
                             </div>
@@ -850,7 +851,7 @@ const GapBadge = ({ gap }) => {
                               {membersWithShift.map(member => (
                                 <span 
                                   key={member} 
-                                  className="inline-flex items-center px-3 py-1 rounded bg-indigo-100 text-indigo-800 text-sm font-medium"
+                                  className="inline-flex items-center px-3 py-1 rounded bg-indigo-100 text-indigo-800 text-sm font-sm"
                                 >
                                   {member}
                                 </span>
@@ -886,27 +887,27 @@ const GapBadge = ({ gap }) => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                               <div>
                                 <p className="text-gray-600 mb-1">
-                                  <span className="font-medium">Shift:</span> {note.your_shift}
+                                  <span className="font-sm">Shift:</span> {note.your_shift}
                                 </p>
                                 {note.assigned_to && (
                                   <p className="text-gray-600 mb-1">
-                                    <span className="font-medium">Assigned To:</span> {note.assigned_to}
+                                    <span className="font-sm">Assigned To:</span> {note.assigned_to}
                                   </p>
                                 )}
                                 <p className="text-gray-600 mb-1">
-                                  <span className="font-medium">Updated Shift:</span> {note.updated_shift}
+                                  <span className="font-sm">Updated Shift:</span> {note.updated_shift}
                                 </p>
                               </div>
                               
                               <div>
                                 <p className="text-gray-600 mb-1">
-                                  <span className="font-medium">Reason:</span> {note.reason}
+                                  <span className="font-sm">Reason:</span> {note.reason}
                                 </p>
                                 <p className="text-gray-600 mb-1">
-                                  <span className="font-medium">Handover Task:</span> {note.handover_task}
+                                  <span className="font-sm">Handover Task:</span> {note.handover_task}
                                 </p>
                                 <p className="text-gray-600">
-                                  <span className="font-medium">Communicated With:</span> {note.communicated_person}
+                                  <span className="font-sm">Communicated With:</span> {note.communicated_person}
                                 </p>
                               </div>
                             </div>
@@ -931,7 +932,7 @@ const GapBadge = ({ gap }) => {
                 <div className="p-4 border-t border-gray-200 bg-gray-50 rounded flex justify-end">
                   <button
                     onClick={closeModal}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors font-medium text-sm"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors font-sm text-sm"
                   >
                     Close
                   </button>
