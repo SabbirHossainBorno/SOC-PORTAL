@@ -235,15 +235,29 @@ export async function GET(request) {
     
     // Channel filter
     if (channel) {
-      whereConditions.push(`affected_channel = $${queryParams.length + 1}`);
-      queryParams.push(channel);
-    }
+  // For comma-separated values, we need to check if any of the values match
+  whereConditions.push(`(
+    affected_channel = $${queryParams.length + 1} 
+    OR affected_channel ILIKE $${queryParams.length + 1} || ',%'
+    OR affected_channel ILIKE '%,' || $${queryParams.length + 1} || ',%'
+    OR affected_channel ILIKE '%,' || $${queryParams.length + 1}
+    OR affected_channel ILIKE '%' || $${queryParams.length + 1} || '%'
+  )`);
+  queryParams.push(channel);
+}
     
     // MNO filter
     if (affectedMNO) {
-      whereConditions.push(`affected_mno = $${queryParams.length + 1}`);
-      queryParams.push(affectedMNO);
-    }
+  // For comma-separated values, we need to check if any of the values match
+  whereConditions.push(`(
+    affected_mno = $${queryParams.length + 1} 
+    OR affected_mno ILIKE $${queryParams.length + 1} || ',%'
+    OR affected_mno ILIKE '%,' || $${queryParams.length + 1} || ',%'
+    OR affected_mno ILIKE '%,' || $${queryParams.length + 1}
+    OR affected_mno ILIKE '%' || $${queryParams.length + 1} || '%'
+  )`);
+  queryParams.push(affectedMNO);
+}
     
     // Time range handling
     if (timeRange && timeRange !== '') {
@@ -323,12 +337,34 @@ export async function GET(request) {
       ${whereClause}
     `;
 
-    // Summary query with max duration per downtime_id and top channels
-    const summaryQuery = `
+    // Summary query with max duration per downtime_id, current week, and previous week
+const summaryQuery = `
+  WITH weekly_data AS (
       SELECT
+        -- Current week (Sunday to Saturday)
+        SUM(CASE 
+          WHEN start_date_time >= (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day')
+          AND start_date_time < (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day') + INTERVAL '7 days'
+          THEN EXTRACT(EPOCH FROM duration) 
+          ELSE 0 
+        END) as current_week_seconds,
+
+        -- Previous week (Sunday to Saturday)
+        SUM(CASE 
+          WHEN start_date_time >= (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day') - INTERVAL '7 days'
+          AND start_date_time < (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day')
+          THEN EXTRACT(EPOCH FROM duration) 
+          ELSE 0 
+        END) as previous_week_seconds,
+
+        -- Total (max duration per downtime_id)
+        SUM(max_duration) as total_seconds,
+
+        -- Counts
         COUNT(DISTINCT downtime_id) as total_events,
         COUNT(*) as total_records,
-        SUM(max_duration) as total_seconds,
+
+        -- Top channels
         (
           SELECT json_agg(row_to_json(t)) 
           FROM (
@@ -341,12 +377,25 @@ export async function GET(request) {
           ) t
         ) as top_channels
       FROM (
-        SELECT downtime_id, MAX(EXTRACT(EPOCH FROM duration)) as max_duration
+        SELECT 
+          downtime_id, 
+          MAX(EXTRACT(EPOCH FROM duration)) as max_duration,
+          MIN(start_date_time) as start_date_time,
+          duration
         FROM downtime_report_v2
         ${whereClause}
-        GROUP BY downtime_id
+        GROUP BY downtime_id, duration
       ) sub
-    `;
+    )
+    SELECT 
+      total_events,
+      total_records,
+      total_seconds,
+      current_week_seconds,
+      previous_week_seconds,
+      top_channels
+    FROM weekly_data
+`;
     
     // Execute queries
     const dataResult = await query(dataQuery, [...queryParams, limit, offset]);
@@ -355,18 +404,75 @@ export async function GET(request) {
     const summaryData = summaryResult.rows[0];
     
     // Format total duration
-    let totalDuration = {
-      formatted: 'N/A',
-      minutes: 0
-    };
-    if (summaryData.total_seconds) {
-      const hours = Math.floor(summaryData.total_seconds / 3600);
-      const minutes = Math.floor((summaryData.total_seconds % 3600) / 60);
-      totalDuration = {
-        formatted: `${hours}h ${minutes}m`,
-        minutes: Math.floor(summaryData.total_seconds / 60)
-      };
-    }
+let totalDuration = {
+  formatted: 'N/A',
+  minutes: 0
+};
+if (summaryData.total_seconds) {
+  const hours = Math.floor(summaryData.total_seconds / 3600);
+  const minutes = Math.floor((summaryData.total_seconds % 3600) / 60);
+  totalDuration = {
+    formatted: `${hours}h ${minutes}m`,
+    minutes: Math.floor(summaryData.total_seconds / 60)
+  };
+}
+
+// Format current week duration
+let currentWeekDuration = {
+  formatted: 'N/A',
+  minutes: 0
+};
+if (summaryData.current_week_seconds) {
+  const hours = Math.floor(summaryData.current_week_seconds / 3600);
+  const minutes = Math.floor((summaryData.current_week_seconds % 3600) / 60);
+  currentWeekDuration = {
+    formatted: `${hours}h ${minutes}m`,
+    minutes: Math.floor(summaryData.current_week_seconds / 60)
+  };
+}
+
+// Format previous week duration
+let previousWeekDuration = {
+  formatted: 'N/A',
+  minutes: 0
+};
+if (summaryData.previous_week_seconds) {
+  const hours = Math.floor(summaryData.previous_week_seconds / 3600);
+  const minutes = Math.floor((summaryData.previous_week_seconds % 3600) / 60);
+  previousWeekDuration = {
+    formatted: `${hours}h ${minutes}m`,
+    minutes: Math.floor(summaryData.previous_week_seconds / 60)
+  };
+}
+
+// Get week date ranges
+const getWeekDateRange = (weekOffset = 0) => {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // Calculate start of week (Sunday)
+  const start = new Date(now);
+  start.setDate(now.getDate() - currentDay - (weekOffset * 7));
+  start.setHours(0, 0, 0, 0);
+  
+  // Calculate end of week (Saturday)
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  
+  return { start, end };
+};
+
+const currentWeekRange = getWeekDateRange(0);
+const previousWeekRange = getWeekDateRange(1);
+
+const formatDateRange = (start, end) => {
+  const format = (date) => date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short'
+  });
+  return `${format(start)} - ${format(end)}`;
+};
     
     // Format data for frontend
     const downtimes = dataResult.rows.map(record => ({
@@ -385,12 +491,18 @@ export async function GET(request) {
       downtimes,
       total: countResult.rows[0].total,
       summary: {
-        totalEvents: summaryData.total_events,
-        totalRecords: summaryData.total_records,
-        totalDuration: totalDuration.formatted,
-        totalDurationMinutes: totalDuration.minutes,
-        topChannels: summaryData.top_channels || []
-      }
+  totalEvents: summaryData.total_events,
+  totalRecords: summaryData.total_records,
+  totalDuration: totalDuration.formatted,
+  totalDurationMinutes: totalDuration.minutes,
+  currentWeekDuration: currentWeekDuration.formatted,
+  currentWeekMinutes: currentWeekDuration.minutes,
+  currentWeekRange: formatDateRange(currentWeekRange.start, currentWeekRange.end),
+  previousWeekDuration: previousWeekDuration.formatted,
+  previousWeekMinutes: previousWeekDuration.minutes,
+  previousWeekRange: formatDateRange(previousWeekRange.start, previousWeekRange.end),
+  topChannels: summaryData.top_channels || []
+}
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

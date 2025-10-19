@@ -79,17 +79,48 @@ const formatDuration = (duration) => {
   return 'N/A';
 };
 
-// Map MNO to short names
+// Map MNO to short names - handle comma-separated values
 const getMNOShortName = (mno) => {
   if (!mno) return 'N/A';
-  switch (mno) {
-    case 'ALL': return 'ALL';
-    case 'GRAMEENPHONE': return 'GP';
-    case 'ROBI/AIRTEL': return 'RB/AT';
-    case 'BANGLALINK': return 'BL';
-    case 'TELETALK': return 'TT';
-    default: return mno;
+  
+  const mnoMap = {
+    'ALL': 'ALL',
+    'GRAMEENPHONE': 'GP',
+    'ROBI/AIRTEL': 'RB/AT', 
+    'BANGLALINK': 'BL',
+    'TELETALK': 'TT'
+  };
+  
+  if (mno.includes(',')) {
+    return mno.split(',').map(item => 
+      mnoMap[item.trim()] || item.trim()
+    ).join(', ');
   }
+  
+  return mnoMap[mno] || mno;
+};
+
+// Map Channel to short names - handle comma-separated values
+const getChannelShortName = (channel) => {
+  if (!channel) return 'N/A';
+  
+  const channelMap = {
+    'ALL': 'ALL',
+    'APP': 'APP',
+    'USSD': 'USSD', 
+    'WEB': 'WEB',
+    'SMS': 'SMS',
+    'MIDDLEWARE': 'MW',
+    'INWARD SERVICE': 'INWARD'
+  };
+  
+  if (channel.includes(',')) {
+    return channel.split(',').map(item => 
+      channelMap[item.trim()] || item.trim()
+    ).join(', ');
+  }
+  
+  return channelMap[channel] || channel;
 };
 
 const DowntimeLog = () => {
@@ -127,7 +158,7 @@ const DowntimeLog = () => {
     'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
     'TRANSACTION HISTORY', 'KYC', 'REGISTRATION', 'DEVICE CHANGE',
     'E-COM PAYMENT', 'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING',
-    'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION',
+    'REFUND', 'DISBURSEMENT', 'REVERSAL', 'KYC OPERATIONS', 'PARTNER REGISTRATION', 'CLAWBACK',
     'REMITTANCE', 'BANK TO NAGAD'
   ];
   
@@ -135,13 +166,13 @@ const DowntimeLog = () => {
   const modalities = ['PLANNED', 'UNPLANNED'];
   const reliabilityOptions = ['YES', 'NO'];
   const channelOptions = [
-    { value: 'APP', label: 'Mobile App', icon: <FaMobile className="text-blue-500" /> },
-    { value: 'USSD', label: 'USSD', icon: <FaMobile className="text-green-500" /> },
-    { value: 'WEB', label: 'Web Portal', icon: <FaGlobe className="text-purple-500" /> },
-    { value: 'SMS', label: 'SMS', icon: <FaEnvelope className="text-yellow-500" /> },
-    { value: 'MIDDLEWARE', label: 'Middleware', icon: <FaCog className="text-gray-500" /> },
-    { value: 'INWARD SERVICE', label: 'Inward Service', icon: <FaServer className="text-red-500" /> }
-  ];
+  { value: 'APP', label: 'APP', icon: <FaMobile className="text-blue-500" /> },
+  { value: 'USSD', label: 'USSD', icon: <FaMobile className="text-green-500" /> },
+  { value: 'WEB', label: 'WEB', icon: <FaGlobe className="text-purple-500" /> },
+  { value: 'SMS', label: 'SMS', icon: <FaEnvelope className="text-yellow-500" /> },
+  { value: 'MIDDLEWARE', label: 'MIDDLEWARE', icon: <FaCog className="text-gray-500" /> },
+  { value: 'INWARD SERVICE', label: 'INWARD SERVICE', icon: <FaServer className="text-red-500" /> }
+];
   const mnoOptions = ['ALL', 'GRAMEENPHONE', 'ROBI/AIRTEL', 'BANGLALINK', 'TELETALK'];
 
   const timeRangeOptions = [
@@ -216,22 +247,36 @@ const DowntimeLog = () => {
     fetchData();
   }, [filters, sortConfig, pagination.page, pagination.limit]);
 
+  // Add this helper function near your other utility functions
+const channelRequiresMNO = (channel) => {
+  if (!channel) return false;
+  
+  // Handle comma-separated values
+  if (channel.includes(',')) {
+    const channels = channel.split(',').map(ch => ch.trim());
+    return channels.some(ch => ch === 'SMS' || ch === 'USSD');
+  }
+  
+  // Handle single value
+  return channel === 'SMS' || channel === 'USSD';
+};
+
   const handleFilterChange = (name, value) => {
+  setFilters(prev => ({
+    ...prev,
+    [name]: value
+    // Remove the MNO reset logic
+  }));
+  setPagination(prev => ({ ...prev, page: 1 }));
+  
+  if (name === 'timeRange' && value !== 'custom') {
     setFilters(prev => ({
       ...prev,
-      [name]: value,
-      ...(name === 'channel' && !['SMS', 'USSD'].includes(value) ? { affectedMNO: '' } : {})
+      startDate: null,
+      endDate: null
     }));
-    setPagination(prev => ({ ...prev, page: 1 }));
-    
-    if (name === 'timeRange' && value !== 'custom') {
-      setFilters(prev => ({
-        ...prev,
-        startDate: null,
-        endDate: null
-      }));
-    }
-  };
+  }
+};
 
   const requestSort = (key) => {
     let direction = 'ASC';
@@ -307,103 +352,166 @@ const DowntimeLog = () => {
         </div>
 
         {/* Modern Summary Section */}
-        {summary && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            {/* Total Events Card */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 shadow-md border border-blue-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">Total Events</h3>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalEvents}</p>
-                  <p className="text-xs text-blue-600 mt-2">Unique incidents tracked</p>
-                </div>
-                <div className="p-3 rounded bg-white shadow-sm">
-                  <FaExclamationTriangle className="text-blue-600 text-xl" />
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-blue-200 border-dashed">
-                <div className="flex items-center text-xs text-blue-700">
-                  <FaHistory className="mr-1" />
-                  <span>All-time recorded events</span>
-                </div>
-              </div>
+{summary && (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    {/* Total Events Card - Keep your existing design */}
+    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 shadow-md border border-blue-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">Total Events</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalEvents}</p>
+          <p className="text-xs text-blue-600 mt-2">Unique incidents tracked</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaExclamationTriangle className="text-blue-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-blue-200 border-dashed">
+        <div className="flex items-center text-xs text-blue-700">
+          <FaHistory className="mr-1" />
+          <span>All-time recorded events</span>
+        </div>
+      </div>
+    </div>
+    
+    {/* Total Records Card - Keep your existing design */}
+    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded p-5 shadow-md border border-purple-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide">Total Records</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalRecords}</p>
+          <p className="text-xs text-purple-600 mt-2">All downtime entries</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaLayerGroup className="text-purple-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-purple-200 border-dashed">
+        <div className="flex items-center text-xs text-purple-700">
+          <FaDatabase className="mr-1" />
+          <span>Complete historical data</span>
+        </div>
+      </div>
+    </div>
+    
+    {/* Total Duration Card - Keep your existing design */}
+    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded p-5 shadow-md border border-green-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-green-800 uppercase tracking-wide">Total Duration</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalDuration}</p>
+          <p className="text-sm font-medium text-green-700 mt-1">{summary.totalDurationMinutes} minutes</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaClock className="text-green-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-green-200 border-dashed">
+        <div className="flex items-center text-xs text-green-700">
+          <FaSignal className="mr-1" />
+          <span>Cumulative downtime</span>
+        </div>
+      </div>
+    </div>
+    
+    {/* Top Channels Card - Keep your existing design */}
+    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded p-4 shadow-sm border border-orange-200">
+      <div className="flex items-start justify-between mb-3">
+        <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Top Channels</h3>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaChartPie className="text-orange-600 text-xl" />
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        {summary.topChannels.map((ch, index) => (
+          <div key={index} className="flex items-center justify-between bg-white/80 py-1.5 px-2.5 rounded shadow-xs">
+            <div className="flex items-center">
+              <span className={`w-1.5 h-1.5 rounded mr-2 ${
+                index === 0 ? 'bg-orange-500' : 
+                index === 1 ? 'bg-orange-400' : 'bg-orange-300'
+              }`}></span>
+              <span className="text-xs font-medium text-gray-800 truncate">{ch.channel}</span>
             </div>
-            
-            {/* Total Records Card */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded p-5 shadow-md border border-purple-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide">Total Records</h3>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalRecords}</p>
-                  <p className="text-xs text-purple-600 mt-2">All downtime entries</p>
-                </div>
-                <div className="p-3 rounded bg-white shadow-sm">
-                  <FaLayerGroup className="text-purple-600 text-xl" />
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-purple-200 border-dashed">
-                <div className="flex items-center text-xs text-purple-700">
-                  <FaDatabase className="mr-1" />
-                  <span>Complete historical data</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Total Duration Card */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded p-5 shadow-md border border-green-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-green-800 uppercase tracking-wide">Total Duration</h3>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalDuration}</p>
-                  <p className="text-sm font-medium text-green-700 mt-1">{summary.totalDurationMinutes} minutes</p>
-                </div>
-                <div className="p-3 rounded bg-white shadow-sm">
-                  <FaClock className="text-green-600 text-xl" />
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-green-200 border-dashed">
-                <div className="flex items-center text-xs text-green-700">
-                  <FaSignal className="mr-1" />
-                  <span>Cumulative downtime</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Top Channels Card */}
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded p-4 shadow-sm border border-orange-200">
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Top Channels</h3>
-                <div className="p-3 rounded bg-white shadow-sm">
-                  <FaChartPie className="text-orange-600 text-xl" />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                {summary.topChannels.map((ch, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white/80 py-1.5 px-2.5 rounded shadow-xs">
-                    <div className="flex items-center">
-                      <span className={`w-1.5 h-1.5 rounded mr-2 ${
-                        index === 0 ? 'bg-orange-500' : 
-                        index === 1 ? 'bg-orange-400' : 'bg-orange-300'
-                      }`}></span>
-                      <span className="text-xs font-medium text-gray-800 truncate">{ch.channel}</span>
-                    </div>
-                    <span className="bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded min-w-[1.5rem] text-center">
-                      {ch.count}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-3 pt-2 border-t border-orange-200 border-dashed">
-                <div className="flex items-center text-xs text-orange-700">
-                  <FaChartBar className="mr-1 text-xs" />
-                  <span>Most affected</span>
-                </div>
-              </div>
-            </div>
+            <span className="bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded min-w-[1.5rem] text-center">
+              {ch.count}
+            </span>
           </div>
-        )}
+        ))}
+      </div>
+      
+      <div className="mt-3 pt-2 border-t border-orange-200 border-dashed">
+        <div className="flex items-center text-xs text-orange-700">
+          <FaChartBar className="mr-1 text-xs" />
+          <span>Most affected</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Current Week Duration Card - Same design as your cards */}
+    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded p-5 shadow-md border border-indigo-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">Current Week</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentWeekDuration}</p>
+          <p className="text-sm font-medium text-indigo-700 mt-1">{summary.currentWeekMinutes} minutes</p>
+          <p className="text-xs text-indigo-600 mt-1">{summary.currentWeekRange}</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaCalendar className="text-indigo-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-indigo-200 border-dashed">
+        <div className="flex items-center text-xs text-indigo-700">
+          <FaChartBar className="mr-1" />
+          <span>This week&apos;s downtime</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Previous Week Duration Card - Same design as your cards */}
+    <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded p-5 shadow-md border border-pink-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-pink-800 uppercase tracking-wide">Last Week</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.previousWeekDuration}</p>
+          <p className="text-sm font-medium text-pink-700 mt-1">{summary.previousWeekMinutes} minutes</p>
+          <p className="text-xs text-pink-600 mt-1">{summary.previousWeekRange}</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaHistory className="text-pink-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-pink-200 border-dashed">
+        <div className="flex items-center text-xs text-pink-700">
+          <FaChartBar className="mr-1" />
+          <span>Previous week downtime</span>
+        </div>
+      </div>
+    </div>
+
+    {/* This Month Duration Card - Same design as your cards */}
+    <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded p-5 shadow-md border border-teal-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-teal-800 uppercase tracking-wide">This Month</h3>
+          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentMonthDuration}</p>
+          <p className="text-sm font-medium text-teal-700 mt-1">{summary.currentMonthMinutes} minutes</p>
+          <p className="text-xs text-teal-600 mt-1">{summary.currentMonthRange}</p>
+        </div>
+        <div className="p-3 rounded bg-white shadow-sm">
+          <FaCalendarAlt className="text-teal-600 text-xl" />
+        </div>
+      </div>
+      <div className="mt-4 pt-3 border-t border-teal-200 border-dashed">
+        <div className="flex items-center text-xs text-teal-700">
+          <FaChartBar className="mr-1" />
+          <span>This month&apos;s downtime</span>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
         <div className="bg-white rounded shadow-md mb-6 overflow-hidden">
           <div className="p-4">
@@ -432,154 +540,155 @@ const DowntimeLog = () => {
             </div>
             
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Time Range
-                </label>
-                <select
-                  value={filters.timeRange}
-                  onChange={(e) => handleFilterChange('timeRange', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  {timeRangeOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              {filters.timeRange === 'custom' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Start Date
-                    </label>
-                    <DatePicker
-                      selected={filters.startDate}
-                      onChange={(date) => handleFilterChange('startDate', date)}
-                      selectsStart
-                      startDate={filters.startDate}
-                      endDate={filters.endDate}
-                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                      placeholderText="Select start date"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      End Date
-                    </label>
-                    <DatePicker
-                      selected={filters.endDate}
-                      onChange={(date) => handleFilterChange('endDate', date)}
-                      selectsEnd
-                      startDate={filters.startDate}
-                      endDate={filters.endDate}
-                      minDate={filters.startDate}
-                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                      placeholderText="Select end date"
-                    />
-                  </div>
-                </>
-              )}
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={filters.category}
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Impact Type
-                </label>
-                <select
-                  value={filters.impactType}
-                  onChange={(e) => handleFilterChange('impactType', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Types</option>
-                  {impactTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Modality
-                </label>
-                <select
-                  value={filters.modality}
-                  onChange={(e) => handleFilterChange('modality', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Modalities</option>
-                  {modalities.map(mod => (
-                    <option key={mod} value={mod}>{mod}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Reliability Impacted
-                </label>
-                <select
-                  value={filters.reliability}
-                  onChange={(e) => handleFilterChange('reliability', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All</option>
-                  {reliabilityOptions.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Affected Channel
-                </label>
-                <select
-                  value={filters.channel}
-                  onChange={(e) => handleFilterChange('channel', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Channels</option>
-                  {channelOptions.map(channel => (
-                    <option key={channel.value} value={channel.value}>{channel.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              {['SMS', 'USSD'].includes(filters.channel) && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Affected MNO
-                  </label>
-                  <select
-                    value={filters.affectedMNO}
-                    onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
-                    className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                  >
-                    <option value="">All MNOs</option>
-                    {mnoOptions.map(mno => (
-                      <option key={mno} value={mno}>{getMNOShortName(mno)}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Time Range
+    </label>
+    <select
+      value={filters.timeRange}
+      onChange={(e) => handleFilterChange('timeRange', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      {timeRangeOptions.map(option => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
+  </div>
+  
+  {filters.timeRange === 'custom' && (
+    <>
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Start Date
+        </label>
+        <DatePicker
+          selected={filters.startDate}
+          onChange={(date) => handleFilterChange('startDate', date)}
+          selectsStart
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+          placeholderText="Select start date"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          End Date
+        </label>
+        <DatePicker
+          selected={filters.endDate}
+          onChange={(date) => handleFilterChange('endDate', date)}
+          selectsEnd
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          minDate={filters.startDate}
+          className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+          placeholderText="Select end date"
+        />
+      </div>
+    </>
+  )}
+  
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Category
+    </label>
+    <select
+      value={filters.category}
+      onChange={(e) => handleFilterChange('category', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All Categories</option>
+      {categories.map(category => (
+        <option key={category} value={category}>{category}</option>
+      ))}
+    </select>
+  </div>
+  
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Impact Type
+    </label>
+    <select
+      value={filters.impactType}
+      onChange={(e) => handleFilterChange('impactType', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All Types</option>
+      {impactTypes.map(type => (
+        <option key={type} value={type}>{type}</option>
+      ))}
+    </select>
+  </div>
+  
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Modality
+    </label>
+    <select
+      value={filters.modality}
+      onChange={(e) => handleFilterChange('modality', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All Modalities</option>
+      {modalities.map(mod => (
+        <option key={mod} value={mod}>{mod}</option>
+      ))}
+    </select>
+  </div>
+  
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Reliability Impacted
+    </label>
+    <select
+      value={filters.reliability}
+      onChange={(e) => handleFilterChange('reliability', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All</option>
+      {reliabilityOptions.map(opt => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
+  </div>
+  
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Affected Channel
+    </label>
+    <select
+      value={filters.channel}
+      onChange={(e) => handleFilterChange('channel', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All Channels</option>
+      {channelOptions.map(channel => (
+        <option key={channel.value} value={channel.value}>{channel.label}</option>
+      ))}
+    </select>
+  </div>
+  
+  {/* MNO Filter - Always Visible */}
+  <div>
+    <label className="block text-xs font-medium text-gray-700 mb-1">
+      Affected MNO
+    </label>
+    <select
+      value={filters.affectedMNO}
+      onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
+      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+    >
+      <option value="">All MNOs</option>
+      {mnoOptions.map(mno => (
+        <option key={mno} value={mno}>
+          {getMNOShortName(mno)} ({mno})
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
           </div>
         </div>
 
@@ -673,16 +782,16 @@ const DowntimeLog = () => {
                       <td className="px-1 py-2 text-gray-900 border-r border-gray-200 max-w-[150px] truncate" title={downtime.issue_title}>
                         {downtime.issue_title}
                       </td>
-                      <td className="px-1 py-2 whitespace-nowrap border-r border-gray-200">
-                        <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
-                          {downtime.affected_channel}
-                        </span>
-                      </td>
-                      <td className="px-1 py-2 whitespace-nowrap border-r border-gray-200">
-                        <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs">
-                          {getMNOShortName(downtime.affected_mno)}
-                        </span>
-                      </td>
+                      <td className="px-1 py-2 border-r border-gray-200">
+  <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs break-words">
+    {getChannelShortName(downtime.affected_channel)}
+  </span>
+</td>
+                      <td className="px-1 py-2 border-r border-gray-200">
+                      <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs break-words">
+                        {getMNOShortName(downtime.affected_mno)}
+                      </span>
+                    </td>
                       <td className="px-1 py-2 whitespace-nowrap border-r border-gray-200">
                         <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
                           {downtime.category}
