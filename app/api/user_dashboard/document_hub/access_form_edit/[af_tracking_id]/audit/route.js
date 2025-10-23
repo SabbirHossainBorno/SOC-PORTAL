@@ -7,7 +7,7 @@ export async function GET(request, { params }) {
   try {
     const result = await query(
       `SELECT serial, version, action_type, audit_info, document_location, 
-              updated_by, ip_address, user_agent, audit_remark, created_at, updated_at
+              updated_by, ip_address, user_agent, audit_remark, created_at, updated_at, effective_date
        FROM access_form_audit_trail 
        WHERE af_tracking_id = $1 
        ORDER BY version ASC`,

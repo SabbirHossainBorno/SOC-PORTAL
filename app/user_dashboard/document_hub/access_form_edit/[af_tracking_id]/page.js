@@ -158,26 +158,27 @@ export default function AccessFormEdit() {
   ];
   
   const [formData, setFormData] = useState({
-    ngd_id: '',
-    user_name: '',
-    email: '',
-    mobile_number: '',
-    division: '',
-    department: '',
-    portal_name: [],
-    custom_portal_name: '',
-    role: [],
-    custom_role: '',
-    effective_date: '',
-    revoke_date: '',
-    status: 'Active',
-    remark: '',
-    document_location: '',
-    track_by: '',
-    created_at: '',
-    updated_at: '',
-    access_form_type: '', // Don't set a default, it will be populated from the API
-    audit_remark: '' // Add audit remark field
+  ngd_id: '',
+  user_name: '',
+  email: '',
+  mobile_number: '',
+  division: '',
+  department: '',
+  portal_name: [],
+  custom_portal_name: '',
+  role: [],
+  custom_role: '',
+  effective_date: '',
+  revoke_date: '',
+  status: 'Active',
+  remark: '',
+  document_location: '',
+  track_by: '',
+  created_at: '',
+  updated_at: '',
+  access_form_type: '',
+  audit_remark: '',
+  initial_effective_date: '' // Add this
 });
   
   const [documentFile, setDocumentFile] = useState(null);
@@ -230,21 +231,24 @@ useEffect(() => {
           const option = roleOptions.find(opt => opt.value === trimmedRole);
           return option || { value: trimmedRole, label: trimmedRole };
         });
+
+        
         
         // Check if any role is not in the standard options
         const hasCustomRole = roles.some(r => !roleOptions.find(opt => opt.value === r.value));
         
         setFormData({
-        ...data,
-        portal_name: portalNames,
-        custom_portal_name: hasCustomPortal ? data.portal_name : '',
-        role: roles,
-        custom_role: hasCustomRole ? data.role : '',
-        effective_date: formatDateForInput(data.effective_date),
-        revoke_date: formatDateForInput(data.revoke_date),
-        access_form_type: data.access_form_type || '', // Get from API or empty string
-        additional_info: data.additional_info || '' // Get from API or empty string
-      });
+  ...data,
+  portal_name: portalNames,
+  custom_portal_name: hasCustomPortal ? data.portal_name : '',
+  role: roles,
+  custom_role: hasCustomRole ? data.role : '',
+  effective_date: '', // Clear effective date for new version
+  revoke_date: formatDateForInput(data.revoke_date),
+  access_form_type: data.access_form_type || '',
+  additional_info: data.additional_info || '',
+  initial_effective_date: data.effective_date // Store the initial effective date separately
+});
         
         // Fetch document history
         await fetchDocumentHistory(af_tracking_id);
@@ -478,6 +482,17 @@ const handleSubmit = async (e) => {
   return date.toLocaleDateString('en-US', options);
 };
 
+const formatDateOnly = (dateString) => {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'Asia/Dhaka'
+  });
+};
+
+
 const formatDateTime = (dateString) => {
   if (!dateString) return '-';
   
@@ -633,19 +648,25 @@ const formatDateTime = (dateString) => {
                   </div>
                   
                   <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-white rounded border border-gray-200">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tracked By</label>
-                      <p className="text-sm text-gray-900">{formData.track_by}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
-                      <p className="text-sm text-gray-900">{formatDateTime(formData.created_at)}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Last Updated</label>
-                      <p className="text-sm text-gray-900">{formatDateTime(formData.updated_at)}</p>
-                    </div>
-                  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">Tracked By</label>
+    <p className="text-sm text-gray-900">{formData.track_by}</p>
+  </div>
+  <div>
+    <span className="text-xs text-gray-500 block">Initial Effective Date</span>
+    <span className="text-sm font-medium text-gray-900">
+      {formData.initial_effective_date ? formatDateOnly(formData.initial_effective_date) : 'N/A'}
+    </span>
+  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
+    <p className="text-sm text-gray-900">{formatDateTime(formData.created_at)}</p>
+  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">Last Updated</label>
+    <p className="text-sm text-gray-900">{formatDateTime(formData.updated_at)}</p>
+  </div>
+</div>
                 </div>
 
                 <div className="md:col-span-2">
@@ -765,19 +786,22 @@ const formatDateTime = (dateString) => {
                   )}
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Effective Date *
-                    </label>
-                    <input
-                      type="date"
-                      name="effective_date"
-                      value={formData.effective_date}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded border ${errors.effective_date ? 'border-red-600 ring-2 ring-red-300' : 'border-gray-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-300'} transition-all placeholder-gray-600 placeholder-opacity-80 text-gray-900`}
-                      placeholder="Select effective date"
-                    />
-                    {errors.effective_date && <p className="mt-2 text-sm text-red-700 flex items-center"><FaTimes className="mr-1 text-xs" /> {errors.effective_date}</p>}
-                  </div>
+  <label className="block text-sm font-medium text-gray-900 mb-2">
+    Effective Date for This Update *
+    <span className="text-blue-600 ml-2 text-xs">
+      (Leave blank to keep current date: {formData.effective_date ? formatDateOnly(formData.effective_date) : 'Not set'})
+    </span>
+  </label>
+  <input
+    type="date"
+    name="effective_date"
+    value={formData.effective_date}
+    onChange={handleChange}
+    className={`w-full px-4 py-3 rounded border ${errors.effective_date ? 'border-red-600 ring-2 ring-red-300' : 'border-gray-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-300'} transition-all placeholder-gray-600 placeholder-opacity-80 text-gray-900`}
+    placeholder="Select effective date for this version"
+  />
+  {errors.effective_date && <p className="mt-2 text-sm text-red-700 flex items-center"><FaTimes className="mr-1 text-xs" /> {errors.effective_date}</p>}
+</div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-900 mb-2">

@@ -184,6 +184,7 @@ export async function POST(request) {
     const access_form_type = formData.get('access_form_type');
     const additional_info = formData.get('additional_info');
     const audit_remark = formData.get('audit_remark') || '';
+    const finalEffectiveDate = effective_date || currentForm.effective_date;
 
     console.log('Form data received:', {
       af_tracking_id,
@@ -257,19 +258,19 @@ export async function POST(request) {
     }
 
     // Validate dates
-    const dateErrors = validateDates(effective_date, revoke_date);
-    if (Object.keys(dateErrors).length > 0) {
-      console.warn('Date validation failed:', dateErrors);
-      await client.query('ROLLBACK');
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'Date validation failed',
-        errors: dateErrors
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    const dateErrors = validateDates(finalEffectiveDate, revoke_date);
+if (Object.keys(dateErrors).length > 0) {
+  console.warn('Date validation failed:', dateErrors);
+  await client.query('ROLLBACK');
+  return new Response(JSON.stringify({
+    success: false,
+    message: 'Date validation failed',
+    errors: dateErrors
+  }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 
     if (action !== 'update') {
       console.warn('Invalid action:', action);
@@ -434,52 +435,50 @@ export async function POST(request) {
     // Update the record
     console.log('Updating access form tracker in DB');
     const updateQuery = `
-      UPDATE access_form_tracker 
-      SET 
-        ngd_id = $1,
-        user_name = $2,
-        email = $3,
-        mobile_number = $4,
-        division = $5,
-        department = $6,
-        portal_name = $7,
-        role = $8,
-        effective_date = $9,
-        revoke_date = $10,
-        status = $11,
-        remark = $12,
-        document_location = $13,
-        access_form_type = $14,
-        additional_info = $15,
-        updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::timestamp
-      WHERE af_tracking_id = $16
-    `;
+  UPDATE access_form_tracker 
+  SET 
+    ngd_id = $1,
+    user_name = $2,
+    email = $3,
+    mobile_number = $4,
+    division = $5,
+    department = $6,
+    portal_name = $7,
+    role = $8,
+    revoke_date = $9,
+    status = $10,
+    remark = $11,
+    document_location = $12,
+    access_form_type = $13,
+    additional_info = $14,
+    updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::timestamp
+  WHERE af_tracking_id = $15
+`;
 
-    await client.query(updateQuery, [
-      ngd_id,
-      user_name,
-      email,
-      mobile_number,
-      division,
-      department,
-      finalPortalNames,
-      finalRoles,
-      effective_date,
-      revoke_date || null,
-      finalStatus,
-      remark,
-      documentLocation,
-      access_form_type,
-      additional_info,
-      af_tracking_id
-    ]);
+await client.query(updateQuery, [
+  ngd_id,
+  user_name,
+  email,
+  mobile_number,
+  division,
+  department,
+  finalPortalNames,
+  finalRoles,
+  revoke_date || null,
+  finalStatus,
+  remark,
+  documentLocation,
+  access_form_type,
+  additional_info,
+  af_tracking_id
+]);
     console.log('DB update successful for af_tracking_id:', af_tracking_id);
     
     // Insert into audit trail
     await client.query(
   `INSERT INTO access_form_audit_trail 
-   (af_tracking_id, version, action_type, audit_info, document_location, updated_by, ip_address, user_agent, audit_remark)
-   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+   (af_tracking_id, version, action_type, audit_info, document_location, updated_by, ip_address, user_agent, audit_remark, effective_date, created_at, updated_at)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::timestamp, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::timestamp)`,
   [
     af_tracking_id,
     nextVersion,
@@ -489,7 +488,8 @@ export async function POST(request) {
     userInfo.short_name,
     ipAddress,
     userAgent,
-    audit_remark // Add audit remark
+    audit_remark,
+    effective_date // This is the version-specific effective date
   ]
 );
 

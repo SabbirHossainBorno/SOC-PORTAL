@@ -1,0 +1,676 @@
+// app/user_dashboard/document_hub/other_document_tracker/device_tracker/page.js
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  FaMobile, FaSimCard, FaUser, FaCalendarAlt,
+  FaPaperPlane, FaSpinner, FaTimes, FaArrowLeft,
+  FaSave, FaIdCard, FaInfoCircle, FaBullseye,
+  FaCheckCircle, FaExclamationTriangle
+} from 'react-icons/fa';
+import { toast } from 'react-hot-toast';
+import Select from 'react-select';
+
+const personaOptions = [
+  { value: 'Customer', label: 'Customer' },
+  { value: 'Agent', label: 'Agent' },
+  { value: 'DSO', label: 'DSO' },
+  { value: 'Merchant', label: 'Merchant' },
+  { value: 'Distributor', label: 'Distributor' }
+];
+
+const deviceStatusOptions = [
+  { value: 'Working', label: 'Working' },
+  { value: 'Not Working', label: 'Not Working' }
+];
+
+const customStyles = {
+  control: (provided, state) => ({
+    ...provided,
+    backgroundColor: '#f9fafb',
+    borderColor: state.isFocused ? '#3b82f6' : '#d1d5db',
+    borderRadius: '0.5rem',
+    padding: '0.25rem',
+    boxShadow: state.isFocused ? '0 0 0 3px rgba(59, 130, 246, 0.2)' : 'none',
+    '&:hover': {
+      borderColor: state.isFocused ? '#3b82f6' : '#9ca3af'
+    },
+    minHeight: '42px'
+  }),
+  option: (provided, state) => ({
+    ...provided,
+    backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#e5e7eb' : '#ffffff',
+    color: state.isSelected ? '#ffffff' : '#1f2937',
+    padding: '0.5rem 1rem'
+  })
+};
+
+export default function DeviceTracker() {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    brand_name: '',
+    device_model: '',
+    imei_1: '',
+    imei_2: '',
+    sim_1: '',
+    sim_1_persona: '',
+    sim_2: '',
+    sim_2_persona: '',
+    purpose: '',
+    handover_to: '',
+    handover_date: '',
+    return_date: '',
+    remark: '',
+    device_status: 'Working', // Default value
+    device_status_details: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [userInfo, setUserInfo] = useState(null);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const response = await fetch('/api/user_dashboard/user_info');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info');
+        }
+        
+        const userData = await response.json();
+        setUserInfo(userData);
+        
+      } catch (error) {
+        console.error('Error fetching user info:', error);
+        toast.error('Failed to load user information');
+      }
+    };
+
+    fetchUserInfo();
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handlePersonaChange = (field, selectedOption) => {
+    setFormData(prev => ({ ...prev, [field]: selectedOption?.value || '' }));
+  };
+
+  const handleStatusChange = (selectedOption) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      device_status: selectedOption?.value || 'Working',
+      device_status_details: selectedOption?.value === 'Working' ? '' : prev.device_status_details
+    }));
+  };
+
+  // Validate SIM number format
+  const isValidSIM = (sim) => {
+    if (!sim) return true; // SIM is optional
+    const validPrefixes = ['017', '013', '019', '014', '016', '018', '015'];
+    return /^\d{11}$/.test(sim) && validPrefixes.includes(sim.substring(0, 3));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.brand_name.trim()) {
+      newErrors.brand_name = 'Brand name is required';
+    }
+    
+    if (!formData.device_model.trim()) {
+      newErrors.device_model = 'Device model is required';
+    }
+    
+    if (!formData.imei_1.trim()) {
+      newErrors.imei_1 = 'IMEI 1 is required';
+    } else if (!/^\d{15}$/.test(formData.imei_1)) {
+      newErrors.imei_1 = 'IMEI must be 15 digits';
+    }
+    
+    if (formData.imei_2 && !/^\d{15}$/.test(formData.imei_2)) {
+      newErrors.imei_2 = 'IMEI must be 15 digits';
+    }
+    
+    // SIM 1 validation (optional but must be valid if provided)
+    if (formData.sim_1 && !isValidSIM(formData.sim_1)) {
+      newErrors.sim_1 = 'SIM must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015';
+    }
+    
+    // SIM 2 validation (optional but must be valid if provided)
+    if (formData.sim_2 && !isValidSIM(formData.sim_2)) {
+      newErrors.sim_2 = 'SIM must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015';
+    }
+    
+    // Persona is optional even if SIM is provided
+    // No validation needed for sim_1_persona and sim_2_persona
+    
+    if (!formData.purpose.trim()) {
+      newErrors.purpose = 'Purpose is required';
+    }
+
+    // Device status details validation when status is "Not Working"
+    if (formData.device_status === 'Not Working' && !formData.device_status_details.trim()) {
+      newErrors.device_status_details = 'Reason is required when device status is "Not Working"';
+    }
+    
+    // Handover fields are now optional
+    // No validation for handover_to, handover_date, return_date
+    
+    // Only validate return_date if both dates are provided
+    if (formData.handover_date && formData.return_date && new Date(formData.return_date) <= new Date(formData.handover_date)) {
+      newErrors.return_date = 'Return date must be after handover date';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('Please fix validation errors');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch('/api/user_dashboard/document_hub/other_document_tracker/device_tracker', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('Device information saved successfully!');
+        
+        // Reset form
+        setFormData({
+          brand_name: '',
+          device_model: '',
+          imei_1: '',
+          imei_2: '',
+          sim_1: '',
+          sim_1_persona: '',
+          sim_2: '',
+          sim_2_persona: '',
+          purpose: '',
+          handover_to: '',
+          handover_date: '',
+          return_date: '',
+          remark: '',
+          device_status: 'Working',
+          device_status_details: ''
+        });
+        
+        // Redirect to device log page after success
+        setTimeout(() => {
+          router.push('/user_dashboard/document_hub/other_document_log');
+        }, 2000);
+      } else {
+        toast.error(result.message || 'Failed to save device information');
+      }
+    } catch (error) {
+      console.error('Error saving device information:', error);
+      toast.error('Failed to save device information');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300">
+          {/* Header */}
+          <div className="relative px-8 py-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white border-b border-white/10 shadow-md">
+            <div className="relative flex flex-col md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center">
+                <button
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
+                  className="mr-4 p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                >
+                  <FaArrowLeft />
+                </button>
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                    Device Tracker
+                  </h1>
+                  <p className="text-blue-200 mt-1 text-sm md:text-base">
+                    Track and manage device information
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 md:mt-0 flex items-center space-x-2">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <FaMobile className="text-xl" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="p-8">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Device Information Section */}
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                    <FaMobile className="text-blue-700" />
+                  </div>
+                  Device Information
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Brand Name *
+                    </label>
+                    <input
+                      type="text"
+                      name="brand_name"
+                      value={formData.brand_name}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.brand_name ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900`}
+                      placeholder="e.g., Samsung, Apple, Xiaomi"
+                    />
+                    {errors.brand_name && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.brand_name}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Device Model *
+                    </label>
+                    <input
+                      type="text"
+                      name="device_model"
+                      value={formData.device_model}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.device_model ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900`}
+                      placeholder="e.g., Galaxy S23, iPhone 15"
+                    />
+                    {errors.device_model && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.device_model}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      IMEI 1 *
+                    </label>
+                    <input
+                      type="text"
+                      name="imei_1"
+                      value={formData.imei_1}
+                      onChange={handleChange}
+                      maxLength={15}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.imei_1 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900`}
+                      placeholder="15-digit IMEI number"
+                    />
+                    {errors.imei_1 && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.imei_1}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      IMEI 2
+                    </label>
+                    <input
+                      type="text"
+                      name="imei_2"
+                      value={formData.imei_2}
+                      onChange={handleChange}
+                      maxLength={15}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.imei_2 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900`}
+                      placeholder="15-digit IMEI number (optional)"
+                    />
+                    {errors.imei_2 && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.imei_2}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Device Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Device Status *
+                    </label>
+                    <Select
+                      options={deviceStatusOptions}
+                      value={deviceStatusOptions.find(opt => opt.value === formData.device_status)}
+                      onChange={handleStatusChange}
+                      styles={customStyles}
+                      className="rounded-lg"
+                      classNamePrefix="select"
+                      placeholder="Select device status..."
+                    />
+                  </div>
+
+                  {/* Device Status Details - Show only when status is "Not Working" */}
+                  {formData.device_status === 'Not Working' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Reason for Not Working *
+                      </label>
+                      <textarea
+                        name="device_status_details"
+                        value={formData.device_status_details}
+                        onChange={handleChange}
+                        rows={3}
+                        className={`w-full px-4 py-3 rounded-lg border ${
+                          errors.device_status_details ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                        } transition-all placeholder-gray-500 text-gray-900 resize-none`}
+                        placeholder="Please provide details about why the device is not working..."
+                      />
+                      {errors.device_status_details && (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaTimes className="mr-1 text-xs" /> {errors.device_status_details}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Purpose Field */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Purpose *
+                    </label>
+                    <textarea
+                      name="purpose"
+                      value={formData.purpose}
+                      onChange={handleChange}
+                      rows={3}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.purpose ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900 resize-none`}
+                      placeholder="Describe the purpose of this device"
+                    />
+                    {errors.purpose && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.purpose}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* SIM Information Section */}
+              <div className="bg-green-50 p-6 rounded-xl border border-green-200">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                    <FaSimCard className="text-green-700" />
+                  </div>
+                  SIM Information (Optional)
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* SIM 1 */}
+                  <div className="space-y-4">
+                    <h3 className="text-md font-medium text-gray-800 flex items-center">
+                      <FaSimCard className="mr-2 text-green-600" />
+                      SIM 1 (Optional)
+                    </h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        SIM Number
+                      </label>
+                      <input
+                        type="text"
+                        name="sim_1"
+                        value={formData.sim_1}
+                        onChange={handleChange}
+                        maxLength={11}
+                        className={`w-full px-4 py-3 rounded-lg border ${
+                          errors.sim_1 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                        } transition-all placeholder-gray-500 text-gray-900`}
+                        placeholder="11-digit SIM number"
+                      />
+                      {errors.sim_1 && (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaTimes className="mr-1 text-xs" /> {errors.sim_1}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Persona Type (Optional)
+                      </label>
+                      <Select
+                        options={personaOptions}
+                        value={personaOptions.find(opt => opt.value === formData.sim_1_persona)}
+                        onChange={(selected) => handlePersonaChange('sim_1_persona', selected)}
+                        styles={customStyles}
+                        className="rounded-lg"
+                        classNamePrefix="select"
+                        placeholder="Select persona type..."
+                        isClearable
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* SIM 2 */}
+                  <div className="space-y-4">
+                    <h3 className="text-md font-medium text-gray-800 flex items-center">
+                      <FaSimCard className="mr-2 text-green-600" />
+                      SIM 2 (Optional)
+                    </h3>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        SIM Number
+                      </label>
+                      <input
+                        type="text"
+                        name="sim_2"
+                        value={formData.sim_2}
+                        onChange={handleChange}
+                        maxLength={11}
+                        className={`w-full px-4 py-3 rounded-lg border ${
+                          errors.sim_2 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                        } transition-all placeholder-gray-500 text-gray-900`}
+                        placeholder="11-digit SIM number"
+                      />
+                      {errors.sim_2 && (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaTimes className="mr-1 text-xs" /> {errors.sim_2}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Persona Type (Optional)
+                      </label>
+                      <Select
+                        options={personaOptions}
+                        value={personaOptions.find(opt => opt.value === formData.sim_2_persona)}
+                        onChange={(selected) => handlePersonaChange('sim_2_persona', selected)}
+                        styles={customStyles}
+                        className="rounded-lg"
+                        classNamePrefix="select"
+                        placeholder="Select persona type..."
+                        isClearable
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Handover Information Section */}
+              <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
+                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-3">
+                    <FaUser className="text-purple-700" />
+                  </div>
+                  Handover Information (Optional)
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Handover To
+                    </label>
+                    <input
+                      type="text"
+                      name="handover_to"
+                      value={formData.handover_to}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900"
+                      placeholder="Person receiving the device (optional)"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Handover Date
+                      </label>
+                      <input
+                        type="date"
+                        name="handover_date"
+                        value={formData.handover_date}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-900"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Return Date
+                      </label>
+                      <input
+                        type="date"
+                        name="return_date"
+                        value={formData.return_date}
+                        onChange={handleChange}
+                        className={`w-full px-4 py-3 rounded-lg border ${
+                          errors.return_date ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                        } transition-all text-gray-900`}
+                      />
+                      {errors.return_date && (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaTimes className="mr-1 text-xs" /> {errors.return_date}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information */}
+              <div className="bg-gray-50 p-6 rounded-xl border border-gray-300">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
+                    <FaInfoCircle className="text-gray-700" />
+                  </div>
+                  Additional Information
+                </h2>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Remark (Optional)
+                  </label>
+                  <textarea
+                    name="remark"
+                    value={formData.remark}
+                    onChange={handleChange}
+                    rows={4}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900 resize-none"
+                    placeholder="Any additional remarks or notes..."
+                  />
+                </div>
+                
+                {/* Tracked By Info */}
+                {userInfo && (
+                  <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Tracked By</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {userInfo.shortName || userInfo.short_name || userInfo.name || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          SOC Portal ID: {userInfo.id || userInfo.soc_portal_id || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-blue-100 rounded-lg">
+                        <FaIdCard className="text-blue-600 text-2xl" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end pt-6 border-t border-gray-300">
+                <button
+                  type="button"
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
+                  className="mr-4 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center px-8 py-3 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-70 font-medium"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <FaSpinner className="animate-spin mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <FaSave className="mr-2" />
+                      Save Device Information
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -552,6 +552,16 @@ const handleFileChange = (e, version, currentRemark) => {
     });
   };
 
+  const formatDateOnly = (dateString) => {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'Asia/Dhaka'
+  });
+};
+
   const viewFormDetails = (form) => {
     setSelectedForm(form);
     setShowDetailsModal(true);
@@ -1057,6 +1067,13 @@ const handleFileChange = (e, version, currentRemark) => {
                     <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Basic Information</h4>
                     
                     <div className="space-y-3">
+
+                      <div>
+      <span className="text-xs text-gray-500 block">Initial Effective Date</span>
+      <span className="text-sm font-medium text-gray-900">
+        {selectedForm.effective_date ? formatDateOnly(selectedForm.effective_date) : 'N/A'}
+      </span>
+    </div>
                       <div>
                         <span className="text-xs text-gray-500 block">Access Form Type</span>
                         <span className="text-sm font-medium text-gray-900">
@@ -1225,14 +1242,20 @@ const handleFileChange = (e, version, currentRemark) => {
               {icon}
             </div>
             <div>
-              <h5 className="text-sm font-semibold text-gray-800">
-                {audit.action_type === 'CREATE' ? 'Form Created' : 'Form Updated'}
-                {` (Version ${audit.version})`}
-              </h5>
-              <p className="text-xs text-gray-500">
-                By {audit.updated_by} on {formatDate(audit.created_at)} from IP {audit.ip_address}
-              </p>
-            </div>
+  <h5 className="text-sm font-semibold text-gray-800">
+    {audit.action_type === 'CREATE' ? 'Form Created' : 'Form Updated'}
+    {` (Version ${audit.version})`}
+  </h5>
+  <p className="text-xs text-gray-500">
+    By {audit.updated_by} on {formatDate(audit.created_at)} from IP {audit.ip_address} | Last Updated : {formatDate(audit.updated_at)}
+  </p>
+  {/* Show effective date for this version */}
+  {audit.effective_date && (
+    <p className="text-xs text-green-600 font-medium mt-1">
+      Effective Date for this version: {formatDateOnly(audit.effective_date)}
+    </p>
+  )}
+</div>
           </div>
         </div>
         
