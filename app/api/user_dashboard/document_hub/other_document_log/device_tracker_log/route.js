@@ -26,6 +26,7 @@ export async function GET(request) {
     const page = parseInt(searchParams.get('page')) || 1;
     const limit = parseInt(searchParams.get('limit')) || 10;
     const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || '';
     const offset = (page - 1) * limit;
 
     logger.debug('Fetching device tracker logs from database', {
@@ -33,7 +34,7 @@ export async function GET(request) {
         eid,
         sid: sessionId,
         taskName: 'DeviceTrackerLog',
-        details: `Page: ${page}, Limit: ${limit}, Search: ${search}`
+        details: `Page: ${page}, Limit: ${limit}, Search: ${search}, Status: ${status}`
       }
     });
 
@@ -54,6 +55,8 @@ export async function GET(request) {
         return_date,
         remark,
         track_by,
+        device_status,
+        device_status_details,
         created_at
       FROM device_info 
       WHERE 1=1
@@ -71,16 +74,32 @@ export async function GET(request) {
         device_model ILIKE $${paramCount} OR 
         dt_id ILIKE $${paramCount} OR
         imei_1 ILIKE $${paramCount} OR
-        track_by ILIKE $${paramCount}
+        imei_2 ILIKE $${paramCount} OR
+        sim_1 ILIKE $${paramCount} OR
+        sim_2 ILIKE $${paramCount} OR
+        track_by ILIKE $${paramCount} OR
+        purpose ILIKE $${paramCount}
       )`;
       countQuery += ` AND (
         brand_name ILIKE $${paramCount} OR 
         device_model ILIKE $${paramCount} OR 
         dt_id ILIKE $${paramCount} OR
         imei_1 ILIKE $${paramCount} OR
-        track_by ILIKE $${paramCount}
+        imei_2 ILIKE $${paramCount} OR
+        sim_1 ILIKE $${paramCount} OR
+        sim_2 ILIKE $${paramCount} OR
+        track_by ILIKE $${paramCount} OR
+        purpose ILIKE $${paramCount}
       )`;
       queryParams.push(`%${search}%`);
+    }
+
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      paramCount++;
+      queryString += ` AND device_status = $${paramCount}`;
+      countQuery += ` AND device_status = $${paramCount}`;
+      queryParams.push(status);
     }
 
     // Add ordering and pagination
@@ -88,7 +107,7 @@ export async function GET(request) {
     queryParams.push(limit, offset);
 
     // Execute count query
-    const countResult = await query(countQuery, search ? [`%${search}%`] : []);
+    const countResult = await query(countQuery, queryParams.slice(0, search ? (status ? 2 : 1) : (status ? 1 : 0)));
     const totalCount = parseInt(countResult.rows[0]?.total || 0);
 
     // Execute main query
@@ -100,7 +119,7 @@ export async function GET(request) {
         eid,
         sid: sessionId,
         taskName: 'DeviceTrackerLog',
-        details: `Fetched ${devices.length} devices out of ${totalCount} total`
+        details: `Fetched ${devices.length} devices out of ${totalCount} total, Status filter: ${status}`
       }
     });
 

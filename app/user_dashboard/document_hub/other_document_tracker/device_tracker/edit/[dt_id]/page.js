@@ -1,14 +1,14 @@
-// app/user_dashboard/document_hub/other_document_tracker/device_tracker/page.js
+// app/user_dashboard/document_hub/other_document_tracker/device_tracker/edit/[dt_id]/page.js
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import {
   FaMobile, FaSimCard, FaUser, FaCalendarAlt,
   FaPaperPlane, FaSpinner, FaTimes, FaArrowLeft,
   FaSave, FaIdCard, FaInfoCircle, FaBullseye,
   FaCheckCircle, FaExclamationTriangle, FaExclamationCircle,
-  FaTrash, FaUnlink
+  FaEdit, FaUnlink
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import Select from 'react-select';
@@ -18,8 +18,7 @@ const personaOptions = [
   { value: 'Agent', label: 'Agent' },
   { value: 'DSO', label: 'DSO' },
   { value: 'Merchant', label: 'Merchant' },
-  { value: 'Distributor', label: 'Distributor' },
-  { value: 'Super Distributor', label: 'Super Distributor' }
+  { value: 'Distributor', label: 'Distributor' }
 ];
 
 const deviceStatusOptions = [
@@ -48,13 +47,12 @@ const customStyles = {
   })
 };
 
-export default function DeviceTracker() {
+export default function EditDeviceTracker() {
   const router = useRouter();
+  const params = useParams();
+  const dt_id = params.dt_id;
+
   const [formData, setFormData] = useState({
-    brand_name: '',
-    device_model: '',
-    imei_1: '',
-    imei_2: '',
     sim_1: '',
     sim_1_persona: '',
     sim_2: '',
@@ -67,17 +65,19 @@ export default function DeviceTracker() {
     device_status: 'Working',
     device_status_details: ''
   });
+  
+  const [deviceInfo, setDeviceInfo] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [errors, setErrors] = useState({});
   const [userInfo, setUserInfo] = useState(null);
+  
+  // New state for duplicate checks and unbind popup
   const [duplicateChecks, setDuplicateChecks] = useState({
-    imei_1: { checking: false, exists: false, existingDevice: null },
-    imei_2: { checking: false, exists: false, existingDevice: null },
     sim_1: { checking: false, exists: false, existingDevice: null },
     sim_2: { checking: false, exists: false, existingDevice: null }
   });
   
-  // New state for unbind popup
   const [unbindPopup, setUnbindPopup] = useState({
     open: false,
     device: null,
@@ -86,132 +86,163 @@ export default function DeviceTracker() {
     loading: false
   });
 
+  // Debounced duplicate check
+  // In the checkDuplicate function in the edit page, update the API call:
+const checkDuplicate = useCallback(async (field, value, currentDeviceId) => {
+  // Don't check if value is too short or empty
+  if (!value || value.length < 5) {
+    setDuplicateChecks(prev => ({
+      ...prev,
+      [field]: { checking: false, exists: false, existingDevice: null }
+    }));
+    return;
+  }
+
+  // Only check SIM when it's exactly 11 digits
+  if (field.startsWith('sim') && value.length !== 11) {
+    setDuplicateChecks(prev => ({
+      ...prev,
+      [field]: { checking: false, exists: false, existingDevice: null }
+    }));
+    return;
+  }
+
+  setDuplicateChecks(prev => ({
+    ...prev,
+    [field]: { ...prev[field], checking: true }
+  }));
+
+  try {
+    // Pass the current device ID to exclude it from duplicate checks
+    const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/check-duplicate?field=${field}&value=${value}&excludeDevice=${currentDeviceId}`);
+    
+    if (response.ok) {
+      const result = await response.json();
+      
+      setDuplicateChecks(prev => ({
+        ...prev,
+        [field]: {
+          checking: false,
+          exists: result.exists,
+          existingDevice: result.existingDevice,
+          isSim: result.isSim
+        }
+      }));
+
+      if (result.exists && result.isSim) {
+  // For SIM duplicates, show a different toast with unbind option
+  toast.error(
+    (t) => (
+      <div className="flex items-center">
+        <FaExclamationCircle className="text-red-500 mr-2" />
+        <span>
+          {field.toUpperCase()} &quot;{value}&quot; is already bound to device {result.existingDevice?.dt_id}
+        </span>
+        <button
+          type="button" // Add this
+          onClick={(e) => {
+            e.stopPropagation(); // Add this
+            e.preventDefault(); // Add this
+            setUnbindPopup({
+              open: true,
+              device: result.existingDevice,
+              field: field,
+              simNumber: value
+            });
+            toast.dismiss(t.id);
+          }}
+          className="ml-3 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+        >
+          <FaUnlink className="inline mr-1" />
+          Unbind
+        </button>
+      </div>
+    ),
+    {
+      duration: 8000,
+      icon: '⚠️'
+    }
+  );
+} else if (result.exists) {
+        toast.error(`${field.toUpperCase()} "${value}" already exists in device ${result.existingDevice?.dt_id || 'unknown'}`, {
+          duration: 5000,
+          icon: '⚠️'
+        });
+      }
+    } else {
+      // If API fails, don't block the user, just mark as not checking
+      setDuplicateChecks(prev => ({
+        ...prev,
+        [field]: { checking: false, exists: false, existingDevice: null }
+      }));
+    }
+  } catch (error) {
+    console.error('Error checking duplicate:', error);
+    // On error, don't block the user
+    setDuplicateChecks(prev => ({
+      ...prev,
+      [field]: { checking: false, exists: false, existingDevice: null }
+    }));
+  }
+}, []);
+
+  // Fetch device data and user info
   useEffect(() => {
-    const fetchUserInfo = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/user_dashboard/user_info');
+        setIsLoading(true);
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch user info');
+        // Fetch device information
+        const deviceResponse = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/${dt_id}`);
+        
+        if (!deviceResponse.ok) {
+          throw new Error('Failed to fetch device information');
         }
         
-        const userData = await response.json();
-        setUserInfo(userData);
+        const deviceData = await deviceResponse.json();
+        
+        if (deviceData.success) {
+          setDeviceInfo(deviceData.data);
+          // Pre-fill form with existing data
+          setFormData({
+            sim_1: deviceData.data.sim_1 || '',
+            sim_1_persona: deviceData.data.sim_1_persona || '',
+            sim_2: deviceData.data.sim_2 || '',
+            sim_2_persona: deviceData.data.sim_2_persona || '',
+            purpose: deviceData.data.purpose || '',
+            handover_to: deviceData.data.handover_to || '',
+            handover_date: deviceData.data.handover_date || '',
+            return_date: deviceData.data.return_date || '',
+            remark: deviceData.data.remark || '',
+            device_status: deviceData.data.device_status || 'Working',
+            device_status_details: deviceData.data.device_status_details || ''
+          });
+        } else {
+          throw new Error(deviceData.message);
+        }
+
+        // Fetch user information
+        const userResponse = await fetch('/api/user_dashboard/user_info');
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          setUserInfo(userData);
+        }
         
       } catch (error) {
-        console.error('Error fetching user info:', error);
-        toast.error('Failed to load user information');
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load device information');
+        router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    fetchUserInfo();
-  }, []);
-
-  // Debounced duplicate check
-  const checkDuplicate = useCallback(async (field, value) => {
-    // Don't check if value is too short or empty
-    if (!value || value.length < 5) {
-      setDuplicateChecks(prev => ({
-        ...prev,
-        [field]: { checking: false, exists: false, existingDevice: null }
-      }));
-      return;
+    if (dt_id) {
+      fetchData();
     }
+  }, [dt_id, router]);
 
-    // Only check IMEI when it's exactly 15 digits
-    if (field.startsWith('imei') && value.length !== 15) {
-      setDuplicateChecks(prev => ({
-        ...prev,
-        [field]: { checking: false, exists: false, existingDevice: null }
-      }));
-      return;
-    }
-
-    // Only check SIM when it's exactly 11 digits
-    if (field.startsWith('sim') && value.length !== 11) {
-      setDuplicateChecks(prev => ({
-        ...prev,
-        [field]: { checking: false, exists: false, existingDevice: null }
-      }));
-      return;
-    }
-
-    setDuplicateChecks(prev => ({
-      ...prev,
-      [field]: { ...prev[field], checking: true }
-    }));
-
-    try {
-      const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/check-duplicate?field=${field}&value=${value}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        
-        setDuplicateChecks(prev => ({
-          ...prev,
-          [field]: {
-            checking: false,
-            exists: result.exists,
-            existingDevice: result.existingDevice,
-            isSim: result.isSim
-          }
-        }));
-
-        if (result.exists && result.isSim) {
-          // For SIM duplicates, show a different toast with unbind option
-          toast.error(
-            (t) => (
-              <div className="flex items-center">
-                <FaExclamationCircle className="text-red-500 mr-2" />
-                <span>
-                  {field.toUpperCase()} &quot;{value}&quot; is already bound to device {result.existingDevice?.dt_id}
-                </span>
-                <button
-                  onClick={() => {
-                    setUnbindPopup({
-  open: true,
-  device: result.existingDevice,
-  field: result.duplicateField, // Use the field from the API response
-  simNumber: value
-});
-                    toast.dismiss(t.id);
-                  }}
-                  className="ml-3 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
-                >
-                  <FaUnlink className="inline mr-1" />
-                  Unbind
-                </button>
-              </div>
-            ),
-            {
-              duration: 8000,
-              icon: '⚠️'
-            }
-          );
-        } else if (result.exists) {
-          toast.error(`${field.toUpperCase()} "${value}" already exists in device ${result.existingDevice?.dt_id || 'unknown'}`, {
-            duration: 5000,
-            icon: '⚠️'
-          });
-        }
-      } else {
-        // If API fails, don't block the user, just mark as not checking
-        setDuplicateChecks(prev => ({
-          ...prev,
-          [field]: { checking: false, exists: false, existingDevice: null }
-        }));
-      }
-    } catch (error) {
-      console.error('Error checking duplicate:', error);
-      // On error, don't block the user
-      setDuplicateChecks(prev => ({
-        ...prev,
-        [field]: { checking: false, exists: false, existingDevice: null }
-      }));
-    }
-  }, []);
-
-  // Enhanced handleChange with proper debouncing
+  // Enhanced handleChange with proper debouncing for SIM fields
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -221,7 +252,7 @@ export default function DeviceTracker() {
     }
 
     // Clear any existing duplicate status when user changes the value
-    if (['imei_1', 'imei_2', 'sim_1', 'sim_2'].includes(name)) {
+    if (['sim_1', 'sim_2'].includes(name)) {
       setDuplicateChecks(prev => ({
         ...prev,
         [name]: { checking: false, exists: false, existingDevice: null }
@@ -229,33 +260,29 @@ export default function DeviceTracker() {
     }
   };
 
-  // Enhanced useEffect with proper debouncing
+  // Enhanced useEffect with proper debouncing for SIM fields
   useEffect(() => {
-    const debounceTimers = {};
+  const debounceTimers = {};
+  
+  const checkField = (field, value) => {
+    if (debounceTimers[field]) {
+      clearTimeout(debounceTimers[field]);
+    }
     
-    const checkField = (field, value) => {
-      if (debounceTimers[field]) {
-        clearTimeout(debounceTimers[field]);
+    debounceTimers[field] = setTimeout(() => {
+      if (value && field.startsWith('sim') && value.length === 11) {
+        checkDuplicate(field, value, dt_id); // Pass current device ID
       }
-      
-      debounceTimers[field] = setTimeout(() => {
-        if (value && 
-            ((field.startsWith('imei') && value.length === 15) || 
-             (field.startsWith('sim') && value.length === 11))) {
-          checkDuplicate(field, value);
-        }
-      }, 800); // Increased debounce time to 800ms
-    };
+    }, 800); // Increased debounce time to 800ms
+  };
 
-    checkField('imei_1', formData.imei_1);
-    checkField('imei_2', formData.imei_2);
-    checkField('sim_1', formData.sim_1);
-    checkField('sim_2', formData.sim_2);
+  checkField('sim_1', formData.sim_1);
+  checkField('sim_2', formData.sim_2);
 
-    return () => {
-      Object.values(debounceTimers).forEach(timer => clearTimeout(timer));
-    };
-  }, [formData.imei_1, formData.imei_2, formData.sim_1, formData.sim_2, checkDuplicate]);
+  return () => {
+    Object.values(debounceTimers).forEach(timer => clearTimeout(timer));
+  };
+}, [formData.sim_1, formData.sim_2, checkDuplicate, dt_id]);
 
   // Handle SIM unbinding
   const handleUnbindSim = async () => {
@@ -269,7 +296,7 @@ export default function DeviceTracker() {
       },
       body: JSON.stringify({
         deviceId: unbindPopup.device.dt_id,
-        simNumber: unbindPopup.simNumber
+        simNumber: unbindPopup.simNumber  // Remove the 'field' parameter
       })
     });
 
@@ -278,50 +305,11 @@ export default function DeviceTracker() {
     if (result.success) {
       toast.success('SIM unbound successfully!');
       
-      // Clear the duplicate status for the field and re-check
-      const fieldToClear = unbindPopup.field;
-      
-      // Reset the duplicate check state
+      // Clear the duplicate status for the field
       setDuplicateChecks(prev => ({
         ...prev,
-        [fieldToClear]: { checking: false, exists: false, existingDevice: null }
+        [unbindPopup.field]: { checking: false, exists: false, existingDevice: null }
       }));
-
-      // Re-check the current value to update the status
-      if (formData[fieldToClear] && formData[fieldToClear].length === 11) {
-        // Set checking state first
-        setDuplicateChecks(prev => ({
-          ...prev,
-          [fieldToClear]: { ...prev[fieldToClear], checking: true }
-        }));
-
-        // Perform the duplicate check again
-        setTimeout(async () => {
-          try {
-            const recheckResponse = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/check-duplicate?field=${fieldToClear}&value=${formData[fieldToClear]}&excludeDevice=${dt_id}`);
-            
-            if (recheckResponse.ok) {
-              const recheckResult = await recheckResponse.json();
-              
-              setDuplicateChecks(prev => ({
-                ...prev,
-                [fieldToClear]: {
-                  checking: false,
-                  exists: recheckResult.exists,
-                  existingDevice: recheckResult.existingDevice,
-                  isSim: recheckResult.isSim
-                }
-              }));
-            }
-          } catch (error) {
-            console.error('Error rechecking duplicate:', error);
-            setDuplicateChecks(prev => ({
-              ...prev,
-              [fieldToClear]: { checking: false, exists: false, existingDevice: null }
-            }));
-          }
-        }, 500);
-      }
 
       // Close popup
       setUnbindPopup({ open: false, device: null, field: null, simNumber: null, loading: false });
@@ -358,28 +346,6 @@ export default function DeviceTracker() {
   const validateForm = () => {
     const newErrors = {};
     
-    if (!formData.brand_name.trim()) {
-      newErrors.brand_name = 'Brand name is required';
-    }
-    
-    if (!formData.device_model.trim()) {
-      newErrors.device_model = 'Device model is required';
-    }
-    
-    if (!formData.imei_1.trim()) {
-      newErrors.imei_1 = 'IMEI 1 is required';
-    } else if (!/^\d{15}$/.test(formData.imei_1)) {
-      newErrors.imei_1 = 'IMEI must be 15 digits';
-    } else if (duplicateChecks.imei_1.exists) {
-      newErrors.imei_1 = `IMEI 1 already exists in device ${duplicateChecks.imei_1.existingDevice?.dt_id || 'another device'}`;
-    }
-    
-    if (formData.imei_2 && !/^\d{15}$/.test(formData.imei_2)) {
-      newErrors.imei_2 = 'IMEI must be 15 digits';
-    } else if (formData.imei_2 && duplicateChecks.imei_2.exists) {
-      newErrors.imei_2 = `IMEI 2 already exists in device ${duplicateChecks.imei_2.existingDevice?.dt_id || 'another device'}`;
-    }
-    
     // SIM 1 validation
     if (formData.sim_1 && !isValidSIM(formData.sim_1)) {
       newErrors.sim_1 = 'SIM must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015';
@@ -399,11 +365,6 @@ export default function DeviceTracker() {
       newErrors.sim_2 = 'SIM 2 cannot be the same as SIM 1';
     }
     
-    // Check for duplicate IMEI numbers within the same form
-    if (formData.imei_1 && formData.imei_2 && formData.imei_1 === formData.imei_2) {
-      newErrors.imei_2 = 'IMEI 2 cannot be the same as IMEI 1';
-    }
-    
     if (!formData.purpose.trim()) {
       newErrors.purpose = 'Purpose is required';
     }
@@ -412,9 +373,6 @@ export default function DeviceTracker() {
     if (formData.device_status === 'Not Working' && !formData.device_status_details.trim()) {
       newErrors.device_status_details = 'Reason is required when device status is "Not Working"';
     }
-    
-    // Handover fields are now optional
-    // No validation for handover_to, handover_date, return_date
     
     // Only validate return_date if both dates are provided
     if (formData.handover_date && formData.return_date && new Date(formData.return_date) <= new Date(formData.handover_date)) {
@@ -436,15 +394,15 @@ export default function DeviceTracker() {
     // Final duplicate check before submission
     const hasDuplicates = Object.values(duplicateChecks).some(check => check.exists);
     if (hasDuplicates) {
-      toast.error('Please resolve duplicate IMEI or SIM numbers before submitting');
+      toast.error('Please resolve duplicate SIM numbers before submitting');
       return;
     }
     
     setIsSubmitting(true);
     
     try {
-      const response = await fetch('/api/user_dashboard/document_hub/other_document_tracker/device_tracker', {
-        method: 'POST',
+      const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/${dt_id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -454,49 +412,18 @@ export default function DeviceTracker() {
       const result = await response.json();
       
       if (result.success) {
-        toast.success('Device information saved successfully!');
-        
-        // Reset form
-        setFormData({
-          brand_name: '',
-          device_model: '',
-          imei_1: '',
-          imei_2: '',
-          sim_1: '',
-          sim_1_persona: '',
-          sim_2: '',
-          sim_2_persona: '',
-          purpose: '',
-          handover_to: '',
-          handover_date: '',
-          return_date: '',
-          remark: '',
-          device_status: 'Working',
-          device_status_details: ''
-        });
-
-        // Reset duplicate checks
-        setDuplicateChecks({
-          imei_1: { checking: false, exists: false, existingDevice: null },
-          imei_2: { checking: false, exists: false, existingDevice: null },
-          sim_1: { checking: false, exists: false, existingDevice: null },
-          sim_2: { checking: false, exists: false, existingDevice: null }
-        });
+        toast.success('Device information updated successfully!');
         
         // Redirect to device log page after success
         setTimeout(() => {
           router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
-        }, 2000);
+        }, 1500);
       } else {
-        if (result.message?.includes('duplicate') || result.message?.includes('already exists')) {
-          toast.error(result.message);
-        } else {
-          toast.error(result.message || 'Failed to save device information');
-        }
+        toast.error(result.message || 'Failed to update device information');
       }
     } catch (error) {
-      console.error('Error saving device information:', error);
-      toast.error('Failed to save device information');
+      console.error('Error updating device information:', error);
+      toast.error('Failed to update device information');
     } finally {
       setIsSubmitting(false);
     }
@@ -515,7 +442,6 @@ export default function DeviceTracker() {
     );
   }
   
-  // Only show duplicate warning if exists is true
   if (check.exists) {
     if (field.startsWith('sim') && check.existingDevice) {
       return (
@@ -530,10 +456,10 @@ export default function DeviceTracker() {
             </span>
           </div>
           <button
-            type="button"
+            type="button" // Add this
             onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
+              e.stopPropagation(); // Add this
+              e.preventDefault(); // Add this
               setUnbindPopup({
                 open: true,
                 device: check.existingDevice,
@@ -561,8 +487,7 @@ export default function DeviceTracker() {
     }
   }
   
-  // Show success message only when we have a valid SIM and no duplicates
-  if (formData[field] && field.startsWith('sim') && formData[field].length === 11 && !check.exists) {
+  if (formData[field] && field.startsWith('sim') && formData[field].length === 11) {
     return (
       <div className="flex items-center mt-1 text-green-600 text-sm">
         <FaCheckCircle className="mr-1 text-xs" />
@@ -574,12 +499,46 @@ export default function DeviceTracker() {
   return null;
 };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-center items-center py-20">
+            <div className="text-center">
+              <FaSpinner className="animate-spin text-4xl text-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600 text-lg">Loading device information...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!deviceInfo) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-20">
+            <FaExclamationCircle className="text-4xl text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Device Not Found</h2>
+            <p className="text-gray-600 mb-6">The device you&apos;re trying to edit doesn&apos;t exist.</p>
+            <button
+              onClick={() => router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log')}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Back to Device Log
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
       {/* Unbind SIM Popup */}
       {unbindPopup.open && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-300">
             <div className="p-6">
               <div className="flex items-center mb-4">
@@ -650,23 +609,23 @@ export default function DeviceTracker() {
             <div className="relative flex flex-col md:flex-row md:items-center md:justify-between">
               <div className="flex items-center">
                 <button
-                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log')}
                   className="mr-4 p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
                 >
                   <FaArrowLeft />
                 </button>
                 <div>
                   <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                    Device Tracker
+                    Edit Device Information
                   </h1>
                   <p className="text-blue-200 mt-1 text-sm md:text-base">
-                    Track and manage device information
+                    Update device details for {deviceInfo.dt_id}
                   </p>
                 </div>
               </div>
               <div className="mt-4 md:mt-0 flex items-center space-x-2">
                 <div className="p-2 bg-white/20 rounded-lg">
-                  <FaMobile className="text-xl" />
+                  <FaEdit className="text-xl" />
                 </div>
               </div>
             </div>
@@ -675,175 +634,97 @@ export default function DeviceTracker() {
           {/* Form */}
           <div className="p-8">
             <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Device Information Section */}
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+              {/* Device Information Section (Read-only) */}
+              <div className="bg-slate-50 p-6 rounded-xl border border-slate-300">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                    <FaMobile className="text-blue-700" />
+                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center mr-3">
+                    <FaMobile className="text-slate-600" />
                   </div>
-                  Device Information
+                  Device Information (Read Only)
                 </h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Brand Name *
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tracking ID
                     </label>
                     <input
                       type="text"
-                      name="brand_name"
-                      value={formData.brand_name}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.brand_name ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="e.g., Samsung, Apple, Xiaomi"
+                      value={deviceInfo.dt_id}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
-                    {errors.brand_name && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center">
-                        <FaTimes className="mr-1 text-xs" /> {errors.brand_name}
-                      </p>
-                    )}
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Device Model *
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Brand Name
                     </label>
                     <input
                       type="text"
-                      name="device_model"
-                      value={formData.device_model}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.device_model ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="e.g., Galaxy S23, iPhone 15"
+                      value={deviceInfo.brand_name}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
-                    {errors.device_model && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center">
-                        <FaTimes className="mr-1 text-xs" /> {errors.device_model}
-                      </p>
-                    )}
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      IMEI 1 *
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Device Model
                     </label>
                     <input
                       type="text"
-                      name="imei_1"
-                      value={formData.imei_1}
-                      onChange={handleChange}
-                      maxLength={15}
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.imei_1 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="15-digit IMEI number"
+                      value={deviceInfo.device_model}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
-                    {errors.imei_1 && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center">
-                        <FaTimes className="mr-1 text-xs" /> {errors.imei_1}
-                      </p>
-                    )}
-                    {renderDuplicateStatus('imei_1')}
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      IMEI 1
+                    </label>
+                    <input
+                      type="text"
+                      value={deviceInfo.imei_1}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed font-mono"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       IMEI 2
                     </label>
                     <input
                       type="text"
-                      name="imei_2"
-                      value={formData.imei_2}
-                      onChange={handleChange}
-                      maxLength={15}
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.imei_2 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="15-digit IMEI number (optional)"
+                      value={deviceInfo.imei_2 || 'N/A'}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed font-mono"
                     />
-                    {errors.imei_2 && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center">
-                        <FaTimes className="mr-1 text-xs" /> {errors.imei_2}
-                      </p>
-                    )}
-                    {renderDuplicateStatus('imei_2')}
                   </div>
-
-                  {/* Device Status */}
+                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Device Status *
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Originally Tracked By
                     </label>
-                    <Select
-                      options={deviceStatusOptions}
-                      value={deviceStatusOptions.find(opt => opt.value === formData.device_status)}
-                      onChange={handleStatusChange}
-                      styles={customStyles}
-                      className="rounded-lg"
-                      classNamePrefix="select"
-                      placeholder="Select device status..."
+                    <input
+                      type="text"
+                      value={deviceInfo.track_by}
+                      disabled
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
-                  </div>
-
-                  {/* Device Status Details - Show only when status is "Not Working" */}
-                  {formData.device_status === 'Not Working' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-900 mb-2">
-                        Reason for Not Working *
-                      </label>
-                      <textarea
-                        name="device_status_details"
-                        value={formData.device_status_details}
-                        onChange={handleChange}
-                        rows={3}
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.device_status_details ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                        } transition-all placeholder-gray-500 text-gray-900 resize-none`}
-                        placeholder="Please provide details about why the device is not working..."
-                      />
-                      {errors.device_status_details && (
-                        <p className="mt-2 text-sm text-red-600 flex items-center">
-                          <FaTimes className="mr-1 text-xs" /> {errors.device_status_details}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Purpose Field */}
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Purpose *
-                    </label>
-                    <textarea
-                      name="purpose"
-                      value={formData.purpose}
-                      onChange={handleChange}
-                      rows={3}
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.purpose ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900 resize-none`}
-                      placeholder="Describe the purpose of this device"
-                    />
-                    {errors.purpose && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center">
-                        <FaTimes className="mr-1 text-xs" /> {errors.purpose}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
 
-              {/* SIM Information Section */}
+              {/* Editable SIM Information Section */}
               <div className="bg-green-50 p-6 rounded-xl border border-green-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
                     <FaSimCard className="text-green-700" />
                   </div>
-                  SIM Information (Optional)
+                  SIM Information (Editable)
                 </h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -949,13 +830,87 @@ export default function DeviceTracker() {
                 </div>
               </div>
 
-              {/* Handover Information Section */}
+              {/* Editable Device Status and Purpose */}
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                    <FaMobile className="text-blue-700" />
+                  </div>
+                  Device Status & Purpose (Editable)
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Device Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Device Status *
+                    </label>
+                    <Select
+                      options={deviceStatusOptions}
+                      value={deviceStatusOptions.find(opt => opt.value === formData.device_status)}
+                      onChange={handleStatusChange}
+                      styles={customStyles}
+                      className="rounded-lg"
+                      classNamePrefix="select"
+                      placeholder="Select device status..."
+                    />
+                  </div>
+
+                  {/* Device Status Details - Show only when status is "Not Working" */}
+                  {formData.device_status === 'Not Working' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Reason for Not Working *
+                      </label>
+                      <textarea
+                        name="device_status_details"
+                        value={formData.device_status_details}
+                        onChange={handleChange}
+                        rows={3}
+                        className={`w-full px-4 py-3 rounded-lg border ${
+                          errors.device_status_details ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                        } transition-all placeholder-gray-500 text-gray-900 resize-none`}
+                        placeholder="Please provide details about why the device is not working..."
+                      />
+                      {errors.device_status_details && (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaTimes className="mr-1 text-xs" /> {errors.device_status_details}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Purpose Field */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Purpose *
+                    </label>
+                    <textarea
+                      name="purpose"
+                      value={formData.purpose}
+                      onChange={handleChange}
+                      rows={3}
+                      className={`w-full px-4 py-3 rounded-lg border ${
+                        errors.purpose ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+                      } transition-all placeholder-gray-500 text-gray-900 resize-none`}
+                      placeholder="Describe the purpose of this device"
+                    />
+                    {errors.purpose && (
+                      <p className="mt-2 text-sm text-red-600 flex items-center">
+                        <FaTimes className="mr-1 text-xs" /> {errors.purpose}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Editable Handover Information Section */}
               <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-3">
                     <FaUser className="text-purple-700" />
                   </div>
-                  Handover Information (Optional)
+                  Handover Information (Editable)
                 </h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1010,13 +965,13 @@ export default function DeviceTracker() {
                 </div>
               </div>
 
-              {/* Additional Information */}
+              {/* Editable Additional Information */}
               <div className="bg-gray-50 p-6 rounded-xl border border-gray-300">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
                     <FaInfoCircle className="text-gray-700" />
                   </div>
-                  Additional Information
+                  Additional Information (Editable)
                 </h2>
                 
                 <div>
@@ -1033,12 +988,12 @@ export default function DeviceTracker() {
                   />
                 </div>
                 
-                {/* Tracked By Info */}
+                {/* Update By Info */}
                 {userInfo && (
                   <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-700">Tracked By</p>
+                        <p className="text-sm font-medium text-gray-700">Updated By</p>
                         <p className="text-lg font-semibold text-gray-900">
                           {userInfo.shortName || userInfo.short_name || userInfo.name || 'N/A'}
                         </p>
@@ -1046,8 +1001,8 @@ export default function DeviceTracker() {
                           SOC Portal ID: {userInfo.id || userInfo.soc_portal_id || 'N/A'}
                         </p>
                       </div>
-                      <div className="p-3 bg-blue-100 rounded-lg">
-                        <FaIdCard className="text-blue-600 text-2xl" />
+                      <div className="p-3 bg-green-100 rounded-lg">
+                        <FaIdCard className="text-green-600 text-2xl" />
                       </div>
                     </div>
                   </div>
@@ -1055,11 +1010,11 @@ export default function DeviceTracker() {
               </div>
 
               {/* Submit Button */}
-              <div className="flex justify-end pt-6 border-t border-gray-300">
+              <div className="flex justify-end pt-6 border-t border-gray-300 space-x-4">
                 <button
                   type="button"
-                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
-                  className="mr-4 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log')}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                 >
                   Cancel
                 </button>
@@ -1071,12 +1026,12 @@ export default function DeviceTracker() {
                   {isSubmitting ? (
                     <>
                       <FaSpinner className="animate-spin mr-2" />
-                      Saving...
+                      Updating...
                     </>
                   ) : (
                     <>
                       <FaSave className="mr-2" />
-                      Save Device Information
+                      Update Device Information
                     </>
                   )}
                 </button>

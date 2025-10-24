@@ -5,65 +5,76 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   FaMobile, FaArrowLeft, FaSearch, FaEye, 
-  FaEdit, FaTrash, FaSpinner, FaSync,
+  FaEdit, FaSpinner, FaSync,
   FaFilter, FaDownload, FaPlus, FaTimes,
-  FaCheckCircle, FaExclamationTriangle
+  FaCheckCircle, FaExclamationTriangle,
+  FaCaretDown, FaCaretUp
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 
-// Device Details Modal Component
+// Enhanced Device Details Modal Component
 const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
   if (!isOpen || !device) return null;
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return 'Not specified';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',
+      month: 'long',
       day: 'numeric'
     });
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusConfig = (status) => {
     return status === 'Working' ? 
-      <FaCheckCircle className="text-green-500 text-xl" /> : 
-      <FaExclamationTriangle className="text-red-500 text-xl" />;
+      { 
+        icon: <FaCheckCircle className="text-xl" />,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        borderColor: 'border-emerald-200',
+        label: 'Working'
+      } : 
+      { 
+        icon: <FaExclamationTriangle className="text-xl" />,
+        color: 'text-rose-600',
+        bgColor: 'bg-rose-50',
+        borderColor: 'border-rose-200',
+        label: 'Not Working'
+      };
   };
 
-  const getStatusColor = (status) => {
-    return status === 'Working' ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200';
-  };
+  const statusConfig = getStatusConfig(device.device_status);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-scaleIn">
         {/* Modal Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-8 py-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg mr-3">
-                <FaMobile className="text-blue-600 text-xl" />
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg mr-4">
+                <FaMobile className="text-white text-xl" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-800">
-                  Device Details - {device.dt_id}
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Device Details
                 </h2>
-                <p className="text-gray-600 text-sm">
-                  {device.brand_name} {device.device_model}
+                <p className="text-slate-600 mt-1">
+                  Tracking ID: <span className="font-mono font-semibold text-blue-600">{device.dt_id}</span>
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <button
                 onClick={onEdit}
-                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
               >
                 <FaEdit className="mr-2" />
-                Edit Info
+                Edit Device
               </button>
               <button
                 onClick={onClose}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <FaTimes className="text-xl" />
               </button>
@@ -72,55 +83,65 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
         </div>
 
         {/* Modal Body */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Device Information */}
+        <div className="p-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            {/* Left Column */}
             <div className="space-y-6">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h3 className="text-lg font-semibold text-blue-800 mb-4">Device Information</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tracking ID:</span>
-                    <span className="font-semibold">{device.dt_id}</span>
+              {/* Device Basic Information */}
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                    <FaMobile className="text-blue-600" />
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Brand:</span>
-                    <span className="font-semibold">{device.brand_name}</span>
+                  Device Information
+                </h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">Brand</label>
+                      <p className="text-slate-800 font-semibold mt-1">{device.brand_name}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">Model</label>
+                      <p className="text-slate-800 font-semibold mt-1">{device.device_model}</p>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Model:</span>
-                    <span className="font-semibold">{device.device_model}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">IMEI 1:</span>
-                    <span className="font-semibold font-mono">{device.imei_1}</span>
+                  <div>
+                    <label className="text-sm font-medium text-slate-500">IMEI 1</label>
+                    <p className="text-slate-800 font-mono font-semibold mt-1 bg-white p-2 rounded-lg border border-slate-200">
+                      {device.imei_1}
+                    </p>
                   </div>
                   {device.imei_2 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">IMEI 2:</span>
-                      <span className="font-semibold font-mono">{device.imei_2}</span>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500">IMEI 2</label>
+                      <p className="text-slate-800 font-mono font-semibold mt-1 bg-white p-2 rounded-lg border border-slate-200">
+                        {device.imei_2}
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Device Status */}
-              <div className={`p-4 rounded-lg border ${getStatusColor(device.device_status)}`}>
+              <div className={`p-6 rounded-2xl border ${statusConfig.borderColor} ${statusConfig.bgColor}`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  {getStatusIcon(device.device_status)}
-                  <span className="ml-2">Device Status</span>
+                  <span className={`p-2 rounded-lg ${statusConfig.bgColor} ${statusConfig.color} mr-3`}>
+                    {statusConfig.icon}
+                  </span>
+                  <span className="text-slate-900 tracking-wide">Device Status</span>
                 </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium">Status:</span>
-                    <span className={`font-semibold ${device.device_status === 'Working' ? 'text-green-600' : 'text-red-600'}`}>
-                      {device.device_status}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-700">Current Status:</span>
+                    <span className={`font-semibold ${statusConfig.color} px-3 py-1 rounded-full ${statusConfig.bgColor} border ${statusConfig.borderColor}`}>
+                      {statusConfig.label}
                     </span>
                   </div>
                   {device.device_status_details && (
                     <div>
-                      <span className="font-medium">Reason:</span>
-                      <p className="mt-1 text-sm bg-white p-2 rounded border">
+                      <label className="font-medium text-slate-700">Status Details:</label>
+                      <p className="mt-2 text-sm bg-white p-3 rounded-xl border border-slate-200 text-slate-700">
                         {device.device_status_details}
                       </p>
                     </div>
@@ -129,101 +150,120 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
               </div>
             </div>
 
-            {/* Additional Information */}
+            {/* Right Column */}
             <div className="space-y-6">
               {/* SIM Information */}
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <h3 className="text-lg font-semibold text-green-800 mb-4">SIM Information</h3>
+              <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-6 rounded-2xl border border-emerald-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                  <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
+                    <FaMobile className="text-emerald-600" />
+                  </div>
+                  SIM Information
+                </h3>
                 <div className="space-y-4">
                   {device.sim_1 ? (
-                    <div>
-                      <h4 className="font-medium text-gray-700">SIM 1:</h4>
-                      <div className="ml-4 space-y-1">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                      <h4 className="font-semibold text-slate-700 mb-2">SIM 1</h4>
+                      <div className="space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Number:</span>
-                          <span className="font-semibold">{device.sim_1}</span>
+                          <span className="text-slate-600">Number:</span>
+                          <span className="font-semibold text-slate-800">{device.sim_1}</span>
                         </div>
                         {device.sim_1_persona && (
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Persona:</span>
-                            <span className="font-semibold">{device.sim_1_persona}</span>
+                            <span className="text-slate-600">Persona:</span>
+                            <span className="font-semibold text-emerald-600">{device.sim_1_persona}</span>
                           </div>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No SIM 1 information</p>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                      <p className="text-slate-500">No SIM 1 information available</p>
+                    </div>
                   )}
 
                   {device.sim_2 ? (
-                    <div>
-                      <h4 className="font-medium text-gray-700">SIM 2:</h4>
-                      <div className="ml-4 space-y-1">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                      <h4 className="font-semibold text-slate-700 mb-2">SIM 2</h4>
+                      <div className="space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Number:</span>
-                          <span className="font-semibold">{device.sim_2}</span>
+                          <span className="text-slate-600">Number:</span>
+                          <span className="font-semibold text-slate-800">{device.sim_2}</span>
                         </div>
                         {device.sim_2_persona && (
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Persona:</span>
-                            <span className="font-semibold">{device.sim_2_persona}</span>
+                            <span className="text-slate-600">Persona:</span>
+                            <span className="font-semibold text-emerald-600">{device.sim_2_persona}</span>
                           </div>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No SIM 2 information</p>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                      <p className="text-slate-500">No SIM 2 information available</p>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Purpose & Tracking */}
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <h3 className="text-lg font-semibold text-purple-800 mb-4">Purpose & Tracking</h3>
-                <div className="space-y-3">
+              {/* Purpose & Tracking Information */}
+              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-2xl border border-purple-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                    <FaEye className="text-purple-600" />
+                  </div>
+                  Purpose & Tracking
+                </h3>
+                <div className="space-y-4">
                   <div>
-                    <span className="text-gray-600">Purpose:</span>
-                    <p className="font-semibold mt-1">{device.purpose}</p>
+                    <label className="text-sm font-medium text-slate-600">Purpose</label>
+                    <p className="text-slate-800 font-semibold mt-1 bg-white p-3 rounded-xl border border-slate-200">
+                      {device.purpose}
+                    </p>
                   </div>
-                  {device.handover_to && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Handover To:</span>
-                      <span className="font-semibold">{device.handover_to}</span>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {device.handover_to && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Handover To</label>
+                        <p className="text-slate-800 font-semibold mt-1">{device.handover_to}</p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Tracked By</label>
+                      <p className="text-slate-800 font-semibold mt-1">{device.track_by}</p>
                     </div>
-                  )}
-                  {device.handover_date && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Handover Date:</span>
-                      <span className="font-semibold">{formatDate(device.handover_date)}</span>
-                    </div>
-                  )}
-                  {device.return_date && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Return Date:</span>
-                      <span className="font-semibold">{formatDate(device.return_date)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
 
-              {/* Additional Details */}
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Additional Details</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tracked By:</span>
-                    <span className="font-semibold">{device.track_by}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {device.handover_date && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Handover Date</label>
+                        <p className="text-slate-800 font-semibold mt-1">{formatDate(device.handover_date)}</p>
+                      </div>
+                    )}
+                    {device.return_date && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Return Date</label>
+                        <p className="text-slate-800 font-semibold mt-1">{formatDate(device.return_date)}</p>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Created Date:</span>
-                    <span className="font-semibold">{formatDate(device.created_at)}</span>
-                  </div>
+
                   {device.remark && (
                     <div>
-                      <span className="text-gray-600">Remarks:</span>
-                      <p className="font-semibold mt-1">{device.remark}</p>
+                      <label className="text-sm font-medium text-slate-600">Remarks</label>
+                      <p className="text-slate-700 mt-1 bg-white p-3 rounded-xl border border-slate-200">
+                        {device.remark}
+                      </p>
                     </div>
                   )}
+
+                  <div className="pt-4 border-t border-slate-200">
+                    <label className="text-sm font-medium text-slate-600">Created Date</label>
+                    <p className="text-slate-800 font-semibold mt-1">{formatDate(device.created_at)}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -231,13 +271,13 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
         </div>
 
         {/* Modal Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 rounded-b-xl">
-          <div className="flex justify-end space-x-3">
+        <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-8 py-6 rounded-b-2xl">
+          <div className="flex justify-end space-x-4">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-100 transition-colors font-medium"
             >
-              Close
+              Close Details
             </button>
           </div>
         </div>
@@ -252,18 +292,25 @@ export default function DeviceTrackerLog() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sortField, setSortField] = useState('created_at');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const fetchDevices = async (page = 1, search = '') => {
+  const fetchDevices = async (page = 1, search = '', limit = itemsPerPage) => {
     try {
       setLoading(true);
       const queryParams = new URLSearchParams({
         page: page.toString(),
-        limit: '10',
-        ...(search && { search })
+        limit: limit.toString(),
+        sort: sortField,
+        order: sortDirection,
+        ...(search && { search }),
+        ...(statusFilter !== 'all' && { status: statusFilter })
       });
 
       const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/device_tracker_log?${queryParams}`);
@@ -292,7 +339,7 @@ export default function DeviceTrackerLog() {
 
   useEffect(() => {
     fetchDevices();
-  }, []);
+  }, [sortField, sortDirection, statusFilter, itemsPerPage]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -303,29 +350,32 @@ export default function DeviceTrackerLog() {
     fetchDevices(page, searchTerm);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  const handleItemsPerPageChange = (value) => {
+    setItemsPerPage(parseInt(value));
+    setCurrentPage(1);
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
   };
 
   const getStatusBadge = (status) => {
-    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
-    
     if (status === 'Working') {
       return (
-        <span className={`${baseClasses} bg-green-100 text-green-800`}>
-          <FaCheckCircle className="mr-1" />
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <FaCheckCircle className="mr-1.5 text-xs" />
           Working
         </span>
       );
     } else {
       return (
-        <span className={`${baseClasses} bg-red-100 text-red-800`}>
-          <FaExclamationTriangle className="mr-1" />
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-rose-100 text-rose-800 border border-rose-200">
+          <FaExclamationTriangle className="mr-1.5 text-xs" />
           Not Working
         </span>
       );
@@ -343,116 +393,177 @@ export default function DeviceTrackerLog() {
   };
 
   const handleEdit = (device) => {
-    // Navigate to edit page
-    toast.success(`Editing device ${device.dt_id}`);
+    router.push(`/user_dashboard/document_hub/other_document_tracker/device_tracker/edit/${device.dt_id}`);
   };
 
-  const handleDelete = async (device) => {
-    if (!confirm(`Are you sure you want to delete device ${device.dt_id}?`)) {
-      return;
-    }
-
-    try {
-      // Implement delete functionality
-      toast.success(`Device ${device.dt_id} deleted successfully`);
-      fetchDevices(currentPage, searchTerm); // Refresh the list
-    } catch (error) {
-      toast.error('Failed to delete device');
-    }
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <FaCaretDown className="text-slate-400 ml-1" />;
+    return sortDirection === 'asc' ? 
+      <FaCaretUp className="text-blue-600 ml-1" /> : 
+      <FaCaretDown className="text-blue-600 ml-1" />;
   };
+
+  // Calculate statistics
+  const workingDevices = devices.filter(device => device.device_status === 'Working').length;
+  const notWorkingDevices = devices.filter(device => device.device_status === 'Not Working').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300 mb-8">
-          <div className="relative px-8 py-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white border-b border-white/10 shadow-md">
-            <div className="relative flex flex-col md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center">
+        {/* Enhanced Header */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 mb-8">
+          <div className="relative px-8 py-8 bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
+            <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center mb-6 lg:mb-0">
                 <button
                   onClick={() => router.push('/user_dashboard/document_hub/other_document_log')}
-                  className="mr-4 p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                  className="mr-6 p-3 bg-white/20 rounded-xl hover:bg-white/30 transition-colors backdrop-blur-sm"
                 >
-                  <FaArrowLeft />
+                  <FaArrowLeft className="text-xl" />
                 </button>
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                  <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">
                     Device Tracker Log
                   </h1>
-                  <p className="text-blue-200 mt-1 text-sm md:text-base">
-                    View and manage all tracked devices
+                  <p className="text-blue-200 mt-2 text-lg">
+                    Comprehensive overview of all tracked devices
                   </p>
                 </div>
               </div>
-              <div className="mt-4 md:mt-0 flex items-center space-x-4">
+              <div className="flex items-center space-x-4">
                 <button
                   onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold"
                 >
                   <FaPlus className="mr-2" />
-                  Add New Device
+                  Track New Device
                 </button>
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <FaMobile className="text-xl" />
+                <div className="p-4 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <FaMobile className="text-2xl" />
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Devices</p>
+                <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
+              </div>
+              <div className="p-4 bg-blue-50 rounded-xl">
+                <FaMobile className="text-2xl text-blue-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Working Devices</p>
+                <p className="text-3xl font-bold text-emerald-600 mt-2">{workingDevices}</p>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-xl">
+                <FaCheckCircle className="text-2xl text-emerald-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Not Working</p>
+                <p className="text-3xl font-bold text-rose-600 mt-2">{notWorkingDevices}</p>
+              </div>
+              <div className="p-4 bg-rose-50 rounded-xl">
+                <FaExclamationTriangle className="text-2xl text-rose-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Search and Filters */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <form onSubmit={handleSearch} className="flex-1">
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaSearch className="text-gray-400" />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <FaSearch className="text-slate-400" />
                 </div>
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by brand, model, IMEI, or tracking ID..."
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Search by brand, model, IMEI, SIM, tracking ID, or purpose..."
+                  className="block w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700 placeholder-slate-500"
                 />
               </div>
             </form>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-4 py-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700"
+              >
+                <option value="all">All Status</option>
+                <option value="Working">Working Only</option>
+                <option value="Not Working">Not Working Only</option>
+              </select>
+
+              {/* Items Per Page */}
+              <select
+                value={itemsPerPage}
+                onChange={(e) => handleItemsPerPageChange(e.target.value)}
+                className="px-4 py-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700"
+              >
+                <option value="10">10 per page</option>
+                <option value="20">20 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
+              </select>
+
               <button
                 onClick={() => fetchDevices(currentPage, searchTerm)}
                 disabled={loading}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 transition-all shadow-lg hover:shadow-xl font-medium"
               >
                 <FaSync className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
-              </button>
-              
-              <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <FaFilter className="mr-2" />
-                Filters
               </button>
             </div>
           </div>
         </div>
 
-        {/* Devices Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Enhanced Devices Table */}
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
           {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <FaSpinner className="animate-spin text-3xl text-blue-600 mr-3" />
-              <span className="text-gray-600">Loading devices...</span>
+            <div className="flex justify-center items-center py-16">
+              <div className="text-center">
+                <FaSpinner className="animate-spin text-4xl text-blue-600 mx-auto mb-4" />
+                <p className="text-slate-600 text-lg">Loading device information...</p>
+                <p className="text-slate-500 text-sm mt-2">Please wait while we fetch the latest data</p>
+              </div>
             </div>
           ) : devices.length === 0 ? (
-            <div className="text-center py-12">
-              <FaMobile className="mx-auto text-4xl text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No devices found</h3>
-              <p className="text-gray-500 mb-6">
-                {searchTerm ? 'Try adjusting your search terms' : 'Get started by tracking your first device'}
+            <div className="text-center py-16">
+              <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <FaMobile className="text-3xl text-slate-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-700 mb-3">No devices found</h3>
+              <p className="text-slate-500 mb-8 max-w-md mx-auto">
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'No devices match your current filters. Try adjusting your search criteria.' 
+                  : 'Start tracking your first device to manage your inventory efficiently.'}
               </p>
               <button
                 onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl font-semibold"
               >
                 <FaPlus className="mr-2" />
                 Track New Device
@@ -461,110 +572,142 @@ export default function DeviceTrackerLog() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Device Info
+                      <th 
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => handleSort('dt_id')}
+                      >
+                        <div className="flex items-center">
+                          Device Info
+                          <SortIcon field="dt_id" />
+                        </div>
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        IMEI Numbers
+                      <th 
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => handleSort('imei_1')}
+                      >
+                        <div className="flex items-center">
+                          IMEI Numbers
+                          <SortIcon field="imei_1" />
+                        </div>
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        SIM Info
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        SIM Information
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
+                      <th 
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => handleSort('device_status')}
+                      >
+                        <div className="flex items-center">
+                          Status
+                          <SortIcon field="device_status" />
+                        </div>
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tracked By
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {devices.map((device, index) => (
-                      <tr key={device.dt_id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                  <tbody className="bg-white divide-y divide-slate-200">
+                    {devices.map((device) => (
+                      <tr key={device.dt_id} className="hover:bg-slate-50/80 transition-colors group">
+                        {/* Device Info */}
+                        <td className="px-6 py-4">
                           <div>
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
                               {device.dt_id}
                             </div>
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-slate-600 mt-1">
                               {device.brand_name} {device.device_model}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {device.imei_1?.substring(0, 8)}...
-                          </div>
-                          {device.imei_2 && (
-                            <div className="text-sm text-gray-500">
-                              {device.imei_2.substring(0, 8)}...
+                            <div className="text-xs text-slate-500 mt-1">
+                              Tracked by: {device.track_by}
                             </div>
-                          )}
+                          </div>
                         </td>
+                        
+                        {/* IMEI Numbers */}
                         <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            {device.sim_1 ? (
-                              <div className="text-sm text-gray-900">
-                                {device.sim_1}
-                                {device.sim_1_persona && (
-                                  <span className="text-gray-500 ml-1">({device.sim_1_persona})</span>
-                                )}
+                          <div className="space-y-2">
+                            <div>
+                              <div className="text-xs font-medium text-slate-500">IMEI 1</div>
+                              <div className="text-sm font-mono font-semibold text-slate-800 bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                {device.imei_1}
                               </div>
-                            ) : (
-                              <span className="text-sm text-gray-400">No SIM 1</span>
-                            )}
-                            {device.sim_2 ? (
-                              <div className="text-sm text-gray-900">
-                                {device.sim_2}
-                                {device.sim_2_persona && (
-                                  <span className="text-gray-500 ml-1">({device.sim_2_persona})</span>
-                                )}
+                            </div>
+                            {device.imei_2 && (
+                              <div>
+                                <div className="text-xs font-medium text-slate-500">IMEI 2</div>
+                                <div className="text-sm font-mono font-semibold text-slate-800 bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                  {device.imei_2}
+                                </div>
                               </div>
-                            ) : (
-                              <span className="text-sm text-gray-400">No SIM 2</span>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        
+                        {/* SIM Information */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-3">
+                            {device.sim_1 ? (
+                              <div>
+                                <div className="text-xs font-medium text-slate-500">SIM 1</div>
+                                <div className="text-sm font-semibold text-slate-800">
+                                  {device.sim_1}
+                                  {device.sim_1_persona && (
+                                    <span className="text-emerald-600 ml-2 text-xs font-normal bg-emerald-50 px-2 py-0.5 rounded-full">
+                                      {device.sim_1_persona}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-slate-400">No SIM 1</div>
+                            )}
+                            
+                            {device.sim_2 ? (
+                              <div>
+                                <div className="text-xs font-medium text-slate-500">SIM 2</div>
+                                <div className="text-sm font-semibold text-slate-800">
+                                  {device.sim_2}
+                                  {device.sim_2_persona && (
+                                    <span className="text-emerald-600 ml-2 text-xs font-normal bg-emerald-50 px-2 py-0.5 rounded-full">
+                                      {device.sim_2_persona}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-slate-400">No SIM 2</div>
+                            )}
+                          </div>
+                        </td>
+                        
+                        {/* Status */}
+                        <td className="px-6 py-4">
                           {getStatusBadge(device.device_status)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {device.track_by}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDate(device.created_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
+                        
+                        {/* Actions */}
+                        <td className="px-6 py-4">
+                          <div className="flex space-x-3">
                             <button
                               onClick={() => handleViewDetails(device)}
-                              className="text-blue-600 hover:text-blue-900 transition-colors"
-                              title="View Details"
+                              className="flex items-center px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors group/btn"
+                              title="View Full Details"
                             >
-                              <FaEye />
+                              <FaEye className="mr-2 group-hover/btn:scale-110 transition-transform" />
+                              View
                             </button>
                             <button
                               onClick={() => handleEdit(device)}
-                              className="text-green-600 hover:text-green-900 transition-colors"
-                              title="Edit"
+                              className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors group/btn"
+                              title="Edit Device"
                             >
-                              <FaEdit />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(device)}
-                              className="text-red-600 hover:text-red-900 transition-colors"
-                              title="Delete"
-                            >
-                              <FaTrash />
+                              <FaEdit className="mr-2 group-hover/btn:scale-110 transition-transform" />
+                              Edit
                             </button>
                           </div>
                         </td>
@@ -574,42 +717,60 @@ export default function DeviceTrackerLog() {
                 </table>
               </div>
 
-              {/* Pagination */}
+              {/* Enhanced Pagination */}
               {totalPages > 1 && (
-                <div className="bg-white px-6 py-4 border-t border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-700">
-                      Showing <span className="font-medium">{(currentPage - 1) * 10 + 1}</span> to{' '}
-                      <span className="font-medium">
-                        {Math.min(currentPage * 10, totalCount)}
+                <div className="bg-slate-50 px-6 py-4 border-t border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="text-sm text-slate-700">
+                      Showing <span className="font-semibold">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                      <span className="font-semibold">
+                        {Math.min(currentPage * itemsPerPage, totalCount)}
                       </span> of{' '}
-                      <span className="font-medium">{totalCount}</span> devices
+                      <span className="font-semibold">{totalCount}</span> devices
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Previous
                       </button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`px-3 py-1 border text-sm font-medium rounded-md ${
-                            currentPage === page
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
+                      
+                      {/* Page Numbers */}
+                      <div className="flex space-x-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`px-3 py-2 border text-sm font-medium rounded-lg transition-colors ${
+                                currentPage === pageNum
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg'
+                                  : 'border-slate-300 text-slate-700 bg-white hover:bg-slate-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Next
                       </button>
@@ -621,7 +782,7 @@ export default function DeviceTrackerLog() {
           )}
         </div>
 
-        {/* Device Details Modal */}
+        {/* Enhanced Device Details Modal */}
         <DeviceDetailsModal
           device={selectedDevice}
           isOpen={isModalOpen}
@@ -632,6 +793,24 @@ export default function DeviceTrackerLog() {
           }}
         />
       </div>
+
+      {/* Add custom styles for animations */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease-out;
+        }
+        .animate-scaleIn {
+          animation: scaleIn 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

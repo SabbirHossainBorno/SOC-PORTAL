@@ -59,8 +59,8 @@ const navItems = [
     children: [
       { label: 'Access Form Tracker', path: '/user_dashboard/document_hub/access_form_tracker' },
       { label: 'Access Form Log', path: '/user_dashboard/document_hub/access_form_log' },
-      { label: 'Other Document Tracker', path: '/user_dashboard/document_hub/other_document_tracker' },
-      { label: 'Other Document Log', path: '/user_dashboard/document_hub/other_document_log' }
+      { label: 'Document Tracker', path: '/user_dashboard/document_hub/other_document_tracker' },
+      { label: 'Document Log', path: '/user_dashboard/document_hub/other_document_log' }
     ]
   },
   { 
@@ -108,11 +108,11 @@ export default function UserDashboardSidebar() {
   useEffect(() => {
     const initialStates = {};
     navItems.forEach(item => {
-      const isActive = pathname === item.path || 
-        (item.children && item.children.some(child => pathname === child.path));
-      
+      const isActive = pathname.startsWith(item.path) || 
+        (item.children && item.children.some(child => pathname.startsWith(child.path)));
+
       if (item.children) {
-        initialStates[item.label] = isActive || item.children.some(child => pathname === child.path);
+        initialStates[item.label] = isActive;
       }
     });
     setOpenDropdowns(initialStates);
@@ -123,13 +123,18 @@ export default function UserDashboardSidebar() {
   };
 
   const isItemActive = (item) => {
-    return pathname === item.path || 
-      (item.children && item.children.some(child => pathname === child.path));
-  };
+  if (item.children) {
+    // If it has children, check if any child path matches the current pathname
+    return item.children.some(child => pathname.startsWith(child.path));
+  } else {
+    // For items without children, match exact path only
+    return pathname === item.path;
+  }
+};
 
-  const isChildActive = (childPath) => {
-    return pathname === childPath;
-  };
+const isChildActive = (childPath) => {
+  return pathname.startsWith(childPath);
+};
 
   return (
     <aside className="h-full flex flex-col bg-white border-r border-gray-100 shadow-sm">
