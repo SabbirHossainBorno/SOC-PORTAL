@@ -11,6 +11,7 @@ import UnplannedPartialChart from '../components/downtime_chart/UnplannedPartial
 import UnplannedFullChart from '../components/downtime_chart/UnplannedFull';
 import PlannedPartialChart from '../components/downtime_chart/PlannedPartial';
 import PlannedFullChart from '../components/downtime_chart/PlannedFull';
+import SummaryReport from '../components/downtime_chart/SummaryReport';
 import { motion } from 'framer-motion';
 
 // Force dynamic rendering to bypass prerendering
@@ -157,13 +158,16 @@ export default function UserDashboard() {
             <span className="text-sm text-gray-700">Last 7 days</span>
           </div>
         </div>
-        
+        <div className="space-y-6">
+      {/* Summary Report at the top */}
+      <SummaryReport />
         {/* 2x2 grid layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <UnplannedPartialChart />
           <UnplannedFullChart />
           <PlannedPartialChart />
           <PlannedFullChart />
+        </div>
         </div>
       </div>
 

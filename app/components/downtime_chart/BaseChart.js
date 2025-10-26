@@ -14,7 +14,7 @@ import SmallSpinner from '../../components/SmallSpinner';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, ChartDataLabels);
 
-const BaseChart = ({ title, apiEndpoint, colors }) => {
+const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('thisWeek');
@@ -109,18 +109,69 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
     }
   };
 
-  const data = {
-    labels: chartData?.channels.map(c => c.channel) || [],
-    datasets: [
-      {
-        data: chartData?.channels.map(c => c.minutes) || [],
-        backgroundColor: colors || defaultColors,
-        borderColor: '#ffffff',
-        borderWidth: 2,
-        hoverOffset: 20
-      }
-    ]
+  // Get the data array based on chart type
+  const getDataArray = () => {
+    if (!chartData) return [];
+    
+    if (isSummaryChart) {
+      return chartData.chartData || [];
+    } else {
+      return chartData.channels || [];
+    }
   };
+
+  // Get label key based on chart type
+  const getLabelKey = () => {
+    return isSummaryChart ? 'type' : 'channel';
+  };
+
+  // Get total minutes for percentage calculations
+  const getTotalMinutes = () => {
+    if (!chartData) return 0;
+    
+    if (isSummaryChart) {
+      return chartData.totalAvailableMinutes || 0;
+    } else {
+      return chartData.totalMinutes || 0;
+    }
+  };
+
+  const dataArray = getDataArray();
+  const totalMinutes = getTotalMinutes();
+
+  // Prepare chart data with minimum segment size for visibility
+  const prepareChartData = () => {
+    const labels = dataArray.map(item => item[getLabelKey()]) || [];
+    const actualValues = dataArray.map(item => item.minutes) || [];
+    
+    // For summary chart, ensure small downtime segments are visible
+    let displayValues = [...actualValues];
+    if (isSummaryChart && dataArray.length > 0) {
+      const maxValue = Math.max(...actualValues);
+      displayValues = actualValues.map((value, index) => {
+        // For non-service-up segments that are too small, set minimum visible size
+        if (dataArray[index].type !== 'Service Up' && value > 0 && value < maxValue * 0.01) {
+          return Math.max(value, maxValue * 0.01); // At least 1% of the largest segment
+        }
+        return value;
+      });
+    }
+
+    return {
+      labels,
+      datasets: [
+        {
+          data: displayValues,
+          backgroundColor: colors || defaultColors,
+          borderColor: '#ffffff',
+          borderWidth: 2,
+          hoverOffset: 20
+        }
+      ]
+    };
+  };
+
+  const chartDataForDisplay = prepareChartData();
   
   const options = {
     responsive: true,
@@ -136,11 +187,11 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
         callbacks: {
           label: (context) => {
             const label = context.label || '';
-            const value = context.raw || 0;
-            const percentage = context.raw && chartData?.totalMinutes
-              ? Math.round((value / chartData.totalMinutes) * 100)
+            const actualValue = dataArray[context.dataIndex]?.minutes || 0;
+            const percentage = totalMinutes > 0
+              ? Math.round((actualValue / totalMinutes) * 100)
               : 0;
-            return `${label}: ${value} min (${percentage}%)`;
+            return `${label}: ${actualValue} min (${percentage}%)`;
           }
         },
         displayColors: true,
@@ -164,9 +215,12 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
       },
       datalabels: {
         formatter: (value, ctx) => {
+          const actualValue = dataArray[ctx.dataIndex]?.minutes || 0;
           const total = ctx.chart.getDatasetMeta(0).total;
-          const percentage = Math.round((value / total) * 100);
-          return percentage >= 5 ? `${percentage}%` : null;
+          const percentage = Math.round((actualValue / total) * 100);
+          // Show label if percentage >= 2% or if it's a downtime type with actual value > 0
+          const isDowntime = dataArray[ctx.dataIndex]?.type !== 'Service Up';
+          return (percentage >= 2 || (isDowntime && actualValue > 0)) ? `${percentage}%` : null;
         },
         color: '#ffffff',
         font: {
@@ -218,6 +272,14 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
     return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
   };
 
+  // Get info text based on chart type
+  const getInfoText = () => {
+    if (isSummaryChart) {
+      return "Shows service availability vs different types of downtime";
+    }
+    return "Shows distribution of downtime by channel";
+  };
+
   return (
     <motion.div 
       ref={containerRef}
@@ -239,7 +301,7 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
           </h3>
           {showInfo && (
             <div className="mt-1 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg max-w-xs">
-              Shows distribution of downtime by channel
+              {getInfoText()}
             </div>
           )}
         </div>
@@ -326,13 +388,13 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
           <SmallSpinner />
           <p className="mt-2 text-gray-500">Loading downtime data...</p>
         </div>
-      ) : chartData?.channels?.length > 0 ? (
+      ) : dataArray.length > 0 ? (
         <div className="flex-1 flex flex-col">
           <div className="h-[350px] w-full flex items-center justify-center">
             <div className="w-[350px] h-[350px]">
               <Pie 
                 ref={chartRef}
-                data={data} 
+                data={chartDataForDisplay} 
                 options={options} 
                 plugins={[ChartDataLabels]}
               />
@@ -341,7 +403,7 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
           
           <div className="mt-4 pt-3 pb-3 border-t border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {chartData.channels.map((channel, index) => (
+              {dataArray.map((item, index) => (
                 <div key={index} className="flex items-center group">
                   <div 
                     className="w-3 h-3 rounded-full flex-shrink-0 mr-2 shadow-sm" 
@@ -350,10 +412,10 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline">
                       <span className="text-xs font-medium text-gray-800 truncate group-hover:text-gray-900 transition-colors">
-                        {channel.channel}
+                        {item[getLabelKey()]}
                       </span>
                       <span className="text-xs font-semibold text-gray-800 ml-2">
-                        {channel.minutes} min
+                        {item.minutes} min
                       </span>
                     </div>
                     <div className="flex items-center mt-1">
@@ -361,13 +423,13 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
                         <div 
                           className="h-full rounded-full transition-all duration-500 ease-out"
                           style={{ 
-                            width: `${channel.percentage}%`,
+                            width: `${item.percentage}%`,
                             backgroundColor: colors?.[index] || defaultColors[index]
                           }}
                         ></div>
                       </div>
                       <span className="text-xs text-gray-700 ml-2 w-8 font-medium">
-                        {channel.percentage}%
+                        {item.percentage}%
                       </span>
                     </div>
                   </div>
@@ -377,23 +439,65 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
           </div>
           
           <div className="mt-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-blue-700">Total Downtime</p>
-                <p className="text-lg font-bold text-blue-900 mt-1">{chartData.totalMinutes} min</p>
-              </div>
+            <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
+              {isSummaryChart && (
+                <>
+                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-green-700">Service Uptime</p>
+                    <p className="text-lg font-bold text-green-900 mt-1">{chartData?.uptimePercentage || 0}%</p>
+                    <p className="text-xs text-green-800 mt-1">{chartData?.uptimeDuration || '0m'}</p>
+                  </div>
+                  
+                  <div className="bg-red-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-red-700">Total Downtime</p>
+                    <p className="text-lg font-bold text-red-900 mt-1">{chartData?.downtimePercentage || 0}%</p>
+                    <p className="text-xs text-red-800 mt-1">{chartData?.totalDowntimeDuration || '0m'}</p>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-blue-700">Availability</p>
+                    <p className="text-lg font-bold text-blue-900 mt-1">{chartData?.summary?.availabilityStatus || 'N/A'}</p>
+                    <p className="text-xs text-blue-800 mt-1 flex items-center gap-1">
+                      SLA: {chartData?.summary?.sla || '99.9%'}
+                      {chartData?.summary?.meetsSla ? (
+                        <span className="text-green-600">✓</span>
+                      ) : (
+                        <span className="text-red-600">✗</span>
+                      )}
+                    </p>
+                  </div>
+                </>
+              )}
               
-              <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-gray-700">Channels</p>
-                <p className="text-lg font-bold text-gray-900 mt-1">{chartData.channels.length}</p>
-              </div>
-              
-              <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-green-700">Date Range</p>
-                <p className="text-xs font-medium text-green-900 mt-1 text-center">
-                  {formatDateRange()}
+              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded-lg flex flex-col items-center`}>
+                <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
+                  {isSummaryChart ? 'Total Time' : 'Total Downtime'}
                 </p>
+                <p className={`text-lg font-bold ${isSummaryChart ? 'text-gray-900' : 'text-blue-900'} mt-1`}>
+                  {isSummaryChart ? chartData?.totalAvailableDuration || '0m' : `${totalMinutes} min`}
+                </p>
+                {isSummaryChart && chartData?.calculation?.expectedMinutes && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Expected: {Math.round(chartData.calculation.expectedMinutes / 60)}h
+                  </p>
+                )}
               </div>
+              
+              {!isSummaryChart && (
+                <>
+                  <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-gray-700">Channels</p>
+                    <p className="text-lg font-bold text-gray-900 mt-1">{dataArray.length}</p>
+                  </div>
+                  
+                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-green-700">Date Range</p>
+                    <p className="text-xs font-medium text-green-900 mt-1 text-center">
+                      {formatDateRange()}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -404,23 +508,53 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
           <p className="text-xs text-gray-600 mt-1">Try a different time range</p>
           
           <div className="mt-4 pt-3 border-t border-gray-200 w-full">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-blue-700">Total Downtime</p>
-                <p className="text-lg font-bold text-blue-900 mt-1">0 min</p>
-              </div>
+            <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
+              {isSummaryChart && (
+                <>
+                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-green-700">Service Uptime</p>
+                    <p className="text-lg font-bold text-green-900 mt-1">0%</p>
+                    <p className="text-xs text-green-800 mt-1">0m</p>
+                  </div>
+                  
+                  <div className="bg-red-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-red-700">Total Downtime</p>
+                    <p className="text-lg font-bold text-red-900 mt-1">0%</p>
+                    <p className="text-xs text-red-800 mt-1">0m</p>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-blue-700">Availability</p>
+                    <p className="text-lg font-bold text-blue-900 mt-1">N/A</p>
+                    <p className="text-xs text-blue-800 mt-1">SLA: 99.9%</p>
+                  </div>
+                </>
+              )}
               
-              <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-gray-700">Channels</p>
-                <p className="text-lg font-bold text-gray-900 mt-1">0</p>
-              </div>
-              
-              <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
-                <p className="text-xs font-semibold text-green-700">Date Range</p>
-                <p className="text-xs font-medium text-green-900 mt-1 text-center">
-                  {formatDateRange()}
+              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded-lg flex flex-col items-center`}>
+                <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
+                  {isSummaryChart ? 'Total Time' : 'Total Downtime'}
+                </p>
+                <p className={`text-lg font-bold ${isSummaryChart ? 'text-gray-900' : 'text-blue-900'} mt-1`}>
+                  {isSummaryChart ? '0m' : '0 min'}
                 </p>
               </div>
+              
+              {!isSummaryChart && (
+                <>
+                  <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-gray-700">Channels</p>
+                    <p className="text-lg font-bold text-gray-900 mt-1">0</p>
+                  </div>
+                  
+                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                    <p className="text-xs font-semibold text-green-700">Date Range</p>
+                    <p className="text-xs font-medium text-green-900 mt-1 text-center">
+                      {formatDateRange()}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

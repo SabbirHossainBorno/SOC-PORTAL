@@ -32,26 +32,6 @@ const stringToColor = (str) => {
   return `hsl(${hue}, 70%, 95%)`; // Light pastel colors
 };
 
-// Format to Dhaka time
-const formatDhakaTime = (dateString) => {
-  if (!dateString) return 'N/A';
-  
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-GB', {
-      timeZone: 'Asia/Dhaka',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).replace(',', '');
-  } catch {
-    return dateString;
-  }
-};
-
 // Format duration
 const formatDuration = (duration) => {
   if (!duration) return 'N/A';
@@ -166,27 +146,27 @@ const DowntimeLog = () => {
   const modalities = ['PLANNED', 'UNPLANNED'];
   const reliabilityOptions = ['YES', 'NO'];
   const channelOptions = [
-  { value: 'APP', label: 'APP', icon: <FaMobile className="text-blue-500" /> },
-  { value: 'USSD', label: 'USSD', icon: <FaMobile className="text-green-500" /> },
-  { value: 'WEB', label: 'WEB', icon: <FaGlobe className="text-purple-500" /> },
-  { value: 'SMS', label: 'SMS', icon: <FaEnvelope className="text-yellow-500" /> },
-  { value: 'MIDDLEWARE', label: 'MIDDLEWARE', icon: <FaCog className="text-gray-500" /> },
-  { value: 'INWARD SERVICE', label: 'INWARD SERVICE', icon: <FaServer className="text-red-500" /> }
-];
+    { value: 'APP', label: 'APP', icon: <FaMobile className="text-blue-500" /> },
+    { value: 'USSD', label: 'USSD', icon: <FaMobile className="text-green-500" /> },
+    { value: 'WEB', label: 'WEB', icon: <FaGlobe className="text-purple-500" /> },
+    { value: 'SMS', label: 'SMS', icon: <FaEnvelope className="text-yellow-500" /> },
+    { value: 'MIDDLEWARE', label: 'MIDDLEWARE', icon: <FaCog className="text-gray-500" /> },
+    { value: 'INWARD SERVICE', label: 'INWARD SERVICE', icon: <FaServer className="text-red-500" /> }
+  ];
   const mnoOptions = ['ALL', 'GRAMEENPHONE', 'ROBI/AIRTEL', 'BANGLALINK', 'TELETALK'];
 
   const timeRangeOptions = [
-  { value: '', label: 'All Time' },
-  { value: 'today', label: 'Today' },
-  { value: 'thisWeek', label: 'This Week' }, // Add this
-  { value: 'lastWeek', label: 'Last Week' }, // Add this
-  { value: 'last7days', label: 'Last 7 Days' },
-  { value: 'last30days', label: 'Last 30 Days' },
-  { value: 'thisMonth', label: 'This Month' },
-  { value: 'lastMonth', label: 'Last Month' },
-  { value: 'thisYear', label: 'This Year' },
-  { value: 'custom', label: 'Custom Range' }
-];
+    { value: '', label: 'All Time' },
+    { value: 'today', label: 'Today' },
+    { value: 'thisWeek', label: 'This Week' },
+    { value: 'lastWeek', label: 'Last Week' },
+    { value: 'last7days', label: 'Last 7 Days' },
+    { value: 'last30days', label: 'Last 30 Days' },
+    { value: 'thisMonth', label: 'This Month' },
+    { value: 'lastMonth', label: 'Last Month' },
+    { value: 'thisYear', label: 'This Year' },
+    { value: 'custom', label: 'Custom Range' }
+  ];
 
   const fetchData = async () => {
     try {
@@ -245,40 +225,133 @@ const DowntimeLog = () => {
     }
   };
 
+  const fetchDowntimesByTimeRange = async (timeRange) => {
+    try {
+      const params = new URLSearchParams({
+        timeRange: timeRange,
+        page: 1,
+        limit: 100000 // Large number to get all records
+      });
+      
+      const response = await fetch(`/api/user_dashboard/downtime_log?${params.toString()}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        return data.downtimes;
+      } else {
+        throw new Error(data.message || 'Failed to fetch downtimes');
+      }
+    } catch (error) {
+      console.error('Fetch downtimes by time range error:', error);
+      throw error;
+    }
+  };
+
+  const fetchAllDowntimes = async () => {
+    try {
+      const params = new URLSearchParams({
+        page: 1,
+        limit: 100000 // Large number to get all records
+      });
+      
+      const response = await fetch(`/api/user_dashboard/downtime_log?${params.toString()}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        return data.downtimes;
+      } else {
+        throw new Error(data.message || 'Failed to fetch downtimes');
+      }
+    } catch (error) {
+      console.error('Fetch all downtimes error:', error);
+      throw error;
+    }
+  };
+
+  const fetchFilteredDowntimes = async () => {
+    try {
+      const params = new URLSearchParams({
+        ...filters,
+        startDate: filters.startDate ? filters.startDate.toISOString() : '',
+        endDate: filters.endDate ? filters.endDate.toISOString() : '',
+        page: 1,
+        limit: 100000 // Large number to get all records
+      });
+      
+      const response = await fetch(`/api/user_dashboard/downtime_log?${params.toString()}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        return data.downtimes;
+      } else {
+        throw new Error(data.message || 'Failed to fetch downtimes');
+      }
+    } catch (error) {
+      console.error('Fetch filtered downtimes error:', error);
+      throw error;
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      toast.loading('Exporting all downtimes...');
+      const allDowntimes = await fetchAllDowntimes();
+      await exportDowntimeToExcel(allDowntimes);
+      toast.dismiss();
+      toast.success('All downtimes exported successfully!');
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.message || 'Failed to export downtimes');
+    }
+  };
+
+  const handleExportByTimeRange = async (timeRange, label) => {
+    try {
+      toast.loading(`Exporting ${label}...`);
+      const downtimes = await fetchDowntimesByTimeRange(timeRange);
+      await exportDowntimeToExcel(downtimes);
+      toast.dismiss();
+      toast.success(`${label} exported successfully!`);
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.message || `Failed to export ${label}`);
+    }
+  };
+
+  const handleExportFiltered = async () => {
+    try {
+      toast.loading('Exporting filtered downtimes...');
+      const filteredDowntimes = await fetchFilteredDowntimes();
+      await exportDowntimeToExcel(filteredDowntimes);
+      toast.dismiss();
+      toast.success('Filtered downtimes exported successfully!');
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.message || 'Failed to export filtered downtimes');
+    }
+  };
+
+  const isCustomDateRangeActive = filters.startDate && filters.endDate;
+
   useEffect(() => {
     fetchData();
   }, [filters, sortConfig, pagination.page, pagination.limit]);
 
-  // Add this helper function near your other utility functions
-const channelRequiresMNO = (channel) => {
-  if (!channel) return false;
-  
-  // Handle comma-separated values
-  if (channel.includes(',')) {
-    const channels = channel.split(',').map(ch => ch.trim());
-    return channels.some(ch => ch === 'SMS' || ch === 'USSD');
-  }
-  
-  // Handle single value
-  return channel === 'SMS' || channel === 'USSD';
-};
-
   const handleFilterChange = (name, value) => {
-  setFilters(prev => ({
-    ...prev,
-    [name]: value
-    // Remove the MNO reset logic
-  }));
-  setPagination(prev => ({ ...prev, page: 1 }));
-  
-  if (name === 'timeRange' && value !== 'custom') {
     setFilters(prev => ({
       ...prev,
-      startDate: null,
-      endDate: null
+      [name]: value
     }));
-  }
-};
+    setPagination(prev => ({ ...prev, page: 1 }));
+    
+    if (name === 'timeRange' && value !== 'custom') {
+      setFilters(prev => ({
+        ...prev,
+        startDate: null,
+        endDate: null
+      }));
+    }
+  };
 
   const requestSort = (key) => {
     let direction = 'ASC';
@@ -314,17 +387,6 @@ const channelRequiresMNO = (channel) => {
   const startItem = (pagination.page - 1) * pagination.limit + 1;
   const endItem = Math.min(pagination.page * pagination.limit, pagination.total);
 
-  const DetailRow = ({ label, value }) => (
-    <div className="flex flex-col py-2 border-b border-gray-100 last:border-0">
-      <span className="text-gray-600 text-sm font-medium">
-        {label}:
-      </span>
-      <span className="text-gray-900 mt-1 break-words">
-        {value || <span className="text-gray-500 italic">N/A</span>}
-      </span>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
@@ -353,167 +415,219 @@ const channelRequiresMNO = (channel) => {
           </div>
         </div>
 
-        {/* Modern Summary Section */}
-{summary && (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-    {/* Total Events Card - Keep your existing design */}
-    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 shadow-md border border-blue-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">Total Events</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalEvents}</p>
-          <p className="text-xs text-blue-600 mt-2">Unique incidents tracked</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaExclamationTriangle className="text-blue-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-blue-200 border-dashed">
-        <div className="flex items-center text-xs text-blue-700">
-          <FaHistory className="mr-1" />
-          <span>All-time recorded events</span>
-        </div>
-      </div>
-    </div>
-    
-    {/* Total Records Card - Keep your existing design */}
-    <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded p-5 shadow-md border border-purple-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide">Total Records</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalRecords}</p>
-          <p className="text-xs text-purple-600 mt-2">All downtime entries</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaLayerGroup className="text-purple-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-purple-200 border-dashed">
-        <div className="flex items-center text-xs text-purple-700">
-          <FaDatabase className="mr-1" />
-          <span>Complete historical data</span>
-        </div>
-      </div>
-    </div>
-    
-    {/* Total Duration Card - Keep your existing design */}
-    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded p-5 shadow-md border border-green-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-green-800 uppercase tracking-wide">Total Duration</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalDuration}</p>
-          <p className="text-sm font-medium text-green-700 mt-1">{summary.totalDurationMinutes} minutes</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaClock className="text-green-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-green-200 border-dashed">
-        <div className="flex items-center text-xs text-green-700">
-          <FaSignal className="mr-1" />
-          <span>Cumulative downtime</span>
-        </div>
-      </div>
-    </div>
-    
-    {/* Top Channels Card - Keep your existing design */}
-    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded p-4 shadow-sm border border-orange-200">
-      <div className="flex items-start justify-between mb-3">
-        <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Top Channels</h3>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaChartPie className="text-orange-600 text-xl" />
-        </div>
-      </div>
-      
-      <div className="space-y-2">
-        {summary.topChannels.map((ch, index) => (
-          <div key={index} className="flex items-center justify-between bg-white/80 py-1.5 px-2.5 rounded shadow-xs">
-            <div className="flex items-center">
-              <span className={`w-1.5 h-1.5 rounded mr-2 ${
-                index === 0 ? 'bg-orange-500' : 
-                index === 1 ? 'bg-orange-400' : 'bg-orange-300'
-              }`}></span>
-              <span className="text-xs font-medium text-gray-800 truncate">{ch.channel}</span>
+        {/* Updated Summary Section */}
+        {summary && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            {/* Total Downtimes Card */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded p-5 shadow-md border border-blue-200">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-blue-800 uppercase tracking-wide">Total Downtimes</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalDowntimes}</p>
+                  <p className="text-xs text-blue-600 mt-2">Unique downtime incidents</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaExclamationTriangle className="text-blue-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-blue-200 border-dashed">
+                <button
+                  onClick={handleExportAll}
+                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <FaFileExcel /> Export All
+                </button>
+              </div>
             </div>
-            <span className="bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded min-w-[1.5rem] text-center">
-              {ch.count}
-            </span>
+            
+            {/* This Week Count Card - NEW */}
+            <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded p-5 shadow-md border border-cyan-200">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-cyan-800 uppercase tracking-wide">This Week</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.thisWeekCount || 0}</p>
+                  <p className="text-xs text-cyan-600 mt-2">Downtimes this week</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaCalendar className="text-cyan-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-cyan-200 border-dashed">
+                <button
+                  onClick={() => handleExportByTimeRange('thisWeek', 'This Week Downtimes')}
+                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-cyan-600 text-white rounded text-xs font-medium hover:bg-cyan-700 transition-colors"
+                >
+                  <FaFileExcel /> Export
+                </button>
+              </div>
+            </div>
+            
+            {/* Last Week Count Card */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded p-5 shadow-md border border-purple-200">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide">Last Week</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.lastWeekCount}</p>
+                  <p className="text-xs text-purple-600 mt-2">Downtimes last week</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaCalendar className="text-purple-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-purple-200 border-dashed">
+                <button
+                  onClick={() => handleExportByTimeRange('lastWeek', 'Last Week Downtimes')}
+                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 transition-colors"
+                >
+                  <FaFileExcel /> Export
+                </button>
+              </div>
+            </div>
+            
+            {/* This Month Count Card */}
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded p-5 shadow-md border border-green-200">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-800 uppercase tracking-wide">This Month</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.thisMonthCount}</p>
+                  <p className="text-xs text-green-600 mt-2">Downtimes this month</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaCalendarAlt className="text-green-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-green-200 border-dashed">
+                <button
+                  onClick={() => handleExportByTimeRange('thisMonth', 'This Month Downtimes')}
+                  className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors"
+                >
+                  <FaFileExcel /> Export
+                </button>
+              </div>
+            </div>
+            
+            {/* Total Duration Card */}
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded p-5 shadow-md border border-amber-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-800 uppercase tracking-wide">Total Duration</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.totalDuration}</p>
+                  <p className="text-sm font-medium text-amber-700 mt-1">{summary.totalDurationMinutes} minutes</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaClock className="text-amber-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-amber-200 border-dashed">
+                <div className="flex items-center text-xs text-amber-700">
+                  <FaSignal className="mr-1" />
+                  <span>Cumulative downtime</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Current Week Duration Card */}
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded p-5 shadow-md border border-indigo-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">Current Week</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentWeekDuration}</p>
+                  <p className="text-sm font-medium text-indigo-700 mt-1">{summary.currentWeekMinutes} minutes</p>
+                  <p className="text-xs text-indigo-600 mt-1">{summary.currentWeekRange}</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaCalendar className="text-indigo-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-indigo-200 border-dashed">
+                <div className="flex items-center text-xs text-indigo-700">
+                  <FaChartBar className="mr-1" />
+                  <span>This week&apos;s downtime</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Previous Week Duration Card */}
+            <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded p-5 shadow-md border border-pink-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-pink-800 uppercase tracking-wide">Last Week</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.previousWeekDuration}</p>
+                  <p className="text-sm font-medium text-pink-700 mt-1">{summary.previousWeekMinutes} minutes</p>
+                  <p className="text-xs text-pink-600 mt-1">{summary.previousWeekRange}</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaHistory className="text-pink-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-pink-200 border-dashed">
+                <div className="flex items-center text-xs text-pink-700">
+                  <FaChartBar className="mr-1" />
+                  <span>Previous week downtime</span>
+                </div>
+              </div>
+            </div>
+
+            {/* This Month Duration Card */}
+            <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded p-5 shadow-md border border-teal-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-teal-800 uppercase tracking-wide">This Month</h3>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentMonthDuration}</p>
+                  <p className="text-sm font-medium text-teal-700 mt-1">{summary.currentMonthMinutes} minutes</p>
+                  <p className="text-xs text-teal-600 mt-1">{summary.currentMonthRange}</p>
+                </div>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaCalendarAlt className="text-teal-600 text-xl" />
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-teal-200 border-dashed">
+                <div className="flex items-center text-xs text-teal-700">
+                  <FaChartBar className="mr-1" />
+                  <span>This month&apos;s downtime</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Channels Card */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded p-4 shadow-sm border border-orange-200">
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Top Channels</h3>
+                <div className="p-3 rounded bg-white shadow-sm">
+                  <FaChartPie className="text-orange-600 text-xl" />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                {summary.topChannels && summary.topChannels.length > 0 ? (
+                  summary.topChannels.map((ch, index) => (
+                    <div key={index} className="flex items-center justify-between bg-white/80 py-1.5 px-2.5 rounded shadow-xs">
+                      <div className="flex items-center">
+                        <span className={`w-1.5 h-1.5 rounded mr-2 ${
+                          index === 0 ? 'bg-orange-500' : 
+                          index === 1 ? 'bg-orange-400' : 'bg-orange-300'
+                        }`}></span>
+                        <span className="text-xs font-medium text-gray-800 truncate">{ch.channel}</span>
+                      </div>
+                      <span className="bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded min-w-[1.5rem] text-center">
+                        {ch.count}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-gray-500 text-center py-2">No data</div>
+                )}
+              </div>
+              
+              <div className="mt-3 pt-2 border-t border-orange-200 border-dashed">
+                <div className="flex items-center text-xs text-orange-700">
+                  <FaChartBar className="mr-1 text-xs" />
+                  <span>Most affected channels</span>
+                </div>
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
-      
-      <div className="mt-3 pt-2 border-t border-orange-200 border-dashed">
-        <div className="flex items-center text-xs text-orange-700">
-          <FaChartBar className="mr-1 text-xs" />
-          <span>Most affected</span>
-        </div>
-      </div>
-    </div>
-
-    {/* Current Week Duration Card - Same design as your cards */}
-    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded p-5 shadow-md border border-indigo-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">Current Week</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentWeekDuration}</p>
-          <p className="text-sm font-medium text-indigo-700 mt-1">{summary.currentWeekMinutes} minutes</p>
-          <p className="text-xs text-indigo-600 mt-1">{summary.currentWeekRange}</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaCalendar className="text-indigo-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-indigo-200 border-dashed">
-        <div className="flex items-center text-xs text-indigo-700">
-          <FaChartBar className="mr-1" />
-          <span>This week&apos;s downtime</span>
-        </div>
-      </div>
-    </div>
-
-    {/* Previous Week Duration Card - Same design as your cards */}
-    <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded p-5 shadow-md border border-pink-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-pink-800 uppercase tracking-wide">Last Week</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.previousWeekDuration}</p>
-          <p className="text-sm font-medium text-pink-700 mt-1">{summary.previousWeekMinutes} minutes</p>
-          <p className="text-xs text-pink-600 mt-1">{summary.previousWeekRange}</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaHistory className="text-pink-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-pink-200 border-dashed">
-        <div className="flex items-center text-xs text-pink-700">
-          <FaChartBar className="mr-1" />
-          <span>Previous week downtime</span>
-        </div>
-      </div>
-    </div>
-
-    {/* This Month Duration Card - Same design as your cards */}
-    <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded p-5 shadow-md border border-teal-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-teal-800 uppercase tracking-wide">This Month</h3>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentMonthDuration}</p>
-          <p className="text-sm font-medium text-teal-700 mt-1">{summary.currentMonthMinutes} minutes</p>
-          <p className="text-xs text-teal-600 mt-1">{summary.currentMonthRange}</p>
-        </div>
-        <div className="p-3 rounded bg-white shadow-sm">
-          <FaCalendarAlt className="text-teal-600 text-xl" />
-        </div>
-      </div>
-      <div className="mt-4 pt-3 border-t border-teal-200 border-dashed">
-        <div className="flex items-center text-xs text-teal-700">
-          <FaChartBar className="mr-1" />
-          <span>This month&apos;s downtime</span>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+        )}
 
         <div className="bg-white rounded shadow-md mb-6 overflow-hidden">
           <div className="p-4">
@@ -538,166 +652,184 @@ const channelRequiresMNO = (channel) => {
                 >
                   Reset Filters
                 </button>
+                <button 
+                  onClick={handleExportFiltered}
+                  disabled={!isCustomDateRangeActive}
+                  className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
+                    isCustomDateRangeActive 
+                      ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer' 
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                  title={!isCustomDateRangeActive ? 'Select custom date range to export' : 'Export filtered data'}
+                >
+                  <FaFileExcel />
+                  Export Filtered
+                </button>
               </div>
             </div>
             
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Time Range
-    </label>
-    <select
-      value={filters.timeRange}
-      onChange={(e) => handleFilterChange('timeRange', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      {timeRangeOptions.map(option => (
-        <option key={option.value} value={option.value}>{option.label}</option>
-      ))}
-    </select>
-  </div>
-  
-  {filters.timeRange === 'custom' && (
-    <>
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          Start Date
-        </label>
-        <DatePicker
-          selected={filters.startDate}
-          onChange={(date) => handleFilterChange('startDate', date)}
-          selectsStart
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-          placeholderText="Select start date"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          End Date
-        </label>
-        <DatePicker
-          selected={filters.endDate}
-          onChange={(date) => handleFilterChange('endDate', date)}
-          selectsEnd
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          minDate={filters.startDate}
-          className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-          placeholderText="Select end date"
-        />
-      </div>
-    </>
-  )}
-  
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Category
-    </label>
-    <select
-      value={filters.category}
-      onChange={(e) => handleFilterChange('category', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All Categories</option>
-      {categories.map(category => (
-        <option key={category} value={category}>{category}</option>
-      ))}
-    </select>
-  </div>
-  
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Impact Type
-    </label>
-    <select
-      value={filters.impactType}
-      onChange={(e) => handleFilterChange('impactType', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All Types</option>
-      {impactTypes.map(type => (
-        <option key={type} value={type}>{type}</option>
-      ))}
-    </select>
-  </div>
-  
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Modality
-    </label>
-    <select
-      value={filters.modality}
-      onChange={(e) => handleFilterChange('modality', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All Modalities</option>
-      {modalities.map(mod => (
-        <option key={mod} value={mod}>{mod}</option>
-      ))}
-    </select>
-  </div>
-  
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Reliability Impacted
-    </label>
-    <select
-      value={filters.reliability}
-      onChange={(e) => handleFilterChange('reliability', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All</option>
-      {reliabilityOptions.map(opt => (
-        <option key={opt} value={opt}>{opt}</option>
-      ))}
-    </select>
-  </div>
-  
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Affected Channel
-    </label>
-    <select
-      value={filters.channel}
-      onChange={(e) => handleFilterChange('channel', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All Channels</option>
-      {channelOptions.map(channel => (
-        <option key={channel.value} value={channel.value}>{channel.label}</option>
-      ))}
-    </select>
-  </div>
-  
-  {/* MNO Filter - Always Visible */}
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
-      Affected MNO
-    </label>
-    <select
-      value={filters.affectedMNO}
-      onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
-      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-    >
-      <option value="">All MNOs</option>
-      {mnoOptions.map(mno => (
-        <option key={mno} value={mno}>
-          {getMNOShortName(mno)} ({mno})
-        </option>
-      ))}
-    </select>
-  </div>
-</div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 relative">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Time Range
+                </label>
+                <select
+                  value={filters.timeRange}
+                  onChange={(e) => handleFilterChange('timeRange', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  {timeRangeOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {filters.timeRange === 'custom' && (
+                <>
+                  <div className="relative z-[100]">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
+                    <DatePicker
+                      selected={filters.startDate}
+                      onChange={(date) => handleFilterChange('startDate', date)}
+                      selectsStart
+                      startDate={filters.startDate}
+                      endDate={filters.endDate}
+                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                      placeholderText="Select start date"
+                      popperClassName="!z-[999]"
+                      popperPlacement="bottom-start"
+                      portalId="root"
+                    />
+                  </div>
+                  
+                  <div className="relative z-[100]">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      End Date
+                    </label>
+                    <DatePicker
+                      selected={filters.endDate}
+                      onChange={(date) => handleFilterChange('endDate', date)}
+                      selectsEnd
+                      startDate={filters.startDate}
+                      endDate={filters.endDate}
+                      minDate={filters.startDate}
+                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                      placeholderText="Select end date"
+                      popperClassName="!z-[999]"
+                      popperPlacement="bottom-start"
+                      portalId="root"
+                    />
+                  </div>
+                </>
+              )}
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <select
+                  value={filters.category}
+                  onChange={(e) => handleFilterChange('category', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Impact Type
+                </label>
+                <select
+                  value={filters.impactType}
+                  onChange={(e) => handleFilterChange('impactType', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All Types</option>
+                  {impactTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Modality
+                </label>
+                <select
+                  value={filters.modality}
+                  onChange={(e) => handleFilterChange('modality', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All Modalities</option>
+                  {modalities.map(mod => (
+                    <option key={mod} value={mod}>{mod}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Reliability Impacted
+                </label>
+                <select
+                  value={filters.reliability}
+                  onChange={(e) => handleFilterChange('reliability', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All</option>
+                  {reliabilityOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Affected Channel
+                </label>
+                <select
+                  value={filters.channel}
+                  onChange={(e) => handleFilterChange('channel', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All Channels</option>
+                  {channelOptions.map(channel => (
+                    <option key={channel.value} value={channel.value}>{channel.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Affected MNO
+                </label>
+                <select
+                  value={filters.affectedMNO}
+                  onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
+                >
+                  <option value="">All MNOs</option>
+                  {mnoOptions.map(mno => (
+                    <option key={mno} value={mno}>
+                      {getMNOShortName(mno)} ({mno})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="bg-white rounded shadow-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-xs border border-gray-200">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+              <thead className="bg-gray-50 sticky top-0 z-[5]">
                 <tr>
                   <th className="px-2 py-2 text-left font-medium text-gray-700 uppercase tracking-wider border-r border-gray-200">S/N</th>
                   <th 
@@ -785,15 +917,15 @@ const channelRequiresMNO = (channel) => {
                         {downtime.issue_title}
                       </td>
                       <td className="px-1 py-2 border-r border-gray-200">
-  <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs break-words">
-    {getChannelShortName(downtime.affected_channel)}
-  </span>
-</td>
+                        <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs break-words">
+                          {getChannelShortName(downtime.affected_channel)}
+                        </span>
+                      </td>
                       <td className="px-1 py-2 border-r border-gray-200">
-                      <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs break-words">
-                        {getMNOShortName(downtime.affected_mno)}
-                      </span>
-                    </td>
+                        <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs break-words">
+                          {getMNOShortName(downtime.affected_mno)}
+                        </span>
+                      </td>
                       <td className="px-1 py-2 whitespace-nowrap border-r border-gray-200">
                         <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
                           {downtime.category}
@@ -941,12 +1073,11 @@ const channelRequiresMNO = (channel) => {
           )}
         </div>
 
-        {/* Compact & Responsive Modal */}
+        {/* Modal */}
         {selectedDowntime && (
           <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-2 sm:p-3 z-50">
             <div className="relative bg-white rounded shadow-lg w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col border border-gray-200">
               
-              {/* Compact Header */}
               <div className="px-4 py-3 bg-white border-b border-gray-200 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded ${selectedDowntime.modality === 'UNPLANNED' ? 'bg-red-500' : 'bg-green-500'}`}></div>
@@ -960,9 +1091,7 @@ const channelRequiresMNO = (channel) => {
                 </button>
               </div>
               
-              {/* Main Content */}
               <div className="flex-1 overflow-y-auto p-4">
-                {/* Incident Summary */}
                 <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-100">
                   <h3 className="text-base font-medium text-gray-800 mb-1">{selectedDowntime.issue_title}</h3>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -979,9 +1108,7 @@ const channelRequiresMNO = (channel) => {
                   </div>
                 </div>
                 
-                {/* Content Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Timeline Section */}
                   <div className="space-y-3">
                     <div className="bg-gray-50 rounded p-3 border border-gray-200">
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
@@ -1004,7 +1131,6 @@ const channelRequiresMNO = (channel) => {
                       </div>
                     </div>
                     
-                    {/* Affected Services */}
                     <div className="bg-gray-50 rounded p-3 border border-gray-200">
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                         <FaNetworkWired className="text-purple-500 text-xs" />
@@ -1030,9 +1156,7 @@ const channelRequiresMNO = (channel) => {
                     </div>
                   </div>
                   
-                  {/* Impact & Resolution Section */}
                   <div className="space-y-3">
-                    {/* Impact Details */}
                     <div className="bg-gray-50 rounded p-3 border border-gray-200">
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                         <FaExclamationTriangle className="text-orange-500 text-xs" />
@@ -1056,7 +1180,6 @@ const channelRequiresMNO = (channel) => {
                       </div>
                     </div>
                     
-                    {/* Resolution Information */}
                     <div className="bg-gray-50 rounded p-3 border border-gray-200">
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                         <FaTicketAlt className="text-green-500 text-xs" />
@@ -1092,9 +1215,7 @@ const channelRequiresMNO = (channel) => {
                   </div>
                 </div>
                 
-                {/* Additional Information */}
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Reason & Resolution */}
                   <div className="bg-gray-50 rounded p-3 border border-gray-200">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Root Cause</h4>
                     <p className="text-xs text-gray-800">{selectedDowntime.reason || 'N/A'}</p>
@@ -1106,7 +1227,6 @@ const channelRequiresMNO = (channel) => {
                   </div>
                 </div>
                 
-                {/* Remarks Section */}
                 <div className="mt-4 bg-gray-50 rounded p-3 border border-gray-200">
                   <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                     <FaStickyNote className="text-yellow-500 text-xs" />
@@ -1122,7 +1242,6 @@ const channelRequiresMNO = (channel) => {
                 </div>
               </div>
               
-              {/* Compact Footer */}
               <div className="px-4 py-3 bg-white border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-2">
                 <div className="text-xs text-gray-500">
                   <span className="font-medium">Updated:</span>{' '}

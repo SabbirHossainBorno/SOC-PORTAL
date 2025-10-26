@@ -4,9 +4,9 @@ import logger from '../../../../lib/logger';
 
 // Helper to calculate time ranges
 const getTimeRange = (range) => {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
-  let start = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
-  let end = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+  const now = new Date();
+  let start = new Date();
+  let end = new Date();
   
   switch (range) {
     case 'today':
@@ -62,6 +62,7 @@ const getTimeRange = (range) => {
   
   return { start, end };
 };
+
 // Helper to format duration
 const formatDuration = (duration) => {
   if (!duration) return 'N/A';
@@ -89,26 +90,36 @@ const formatDuration = (duration) => {
     }
     
     return duration;
-  } catch {
+  } catch (error) {
+    logger.warn('Duration formatting failed', {
+      meta: {
+        taskName: 'FormatDuration',
+        duration,
+        error: error.message
+      }
+    });
     return duration || 'N/A';
   }
 };
 
-// Helper to format date to Dhaka time
-const formatDhakaTime = (dateString) => {
+// Helper to format date (no timezone conversion)
+const formatDateTime = (dateString) => {
   if (!dateString) return 'N/A';
   
   try {
-    // Assume dateString is already in 'YYYY-MM-DD HH:MM:SS' format in Asia/Dhaka timezone
-    const isoWithTZ = dateString.replace(' ', 'T') + '+06:00';
-    const date = new Date(isoWithTZ);
+    const date = new Date(dateString);
     
     if (isNaN(date.getTime())) {
+      logger.warn('Invalid date format', {
+        meta: {
+          taskName: 'FormatDateTime',
+          dateString
+        }
+      });
       return dateString;
     }
     
     return date.toLocaleString('en-GB', {
-      timeZone: 'Asia/Dhaka',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -116,12 +127,21 @@ const formatDhakaTime = (dateString) => {
       minute: '2-digit',
       hour12: false
     }).replace(',', '');
-  } catch {
+  } catch (error) {
+    logger.warn('Date formatting failed', {
+      meta: {
+        taskName: 'FormatDateTime',
+        dateString,
+        error: error.message
+      }
+    });
     return dateString;
   }
 };
 
 export async function GET(request) {
+  const startTime = Date.now();
+  
   try {
     // Get URL parameters
     const { searchParams } = new URL(request.url);
@@ -142,8 +162,25 @@ export async function GET(request) {
     const offset = (page - 1) * limit;
     const downtimeId = searchParams.get('downtimeId') || '';
 
+    logger.info('Downtime log request received', {
+      meta: {
+        taskName: 'DowntimeLogRequest',
+        filters: { search, category, impactType, modality, reliability, channel, affectedMNO, timeRange },
+        pagination: { page, limit, offset },
+        sort: { sortBy, sortOrder },
+        downtimeId
+      }
+    });
+
     // If downtimeId is provided, fetch all rows for that ID
     if (downtimeId) {
+      logger.info('Fetching downtime by specific ID', {
+        meta: {
+          taskName: 'FetchDowntimeById',
+          downtimeId
+        }
+      });
+
       const queryText = `
         SELECT 
           serial, 
@@ -180,22 +217,30 @@ export async function GET(request) {
       
       const dataResult = await query(queryText, [downtimeId]);
       
+      logger.info('Downtime by ID fetched successfully', {
+        meta: {
+          taskName: 'FetchDowntimeById',
+          downtimeId,
+          recordCount: dataResult.rows.length
+        }
+      });
+      
       const downtimes = dataResult.rows.map(record => ({
         ...record,
-        formattedStart: formatDhakaTime(record.start_date_time),
-        formattedEnd: formatDhakaTime(record.end_date_time),
+        formattedStart: formatDateTime(record.start_date_time),
+        formattedEnd: formatDateTime(record.end_date_time),
         rawStart: record.start_date_time,
         rawEnd: record.end_date_time,
         formattedDuration: formatDuration(record.duration),
-        created_at: formatDhakaTime(record.created_at),
-        updated_at: formatDhakaTime(record.updated_at)
+        created_at: formatDateTime(record.created_at),
+        updated_at: formatDateTime(record.updated_at)
       }));
 
       return new Response(JSON.stringify({
         success: true,
         downtimes,
         total: downtimes.length,
-        summary: null // No summary needed for specific downtime_id fetch
+        summary: null
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
@@ -251,31 +296,29 @@ export async function GET(request) {
       queryParams.push(reliability);
     }
     
-    // Channel filter
+    // Channel filter - handle comma-separated values
     if (channel) {
-  // For comma-separated values, we need to check if any of the values match
-  whereConditions.push(`(
-    affected_channel = $${queryParams.length + 1} 
-    OR affected_channel ILIKE $${queryParams.length + 1} || ',%'
-    OR affected_channel ILIKE '%,' || $${queryParams.length + 1} || ',%'
-    OR affected_channel ILIKE '%,' || $${queryParams.length + 1}
-    OR affected_channel ILIKE '%' || $${queryParams.length + 1} || '%'
-  )`);
-  queryParams.push(channel);
-}
+      whereConditions.push(`(
+        affected_channel = $${queryParams.length + 1} 
+        OR affected_channel ILIKE $${queryParams.length + 1} || ',%'
+        OR affected_channel ILIKE '%,' || $${queryParams.length + 1} || ',%'
+        OR affected_channel ILIKE '%,' || $${queryParams.length + 1}
+        OR affected_channel ILIKE '%' || $${queryParams.length + 1} || '%'
+      )`);
+      queryParams.push(channel);
+    }
     
-    // MNO filter
+    // MNO filter - handle comma-separated values
     if (affectedMNO) {
-  // For comma-separated values, we need to check if any of the values match
-  whereConditions.push(`(
-    affected_mno = $${queryParams.length + 1} 
-    OR affected_mno ILIKE $${queryParams.length + 1} || ',%'
-    OR affected_mno ILIKE '%,' || $${queryParams.length + 1} || ',%'
-    OR affected_mno ILIKE '%,' || $${queryParams.length + 1}
-    OR affected_mno ILIKE '%' || $${queryParams.length + 1} || '%'
-  )`);
-  queryParams.push(affectedMNO);
-}
+      whereConditions.push(`(
+        affected_mno = $${queryParams.length + 1} 
+        OR affected_mno ILIKE $${queryParams.length + 1} || ',%'
+        OR affected_mno ILIKE '%,' || $${queryParams.length + 1} || ',%'
+        OR affected_mno ILIKE '%,' || $${queryParams.length + 1}
+        OR affected_mno ILIKE '%' || $${queryParams.length + 1} || '%'
+      )`);
+      queryParams.push(affectedMNO);
+    }
     
     // Time range handling
     if (timeRange && timeRange !== '') {
@@ -288,30 +331,55 @@ export async function GET(request) {
         );
         queryParams.push(start.toISOString());
         queryParams.push(end.toISOString());
+        
+        logger.info('Time range filter applied', {
+          meta: {
+            taskName: 'TimeRangeFilter',
+            timeRange,
+            startDate: start.toISOString(),
+            endDate: end.toISOString()
+          }
+        });
       }
     }
     
     // Custom date range
     if (startDate && endDate) {
-      const startDateDhaka = new Date(new Date(startDate).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
-      const endDateDhaka = new Date(new Date(endDate).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+      const startDateObj = new Date(startDate);
+      const endDateObj = new Date(endDate);
       
-      // Set endDateDhaka to end of the day (23:59:59.999) to include all events on that day
-      endDateDhaka.setHours(23, 59, 59, 999);
+      // Set end date to end of the day
+      endDateObj.setHours(23, 59, 59, 999);
       
       whereConditions.push(
         `start_date_time >= $${queryParams.length + 1} 
         AND start_date_time <= $${queryParams.length + 2}`
       );
-      queryParams.push(startDateDhaka.toISOString());
-      queryParams.push(endDateDhaka.toISOString());
+      queryParams.push(startDateObj.toISOString());
+      queryParams.push(endDateObj.toISOString());
+      
+      logger.info('Custom date range filter applied', {
+        meta: {
+          taskName: 'CustomDateRangeFilter',
+          startDate: startDateObj.toISOString(),
+          endDate: endDateObj.toISOString()
+        }
+      });
     }
     
     const whereClause = whereConditions.length 
       ? `WHERE ${whereConditions.join(' AND ')}` 
       : '';
 
-    // Main data query - fetch all required fields
+    logger.info('Query conditions built', {
+      meta: {
+        taskName: 'BuildQuery',
+        whereClause,
+        paramCount: queryParams.length
+      }
+    });
+
+    // Main data query
     const dataQuery = `
       SELECT 
         serial, 
@@ -348,190 +416,261 @@ export async function GET(request) {
       OFFSET $${queryParams.length + 2}
     `;
     
-    // Count query for pagination
+    // Count query
     const countQuery = `
       SELECT COUNT(*) as total
       FROM downtime_report_v2
       ${whereClause}
     `;
 
-    // Summary query with max duration per downtime_id, current week, and previous week
-const summaryQuery = `
-  WITH weekly_data AS (
-      SELECT
-        -- Current week (Sunday to Saturday)
-        SUM(CASE 
-          WHEN start_date_time >= (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day')
-          AND start_date_time < (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day') + INTERVAL '7 days'
-          THEN EXTRACT(EPOCH FROM duration) 
-          ELSE 0 
-        END) as current_week_seconds,
-
-        -- Previous week (Sunday to Saturday)
-        SUM(CASE 
-          WHEN start_date_time >= (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day') - INTERVAL '7 days'
-          AND start_date_time < (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer * INTERVAL '1 day')
-          THEN EXTRACT(EPOCH FROM duration) 
-          ELSE 0 
-        END) as previous_week_seconds,
-
-        -- Total (max duration per downtime_id)
-        SUM(max_duration) as total_seconds,
-
-        -- Counts
-        COUNT(DISTINCT downtime_id) as total_events,
-        COUNT(*) as total_records,
-
-        -- Top channels
-        (
-          SELECT json_agg(row_to_json(t)) 
-          FROM (
-            SELECT affected_channel as channel, COUNT(DISTINCT downtime_id) as count
-            FROM downtime_report_v2
-            ${whereClause}
-            GROUP BY affected_channel
-            ORDER BY count DESC
-            LIMIT 3
-          ) t
-        ) as top_channels
-      FROM (
+    // Enhanced summary query with proper channel counting
+    const summaryQuery = `
+      WITH date_ranges AS (
+        SELECT 
+          -- Current week (Sunday to Saturday)
+          date_trunc('week', CURRENT_DATE) as current_week_start,
+          date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' + INTERVAL '23 hours 59 minutes 59 seconds' as current_week_end,
+          
+          -- Previous week
+          date_trunc('week', CURRENT_DATE) - INTERVAL '7 days' as previous_week_start,
+          date_trunc('week', CURRENT_DATE) - INTERVAL '1 second' as previous_week_end,
+          
+          -- Current month
+          date_trunc('month', CURRENT_DATE) as current_month_start,
+          date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 second' as current_month_end
+      ),
+      downtime_max_duration AS (
         SELECT 
           downtime_id, 
-          MAX(EXTRACT(EPOCH FROM duration)) as max_duration,
-          MIN(start_date_time) as start_date_time,
-          duration
+          MAX(EXTRACT(EPOCH FROM duration)) as max_duration_seconds,
+          MIN(start_date_time) as first_start_time
         FROM downtime_report_v2
         ${whereClause}
-        GROUP BY downtime_id, duration
-      ) sub
-    )
-    SELECT 
-      total_events,
-      total_records,
-      total_seconds,
-      current_week_seconds,
-      previous_week_seconds,
-      top_channels
-    FROM weekly_data
-`;
+        GROUP BY downtime_id
+      ),
+      channel_breakdown AS (
+        SELECT 
+          TRIM(UNNEST(string_to_array(affected_channel, ','))) as channel,
+          downtime_id
+        FROM downtime_report_v2
+        ${whereClause}
+      )
+      SELECT 
+        -- Total unique downtimes
+        (SELECT COUNT(DISTINCT downtime_id) FROM downtime_report_v2 ${whereClause}) as total_downtimes,
+        
+        -- This week downtime count
+        (SELECT COUNT(DISTINCT d.downtime_id) 
+         FROM downtime_report_v2 d, date_ranges dr
+         WHERE d.start_date_time >= dr.current_week_start 
+         AND d.start_date_time <= dr.current_week_end
+         ${whereClause.replace('WHERE', 'AND')}) as this_week_count,
+        
+        -- Last week downtime count
+        (SELECT COUNT(DISTINCT d.downtime_id) 
+         FROM downtime_report_v2 d, date_ranges dr
+         WHERE d.start_date_time >= dr.previous_week_start 
+         AND d.start_date_time <= dr.previous_week_end
+         ${whereClause.replace('WHERE', 'AND')}) as last_week_count,
+        
+        -- This month downtime count
+        (SELECT COUNT(DISTINCT d.downtime_id) 
+         FROM downtime_report_v2 d, date_ranges dr
+         WHERE d.start_date_time >= dr.current_month_start 
+         AND d.start_date_time <= dr.current_month_end
+         ${whereClause.replace('WHERE', 'AND')}) as this_month_count,
+        
+        -- Total records
+        (SELECT COUNT(*) FROM downtime_report_v2 ${whereClause}) as total_records,
+        
+        -- Current week duration
+        (SELECT COALESCE(SUM(dmd.max_duration_seconds), 0)
+         FROM downtime_max_duration dmd, date_ranges dr
+         WHERE dmd.first_start_time >= dr.current_week_start 
+         AND dmd.first_start_time <= dr.current_week_end) as current_week_seconds,
+        
+        -- Previous week duration
+        (SELECT COALESCE(SUM(dmd.max_duration_seconds), 0)
+         FROM downtime_max_duration dmd, date_ranges dr
+         WHERE dmd.first_start_time >= dr.previous_week_start 
+         AND dmd.first_start_time <= dr.previous_week_end) as previous_week_seconds,
+        
+        -- Current month duration
+        (SELECT COALESCE(SUM(dmd.max_duration_seconds), 0)
+         FROM downtime_max_duration dmd, date_ranges dr
+         WHERE dmd.first_start_time >= dr.current_month_start 
+         AND dmd.first_start_time <= dr.current_month_end) as current_month_seconds,
+        
+        -- Total duration (max per downtime_id)
+        (SELECT COALESCE(SUM(max_duration_seconds), 0) 
+         FROM downtime_max_duration) as total_seconds,
+        
+        -- Top channels with proper comma-separated handling
+        (SELECT json_agg(row_to_json(t)) 
+         FROM (
+           SELECT channel, COUNT(DISTINCT downtime_id) as count
+           FROM channel_breakdown
+           WHERE channel IS NOT NULL AND channel != ''
+           GROUP BY channel
+           ORDER BY count DESC
+           LIMIT 3
+         ) t) as top_channels,
+         
+        -- Date ranges for display
+        (SELECT current_week_start FROM date_ranges) as current_week_start,
+        (SELECT current_week_end FROM date_ranges) as current_week_end,
+        (SELECT previous_week_start FROM date_ranges) as previous_week_start,
+        (SELECT previous_week_end FROM date_ranges) as previous_week_end,
+        (SELECT current_month_start FROM date_ranges) as current_month_start,
+        (SELECT current_month_end FROM date_ranges) as current_month_end
+    `;
     
     // Execute queries
-    const dataResult = await query(dataQuery, [...queryParams, limit, offset]);
-    const countResult = await query(countQuery, queryParams);
-    const summaryResult = await query(summaryQuery, queryParams);
+    logger.info('Executing database queries', {
+      meta: {
+        taskName: 'ExecuteQueries',
+        queryTypes: ['data', 'count', 'summary']
+      }
+    });
+
+    const [dataResult, countResult, summaryResult] = await Promise.all([
+      query(dataQuery, [...queryParams, limit, offset]),
+      query(countQuery, queryParams),
+      query(summaryQuery, queryParams)
+    ]);
+
     const summaryData = summaryResult.rows[0];
     
-    // Format total duration
-let totalDuration = {
-  formatted: 'N/A',
-  minutes: 0
-};
-if (summaryData.total_seconds) {
-  const hours = Math.floor(summaryData.total_seconds / 3600);
-  const minutes = Math.floor((summaryData.total_seconds % 3600) / 60);
-  totalDuration = {
-    formatted: `${hours}h ${minutes}m`,
-    minutes: Math.floor(summaryData.total_seconds / 60)
-  };
-}
+    logger.info('Database queries executed successfully', {
+      meta: {
+        taskName: 'QueriesCompleted',
+        dataRows: dataResult.rows.length,
+        totalCount: countResult.rows[0].total,
+        summary: {
+          totalDowntimes: summaryData.total_downtimes,
+          thisWeekCount: summaryData.this_week_count,
+          lastWeekCount: summaryData.last_week_count,
+          thisMonthCount: summaryData.this_month_count,
+          totalRecords: summaryData.total_records
+        }
+      }
+    });
+    
+    // Helper to format seconds to duration
+    const formatSecondsToDuration = (seconds) => {
+      if (!seconds || seconds === 0) {
+        return { formatted: '0h 0m', minutes: 0 };
+      }
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return {
+        formatted: `${hours}h ${minutes}m`,
+        minutes: Math.floor(seconds / 60)
+      };
+    };
 
-// Format current week duration
-let currentWeekDuration = {
-  formatted: 'N/A',
-  minutes: 0
-};
-if (summaryData.current_week_seconds) {
-  const hours = Math.floor(summaryData.current_week_seconds / 3600);
-  const minutes = Math.floor((summaryData.current_week_seconds % 3600) / 60);
-  currentWeekDuration = {
-    formatted: `${hours}h ${minutes}m`,
-    minutes: Math.floor(summaryData.current_week_seconds / 60)
-  };
-}
+    // Format durations
+    const totalDuration = formatSecondsToDuration(summaryData.total_seconds);
+    const currentWeekDuration = formatSecondsToDuration(summaryData.current_week_seconds);
+    const previousWeekDuration = formatSecondsToDuration(summaryData.previous_week_seconds);
+    const currentMonthDuration = formatSecondsToDuration(summaryData.current_month_seconds);
 
-// Format previous week duration
-let previousWeekDuration = {
-  formatted: 'N/A',
-  minutes: 0
-};
-if (summaryData.previous_week_seconds) {
-  const hours = Math.floor(summaryData.previous_week_seconds / 3600);
-  const minutes = Math.floor((summaryData.previous_week_seconds % 3600) / 60);
-  previousWeekDuration = {
-    formatted: `${hours}h ${minutes}m`,
-    minutes: Math.floor(summaryData.previous_week_seconds / 60)
-  };
-}
+    // Format date ranges
+    const formatDateRange = (start, end) => {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const format = (date) => date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short'
+      });
+      return `${format(startDate)} - ${format(endDate)}`;
+    };
 
-// Get week date ranges
-const getWeekDateRange = (weekOffset = 0) => {
-  const now = new Date();
-  const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  
-  // Calculate start of week (Sunday)
-  const start = new Date(now);
-  start.setDate(now.getDate() - currentDay - (weekOffset * 7));
-  start.setHours(0, 0, 0, 0);
-  
-  // Calculate end of week (Saturday)
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  
-  return { start, end };
-};
-
-const currentWeekRange = getWeekDateRange(0);
-const previousWeekRange = getWeekDateRange(1);
-
-const formatDateRange = (start, end) => {
-  const format = (date) => date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short'
-  });
-  return `${format(start)} - ${format(end)}`;
-};
+    const currentWeekRange = formatDateRange(
+      summaryData.current_week_start, 
+      summaryData.current_week_end
+    );
+    const previousWeekRange = formatDateRange(
+      summaryData.previous_week_start, 
+      summaryData.previous_week_end
+    );
+    const currentMonthRange = formatDateRange(
+      summaryData.current_month_start, 
+      summaryData.current_month_end
+    );
     
     // Format data for frontend
     const downtimes = dataResult.rows.map(record => ({
       ...record,
-      formattedStart: formatDhakaTime(record.start_date_time),
-      formattedEnd: formatDhakaTime(record.end_date_time),
+      formattedStart: formatDateTime(record.start_date_time),
+      formattedEnd: formatDateTime(record.end_date_time),
       rawStart: record.start_date_time,
       rawEnd: record.end_date_time,
       formattedDuration: formatDuration(record.duration),
-      created_at: formatDhakaTime(record.created_at),
-      updated_at: formatDhakaTime(record.updated_at)
+      created_at: formatDateTime(record.created_at),
+      updated_at: formatDateTime(record.updated_at)
     }));
+
+    const responseTime = Date.now() - startTime;
+
+    logger.info('Downtime log request completed successfully', {
+      meta: {
+        taskName: 'RequestCompleted',
+        responseTime: `${responseTime}ms`,
+        recordsReturned: downtimes.length,
+        totalRecords: countResult.rows[0].total,
+        summary: {
+          totalDowntimes: summaryData.total_downtimes,
+          thisWeekCount: summaryData.this_week_count,
+          lastWeekCount: summaryData.last_week_count,
+          thisMonthCount: summaryData.this_month_count,
+          totalDuration: totalDuration.formatted,
+          currentWeekDuration: currentWeekDuration.formatted,
+          previousWeekDuration: previousWeekDuration.formatted,
+          currentMonthDuration: currentMonthDuration.formatted,
+          topChannels: summaryData.top_channels || []
+        }
+      }
+    });
 
     return new Response(JSON.stringify({
       success: true,
       downtimes,
-      total: countResult.rows[0].total,
+      total: parseInt(countResult.rows[0].total),
       summary: {
-  totalEvents: summaryData.total_events,
-  totalRecords: summaryData.total_records,
-  totalDuration: totalDuration.formatted,
-  totalDurationMinutes: totalDuration.minutes,
-  currentWeekDuration: currentWeekDuration.formatted,
-  currentWeekMinutes: currentWeekDuration.minutes,
-  currentWeekRange: formatDateRange(currentWeekRange.start, currentWeekRange.end),
-  previousWeekDuration: previousWeekDuration.formatted,
-  previousWeekMinutes: previousWeekDuration.minutes,
-  previousWeekRange: formatDateRange(previousWeekRange.start, previousWeekRange.end),
-  topChannels: summaryData.top_channels || []
-}
+        totalDowntimes: parseInt(summaryData.total_downtimes) || 0,
+        thisWeekCount: parseInt(summaryData.this_week_count) || 0,
+        lastWeekCount: parseInt(summaryData.last_week_count) || 0,
+        thisMonthCount: parseInt(summaryData.this_month_count) || 0,
+        totalRecords: parseInt(summaryData.total_records) || 0,
+        totalDuration: totalDuration.formatted,
+        totalDurationMinutes: totalDuration.minutes,
+        currentWeekDuration: currentWeekDuration.formatted,
+        currentWeekMinutes: currentWeekDuration.minutes,
+        currentWeekRange: currentWeekRange,
+        previousWeekDuration: previousWeekDuration.formatted,
+        previousWeekMinutes: previousWeekDuration.minutes,
+        previousWeekRange: previousWeekRange,
+        currentMonthDuration: currentMonthDuration.formatted,
+        currentMonthMinutes: currentMonthDuration.minutes,
+        currentMonthRange: currentMonthRange,
+        topChannels: summaryData.top_channels || []
+      }
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
     
   } catch (error) {
+    const errorTime = Date.now() - startTime;
+    
     logger.error('Failed to fetch downtime log', {
       meta: {
         taskName: 'DatabaseError',
-        details: error.message,
-        stack: error.stack
+        responseTime: `${errorTime}ms`,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        errorName: error.name
       }
     });
     
