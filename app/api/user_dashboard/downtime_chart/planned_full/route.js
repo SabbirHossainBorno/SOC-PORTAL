@@ -3,7 +3,7 @@ import { query } from '../../../../../lib/db';
 import logger from '../../../../../lib/logger';
 
 const getTimeRange = (range) => {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+  const now = new Date();
   let start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
@@ -12,6 +12,34 @@ const getTimeRange = (range) => {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       break;
+    case 'thisWeek':
+      // Calculate Sunday to Saturday week
+      const today = now.getDay(); // 0 = Sunday, 6 = Saturday
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - today); // Go back to Sunday
+      sunday.setHours(0, 0, 0, 0);
+      
+      const saturday = new Date(sunday);
+      saturday.setDate(sunday.getDate() + 6); // Go forward to Saturday
+      saturday.setHours(23, 59, 59, 999);
+      
+      start = sunday;
+      end = saturday;
+      break;
+      case 'lastWeek':
+        // Calculate previous Sunday to Saturday
+        const currentDay = now.getDay();
+        const lastSunday = new Date(now);
+        lastSunday.setDate(now.getDate() - currentDay - 7); // Go back to last Sunday
+        lastSunday.setHours(0, 0, 0, 0);
+        
+        const lastSaturday = new Date(lastSunday);
+        lastSaturday.setDate(lastSunday.getDate() + 6); // Go forward to last Saturday
+        lastSaturday.setHours(23, 59, 59, 999);
+        
+        start = lastSunday;
+        end = lastSaturday;
+        break;
     case 'last7days':
       start.setDate(now.getDate() - 6);
       start.setHours(0, 0, 0, 0);
@@ -44,12 +72,8 @@ const getTimeRange = (range) => {
   logger.debug(`Calculated time range for ${range}`, {
     meta: {
       range,
-      now: now.toISOString(),
-      nowLocale: now.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
       start: start.toISOString(),
       end: end.toISOString(),
-      startLocale: start.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-      endLocale: end.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
     },
   });
   
@@ -76,7 +100,7 @@ export async function GET(request) {
     });
 
     const { searchParams } = new URL(request.url);
-    const timeRange = searchParams.get('timeRange') || 'last7days';
+    const timeRange = searchParams.get('timeRange') || 'thisWeek';
     const customStart = searchParams.get('startDate');
     const customEnd = searchParams.get('endDate');
     
@@ -98,8 +122,9 @@ export async function GET(request) {
       }
       
       try {
-        startDate = new Date(new Date(customStart).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
-        endDate = new Date(new Date(customEnd).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+        startDate = new Date(customStart);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(customEnd);
         endDate.setHours(23, 59, 59, 999);
       } catch (error) {
         const errorMsg = `Invalid date format: startDate=${customStart}, endDate=${customEnd}`;
@@ -126,8 +151,6 @@ export async function GET(request) {
           rawCustomEnd: customEnd,
           processedStart: startDate.toISOString(),
           processedEnd: endDate.toISOString(),
-          processedStartLocale: startDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-          processedEndLocale: endDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
         },
       });
       
@@ -186,47 +209,53 @@ export async function GET(request) {
         timeRange,
         startDateISO,
         endDateISO,
-        startDateLocale: startDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-        endDateLocale: endDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })
       }
     });
     
     const queryStr = `
-      SELECT 
-        expanded_channel.channel,
-        COALESCE(ROUND(SUM(max_duration) / 60)::integer, 0) AS total_minutes
-      FROM (
+      WITH downtime_events AS (
         SELECT 
           downtime_id,
-          UPPER(affected_channel) AS affected_channel,
-          MAX(EXTRACT(EPOCH FROM (
-            CASE 
-              WHEN end_date_time > $2 THEN $2
-              ELSE end_date_time
-            END - 
-            CASE 
-              WHEN start_date_time < $1 THEN $1
-              ELSE start_date_time
-            END
-          ))) AS max_duration
+          affected_channel,
+          EXTRACT(EPOCH FROM (
+            LEAST(end_date_time, $2::timestamp) - 
+            GREATEST(start_date_time, $1::timestamp)
+          )) AS duration_seconds
         FROM downtime_report_v2
         WHERE 
           UPPER(modality) = 'PLANNED'
           AND UPPER(impact_type) = 'FULL'
-          AND start_date_time < $2 + interval '1 millisecond'
-          AND end_date_time >= $1
-        GROUP BY downtime_id, affected_channel
-      ) sub
-      CROSS JOIN LATERAL (
-        SELECT unnest(
-          CASE 
-            WHEN sub.affected_channel = 'ALL' 
-            THEN ARRAY['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE']
-            ELSE ARRAY[sub.affected_channel]
-          END
-        ) AS channel
-      ) expanded_channel
-      GROUP BY expanded_channel.channel
+          AND start_date_time < $2
+          AND end_date_time > $1
+      ),
+      channel_expansion AS (
+        SELECT 
+          downtime_id,
+          UNNEST(
+            CASE 
+              WHEN UPPER(affected_channel) = 'ALL' 
+              THEN ARRAY['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE']
+              WHEN affected_channel LIKE '%,%' 
+              THEN string_to_array(UPPER(REPLACE(affected_channel, ' ', '')), ',')
+              ELSE ARRAY[UPPER(affected_channel)]
+            END
+          ) AS channel,
+          duration_seconds
+        FROM downtime_events
+      ),
+      max_duration_per_downtime AS (
+        SELECT 
+          downtime_id,
+          channel,
+          MAX(duration_seconds) AS max_duration_seconds
+        FROM channel_expansion
+        GROUP BY downtime_id, channel
+      )
+      SELECT 
+        channel,
+        COALESCE(ROUND(SUM(max_duration_seconds) / 60)::integer, 0) AS total_minutes
+      FROM max_duration_per_downtime
+      GROUP BY channel
       ORDER BY total_minutes DESC
     `;
     
@@ -296,12 +325,6 @@ export async function GET(request) {
         timeRange,
         startDateISO,
         endDateISO,
-        startDateLocale: startDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-        endDateLocale: endDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-        responseTimeRange: {
-          start: responseData.timeRange.start,
-          end: responseData.timeRange.end,
-        },
         totalMinutes,
         channelCount: channels.length,
       },
@@ -317,8 +340,6 @@ export async function GET(request) {
         timeRange,
         startDate: startDateISO,
         endDate: endDateISO,
-        startDateLocale: startDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-        endDateLocale: endDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
         totalMinutes,
         channelCount: channels.length,
         duration

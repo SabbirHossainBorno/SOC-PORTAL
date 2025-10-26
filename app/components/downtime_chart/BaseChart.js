@@ -17,7 +17,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, ChartD
 const BaseChart = ({ title, apiEndpoint, colors }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('last7days');
+  const [timeRange, setTimeRange] = useState('thisWeek');
   const [customStart, setCustomStart] = useState(null);
   const [customEnd, setCustomEnd] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -183,8 +183,10 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
   };
 
   const timeRangeOptions = [
-    { value: 'last7days', label: 'Last 7 Days' },
+    { value: 'thisWeek', label: 'This Week' },
+    { value: 'lastWeek', label: 'Last Week' },
     { value: 'today', label: 'Today' },
+    { value: 'last7days', label: 'Last 7 Days' },
     { value: 'last30days', label: 'Last 30 Days' },
     { value: 'thisMonth', label: 'This Month' },
     { value: 'lastMonth', label: 'Last Month' },
@@ -194,23 +196,12 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
   
   const formatDateRange = () => {
     if (!chartData) {
-      console.log('formatDateRange: No chartData, using custom dates if available', {
-        customStart: customStart?.toISOString(),
-        customEnd: customEnd?.toISOString(),
-      });
       if (timeRange === 'custom' && customStart && customEnd) {
-        const start = new Date(customStart);
-        const end = new Date(customEnd);
-        end.setHours(0, 0, 0, 0); // Normalize to start of day
-        const options = { timeZone: 'Asia/Dhaka', month: 'short', day: 'numeric', year: 'numeric' };
-        if (start.toDateString() === end.toDateString()) {
-          const formatted = start.toLocaleDateString('en-US', options);
-          console.log('formatDateRange Custom Single Day:', formatted);
-          return formatted;
+        const options = { month: 'short', day: 'numeric', year: 'numeric' };
+        if (customStart.toDateString() === customEnd.toDateString()) {
+          return customStart.toLocaleDateString('en-US', options);
         }
-        const formattedRange = `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
-        console.log('formatDateRange Custom Range:', formattedRange);
-        return formattedRange;
+        return `${customStart.toLocaleDateString('en-US', options)} - ${customEnd.toLocaleDateString('en-US', options)}`;
       }
       return 'N/A';
     }
@@ -218,30 +209,13 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
     const startDate = new Date(chartData.timeRange.start);
     const endDate = new Date(chartData.timeRange.end);
     
-    console.log('formatDateRange Debug:', {
-      rawStart: chartData.timeRange.start,
-      rawEnd: chartData.timeRange.end,
-      startDateISO: startDate.toISOString(),
-      endDateISO: endDate.toISOString(),
-      startDateLocale: startDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-      endDateLocale: endDate.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-      clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
+    const options = { month: 'short', day: 'numeric', year: 'numeric' };
     
-    const normalizedEndDate = new Date(endDate);
-    normalizedEndDate.setHours(0, 0, 0, 0);
-    
-    const options = { timeZone: 'Asia/Dhaka', month: 'short', day: 'numeric', year: 'numeric' };
-    
-    if (startDate.toDateString() === normalizedEndDate.toDateString()) {
-      const formattedDate = startDate.toLocaleDateString('en-US', options);
-      console.log('formatDateRange Single Day Output:', formattedDate);
-      return formattedDate;
+    if (startDate.toDateString() === endDate.toDateString()) {
+      return startDate.toLocaleDateString('en-US', options);
     }
     
-    const formattedRange = `${startDate.toLocaleDateString('en-US', options)} - ${normalizedEndDate.toLocaleDateString('en-US', options)}`;
-    console.log('formatDateRange Range Output:', formattedRange);
-    return formattedRange;
+    return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
   };
 
   return (
@@ -312,13 +286,9 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
             <DatePicker
               selected={customStart}
               onChange={(date) => {
-                const normalizedDate = date ? new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })) : null;
-                setCustomStart(normalizedDate);
+                setCustomStart(date);
                 console.log('Custom Start Date Selected:', {
                   rawDate: date?.toISOString(),
-                  normalizedDate: normalizedDate?.toISOString(),
-                  normalizedLocale: normalizedDate?.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-                  clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 });
               }}
               selectsStart
@@ -334,16 +304,9 @@ const BaseChart = ({ title, apiEndpoint, colors }) => {
             <DatePicker
               selected={customEnd}
               onChange={(date) => {
-                const normalizedDate = date ? new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })) : null;
-                if (normalizedDate) {
-                  normalizedDate.setHours(23, 59, 59, 999);
-                }
-                setCustomEnd(normalizedDate);
+                setCustomEnd(date);
                 console.log('Custom End Date Selected:', {
                   rawDate: date?.toISOString(),
-                  normalizedDate: normalizedDate?.toISOString(),
-                  normalizedLocale: normalizedDate?.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }),
-                  clientTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 });
               }}
               selectsEnd

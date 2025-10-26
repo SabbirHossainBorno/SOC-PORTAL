@@ -176,15 +176,17 @@ const DowntimeLog = () => {
   const mnoOptions = ['ALL', 'GRAMEENPHONE', 'ROBI/AIRTEL', 'BANGLALINK', 'TELETALK'];
 
   const timeRangeOptions = [
-    { value: '', label: 'All Time' },
-    { value: 'today', label: 'Today' },
-    { value: 'last7days', label: 'Last 7 Days' },
-    { value: 'last30days', label: 'Last 30 Days' },
-    { value: 'thisMonth', label: 'This Month' },
-    { value: 'lastMonth', label: 'Last Month' },
-    { value: 'thisYear', label: 'This Year' },
-    { value: 'custom', label: 'Custom Range' }
-  ];
+  { value: '', label: 'All Time' },
+  { value: 'today', label: 'Today' },
+  { value: 'thisWeek', label: 'This Week' }, // Add this
+  { value: 'lastWeek', label: 'Last Week' }, // Add this
+  { value: 'last7days', label: 'Last 7 Days' },
+  { value: 'last30days', label: 'Last 30 Days' },
+  { value: 'thisMonth', label: 'This Month' },
+  { value: 'lastMonth', label: 'Last Month' },
+  { value: 'thisYear', label: 'This Year' },
+  { value: 'custom', label: 'Custom Range' }
+];
 
   const fetchData = async () => {
     try {

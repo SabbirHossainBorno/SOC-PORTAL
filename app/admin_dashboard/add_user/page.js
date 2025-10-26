@@ -31,6 +31,7 @@ export default function AddUserPage() {
     joiningDate: null,
     email: '',
     phone: '',
+    emergencyContact: '',
     designation: '',
     bloodGroup: '',
     gender: '',
@@ -219,6 +220,7 @@ export default function AddUserPage() {
         joiningDate: null,
         email: '',
         phone: '',
+        emergencyContact: '',
         designation: '',
         bloodGroup: '',
         gender: '',
@@ -529,6 +531,36 @@ export default function AddUserPage() {
                     </p>
                   )}
                 </div>
+
+                <div>
+  <label htmlFor="emergencyContact" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <FaPhone className="mr-2 text-blue-500" />
+    Emergency Contact
+  </label>
+  <motion.div whileHover={{ scale: 1.01 }}>
+    <input
+      type="tel"
+      id="emergencyContact"
+      name="emergencyContact"
+      value={formData.emergencyContact}
+      onChange={handleChange}
+      pattern="(017|013|019|014|018|016|015)\d{8}"
+      title="11 digits starting with 017,013,019,014,018,016 or 015"
+      className={`w-full px-4 py-3 rounded border ${
+        errors.emergencyContact ? 'border-red-400' : 'border-gray-300'
+      } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 placeholder-gray-400`}
+      placeholder="017XXXXXXXX (Optional)"
+    />
+  </motion.div>
+  {errors.emergencyContact && (
+    <p className="mt-2 text-sm text-red-600 flex items-center">
+      <FaExclamationTriangle className="mr-1" /> {errors.emergencyContact}
+    </p>
+  )}
+  <p className="mt-1 text-xs text-gray-500">
+    Optional - Must be 11 digits starting with 017,013,019,014,018,016 or 015
+  </p>
+</div>
                 
                 <div>
                   <label htmlFor="designation" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">

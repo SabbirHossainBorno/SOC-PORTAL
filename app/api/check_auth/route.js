@@ -162,6 +162,25 @@ export async function GET(request) {
       );
     }
 
+    // Check account status - Handle Resigned status specifically
+    if (userStatus === 'Resigned') {
+      logger.warn(`Resigned ${userType} account attempt`, {
+        meta: {
+          email,
+          eid,
+          sid: sessionId,
+          taskName: 'Auth Check',
+          details: `${userType} account is resigned`,
+          severity: 'HIGH'
+        }
+      });
+      
+      return NextResponse.json(
+        { authenticated: false, message: 'You Already Gave Your Resignation' },
+        { status: 403, headers: securityHeaders }
+      );
+    }
+
     // Check account status
     if (userStatus !== 'Active') {
       logger.warn(`Inactive ${userType} account attempt`, {

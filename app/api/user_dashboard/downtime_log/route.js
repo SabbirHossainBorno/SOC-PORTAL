@@ -13,6 +13,24 @@ const getTimeRange = (range) => {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       break;
+    case 'thisWeek':
+      // Start of week (Sunday)
+      start.setDate(now.getDate() - now.getDay());
+      start.setHours(0, 0, 0, 0);
+      // End of week (Saturday)
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'lastWeek':
+      // Start of last week (Sunday)
+      start.setDate(now.getDate() - now.getDay() - 7);
+      start.setHours(0, 0, 0, 0);
+      // End of last week (Saturday)
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      break;
     case 'last7days':
       start.setDate(now.getDate() - 7);
       start.setHours(0, 0, 0, 0);

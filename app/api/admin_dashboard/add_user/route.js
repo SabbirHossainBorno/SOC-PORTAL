@@ -178,6 +178,7 @@ export async function POST(request) {
     const resignDate = formData.get('resignDate') ? new Date(formData.get('resignDate')) : null;
     const email = formData.get('email');
     const phone = formData.get('phone');
+    const emergencyContact = formData.get('emergencyContact');
     const designation = formData.get('designation');
     const bloodGroup = formData.get('bloodGroup');
     const gender = formData.get('gender');
@@ -272,6 +273,25 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    if (emergencyContact && !phoneRegex.test(emergencyContact)) {
+        logger.warn('Invalid emergency contact', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'Validation',
+            details: `Invalid emergency contact: ${emergencyContact} - Must be 11 digits starting with valid prefix`
+          }
+        });
+        
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'Emergency contact must be 11 digits starting with 017,013,019,014,018,016 or 015' 
+          },
+          { status: 400 }
+        );
+      }
     
     // Validate password strength (without special character requirement)
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -420,16 +440,16 @@ export async function POST(request) {
     const insertQuery = `
       INSERT INTO user_info (
         soc_portal_id, ngd_id, first_name, last_name, short_name, date_of_birth,
-        joining_date, resign_date, email, phone, designation,
+        joining_date, resign_date, email, phone, emergency_contact, designation,
         bloodgroup, gender, password, status, role_type, profile_photo_url
       ) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
-    
+
     const userParams = [
       socPortalId, ngdId, firstName, lastName, shortName, dateOfBirth,
-      joiningDate, resignDate, email, phone, designation,
+      joiningDate, resignDate, email, phone, emergencyContact, designation,
       bloodGroup, gender, hashedPassword, status, roleType, profilePhotoUrl
     ];
     

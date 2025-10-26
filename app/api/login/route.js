@@ -399,6 +399,39 @@ export async function POST(request) {
       }
 
       if (passwordValid) {
+        // Check for Resigned status first
+        if (user.status === 'Resigned') {
+          logger.warn('Resigned user account attempt', {
+            meta: {
+              taskName: 'AuthFailure',
+              sid: sessionId,
+              socPortalId: user.soc_portal_id,
+              status: user.status,
+              details: 'User Account Is Resigned'
+            }
+          });
+
+          // Send Telegram alert
+          const resignedMessage = formatAlertMessage(
+            'user',
+            email,
+            ipAddress,
+            userAgent,
+            { 
+              eid: 'Resigned Attempt', 
+              status: 'Failed (Resigned)',
+              socPortalId: user.soc_portal_id,
+              roleType: user.role_type
+            }
+          );
+          await sendTelegramAlert(resignedMessage);
+          
+          return NextResponse.json(
+            { success: false, message: 'You Already Gave Your Resignation' },
+            { status: 403 }
+          );
+        }
+
         if (user.status !== 'Active') {
           // Log to application logger (not activity log)
           logger.warn('Inactive user account attempt', {
@@ -407,7 +440,7 @@ export async function POST(request) {
               sid: sessionId,
               socPortalId: user.soc_portal_id,
               status: user.status,
-              details: 'User account is inactive'
+              details: 'User Account Is Inactive'
             }
           });
 
@@ -427,7 +460,7 @@ export async function POST(request) {
           await sendTelegramAlert(inactiveMessage);
           
           return NextResponse.json(
-            { success: false, message: 'User account is inactive' },
+            { success: false, message: 'Your Account Is Inactive' },
             { status: 403 }
           );
         }

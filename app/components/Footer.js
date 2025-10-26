@@ -279,7 +279,7 @@ const Footer = () => {
             <div className="flex justify-between items-center mb-1">
               <div className="flex items-center">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
-                <span className="font-medium truncate">Development</span>
+                <span className="font-medium truncate">Production</span>
               </div>
               
               <div className="text-center text-gray-500 font-medium truncate">

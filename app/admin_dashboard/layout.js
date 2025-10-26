@@ -6,7 +6,8 @@ import AdminDashboardSidebar from '../components/AdminDashboardSidebar';
 import AdminDashboardNavbar from '../components/AdminDashboardNavbar';
 import { motion, AnimatePresence } from 'framer-motion';
 import withAuth from '../components/WithAuth';
-import { FaSpinner } from 'react-icons/fa';
+import { FaSpinner, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
+import { Toaster } from 'react-hot-toast';
 
 function AdminDashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -111,6 +112,38 @@ function AdminDashboardLayout({ children }) {
           </main>
         </Suspense>
       </div>
+
+      {/* React Hot Toast Container - COMPLETELY DEFAULT */}
+      <Toaster
+    position="top-right"
+    toastOptions={{
+      duration: 5000,
+      style: {
+        background: '#f0fdf4',
+        color: '#15803d',
+        padding: '16px',
+        border: '1px solid #bbf7d0',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        fontSize: '14px',
+      },
+      success: {
+        duration: 5000,
+        icon: <FaCheckCircle className="text-green-500" />,
+      },
+      error: {
+        duration: 5000,
+        icon: <FaTimesCircle className="text-red-500" />,
+        style: {
+          background: '#fef2f2',
+          color: '#b91c1c',
+          border: '1px solid #fecaca',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          padding: '16px',
+          fontSize: '14px',
+        },
+      },
+    }}
+  />
     </div>
   );
 }
