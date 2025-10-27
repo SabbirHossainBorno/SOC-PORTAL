@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale } from 'chart.js';
 import { Pie } from 'react-chartjs-2';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
-import { FaDownload, FaCalendarAlt, FaSync, FaInfoCircle } from 'react-icons/fa';
+import { FaDownload, FaCalendarAlt, FaSync, FaInfoCircle, FaSignal } from 'react-icons/fa';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { motion } from 'framer-motion';
@@ -285,7 +285,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
       ref={containerRef}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl border border-gray-200 shadow-lg p-5 h-full flex flex-col"
+      className="bg-white rounded border border-gray-200 shadow-lg p-5 h-full flex flex-col"
     >
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
         <div>
@@ -300,7 +300,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
             </button>
           </h3>
           {showInfo && (
-            <div className="mt-1 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg max-w-xs">
+            <div className="mt-1 text-xs text-gray-600 bg-gray-50 p-2 rounded max-w-xs">
               {getInfoText()}
             </div>
           )}
@@ -311,7 +311,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
             <select
               value={timeRange}
               onChange={(e) => handleTimeRangeChange(e.target.value)}
-              className="text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white shadow-sm appearance-none pl-8 text-gray-700"
+              className="text-xs border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white shadow-sm appearance-none pl-8 text-gray-700"
             >
               {timeRangeOptions.map(option => (
                 <option key={option.value} value={option.value}>
@@ -325,7 +325,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
             title="Refresh data"
           >
             <FaSync className={loading ? 'animate-spin text-gray-700' : 'text-gray-700'} size={12} />
@@ -333,7 +333,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
           
           <button
             onClick={downloadFullComponent}
-            className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
             title="Download full report"
           >
             <FaDownload className="text-gray-700" size={12} />
@@ -442,19 +442,19 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
             <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
               {isSummaryChart && (
                 <>
-                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-green-700">Service Uptime</p>
                     <p className="text-lg font-bold text-green-900 mt-1">{chartData?.uptimePercentage || 0}%</p>
                     <p className="text-xs text-green-800 mt-1">{chartData?.uptimeDuration || '0m'}</p>
                   </div>
                   
-                  <div className="bg-red-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-red-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-red-700">Total Downtime</p>
                     <p className="text-lg font-bold text-red-900 mt-1">{chartData?.downtimePercentage || 0}%</p>
                     <p className="text-xs text-red-800 mt-1">{chartData?.totalDowntimeDuration || '0m'}</p>
                   </div>
                   
-                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-blue-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-blue-700">Availability</p>
                     <p className="text-lg font-bold text-blue-900 mt-1">{chartData?.summary?.availabilityStatus || 'N/A'}</p>
                     <p className="text-xs text-blue-800 mt-1 flex items-center gap-1">
@@ -469,7 +469,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
                 </>
               )}
               
-              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded-lg flex flex-col items-center`}>
+              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded flex flex-col items-center`}>
                 <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
                   {isSummaryChart ? 'Total Time' : 'Total Downtime'}
                 </p>
@@ -485,12 +485,12 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
               
               {!isSummaryChart && (
                 <>
-                  <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-gray-100 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-gray-700">Channels</p>
                     <p className="text-lg font-bold text-gray-900 mt-1">{dataArray.length}</p>
                   </div>
                   
-                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-green-700">Date Range</p>
                     <p className="text-xs font-medium text-green-900 mt-1 text-center">
                       {formatDateRange()}
@@ -503,7 +503,9 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center py-10">
-          <div className="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 mb-4"></div>
+          <div className="bg-gray-200 border-2 border-dashed rounded w-16 h-16 mb-4 flex items-center justify-center">
+      <FaSignal className="text-green-500 w-8 h-8" />
+    </div>
           <p className="text-gray-700 font-medium text-sm">No downtime data</p>
           <p className="text-xs text-gray-600 mt-1">Try a different time range</p>
           
@@ -511,19 +513,19 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
             <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
               {isSummaryChart && (
                 <>
-                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-green-700">Service Uptime</p>
                     <p className="text-lg font-bold text-green-900 mt-1">0%</p>
                     <p className="text-xs text-green-800 mt-1">0m</p>
                   </div>
                   
-                  <div className="bg-red-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-red-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-red-700">Total Downtime</p>
                     <p className="text-lg font-bold text-red-900 mt-1">0%</p>
                     <p className="text-xs text-red-800 mt-1">0m</p>
                   </div>
                   
-                  <div className="bg-blue-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-blue-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-blue-700">Availability</p>
                     <p className="text-lg font-bold text-blue-900 mt-1">N/A</p>
                     <p className="text-xs text-blue-800 mt-1">SLA: 99.9%</p>
@@ -531,7 +533,7 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
                 </>
               )}
               
-              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded-lg flex flex-col items-center`}>
+              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded flex flex-col items-center`}>
                 <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
                   {isSummaryChart ? 'Total Time' : 'Total Downtime'}
                 </p>
@@ -542,12 +544,12 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
               
               {!isSummaryChart && (
                 <>
-                  <div className="bg-gray-100 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-gray-100 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-gray-700">Channels</p>
                     <p className="text-lg font-bold text-gray-900 mt-1">0</p>
                   </div>
                   
-                  <div className="bg-green-50 p-3 rounded-lg flex flex-col items-center">
+                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
                     <p className="text-xs font-semibold text-green-700">Date Range</p>
                     <p className="text-xs font-medium text-green-900 mt-1 text-center">
                       {formatDateRange()}
