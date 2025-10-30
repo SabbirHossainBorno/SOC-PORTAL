@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '../../../../lib/db';
 import logger from '../../../../lib/logger';
+import { getClientIP } from '../../../../lib/utils/ipUtils';
 
 export async function GET(request) {
   // Extract cookies
@@ -14,7 +15,7 @@ export async function GET(request) {
   
   try {
     // Get request details
-    const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
+    const ipAddress = getClientIP(request);
     const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
     
     // Format details as string

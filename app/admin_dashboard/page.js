@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaUsers, FaChartLine, FaDatabase, FaShieldAlt, FaCog, FaPlus } from 'react-icons/fa';
+import { FaUsers, FaChartLine, FaDatabase, FaShieldAlt, FaCog, FaPlus, FaSignInAlt } from 'react-icons/fa';
 
 // Force dynamic rendering to bypass prerendering
 export const dynamic = 'force-dynamic';
@@ -58,7 +58,14 @@ export default function AdminDashboard() {
       value: stats.incidents,
       label: 'Security Incidents',
       link: '/admin_dashboard/security'
-    }
+    },
+    {
+        title: 'Login Tracker', 
+        icon: <FaSignInAlt className="text-orange-500 text-xl" />,
+        value: `${(stats.activeAdmins || 0) + (stats.activeUsers || 0)}`,
+        label: 'Active Sessions',
+        link: '/admin_dashboard/login-tracker'
+      }
   ];
 
   return (
@@ -102,6 +109,8 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      
 
       {/* Recent Activity */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

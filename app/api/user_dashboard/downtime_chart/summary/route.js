@@ -252,84 +252,39 @@ export async function GET(request) {
       }
     });
     
-    // Query for all downtime types
+    // Query for individual downtime events with their durations
     const queryStr = `
-      WITH all_downtime AS (
-        -- Planned Full Downtime
+      WITH downtime_events AS (
         SELECT 
-          'Planned Full' as downtime_type,
-          COALESCE(ROUND(SUM(
-            EXTRACT(EPOCH FROM (
-              LEAST(end_date_time, $2::timestamp) - 
-              GREATEST(start_date_time, $1::timestamp)
-            ))
-          ) / 60)::integer, 0) AS total_minutes
+          downtime_id,
+          CASE
+            WHEN UPPER(modality) = 'PLANNED' AND UPPER(impact_type) = 'FULL' THEN 'Planned Full'
+            WHEN UPPER(modality) = 'PLANNED' AND UPPER(impact_type) = 'PARTIAL' THEN 'Planned Partial'
+            WHEN UPPER(modality) = 'UNPLANNED' AND UPPER(impact_type) = 'FULL' THEN 'Unplanned Full'
+            WHEN UPPER(modality) = 'UNPLANNED' AND UPPER(impact_type) = 'PARTIAL' THEN 'Unplanned Partial'
+          END AS downtime_type,
+          ROUND(EXTRACT(EPOCH FROM (
+            LEAST(end_date_time, $2::timestamp) - 
+            GREATEST(start_date_time, $1::timestamp)
+          )) / 60)::integer AS duration_minutes
         FROM downtime_report_v2
         WHERE 
-          UPPER(modality) = 'PLANNED'
-          AND UPPER(impact_type) = 'FULL'
-          AND start_date_time < $2
+          start_date_time < $2
           AND end_date_time > $1
-        
-        UNION ALL
-        
-        -- Planned Partial Downtime
-        SELECT 
-          'Planned Partial' as downtime_type,
-          COALESCE(ROUND(SUM(
-            EXTRACT(EPOCH FROM (
-              LEAST(end_date_time, $2::timestamp) - 
-              GREATEST(start_date_time, $1::timestamp)
-            ))
-          ) / 60)::integer, 0) AS total_minutes
-        FROM downtime_report_v2
-        WHERE 
-          UPPER(modality) = 'PLANNED'
-          AND UPPER(impact_type) = 'PARTIAL'
-          AND start_date_time < $2
-          AND end_date_time > $1
-        
-        UNION ALL
-        
-        -- Unplanned Full Downtime
-        SELECT 
-          'Unplanned Full' as downtime_type,
-          COALESCE(ROUND(SUM(
-            EXTRACT(EPOCH FROM (
-              LEAST(end_date_time, $2::timestamp) - 
-              GREATEST(start_date_time, $1::timestamp)
-            ))
-          ) / 60)::integer, 0) AS total_minutes
-        FROM downtime_report_v2
-        WHERE 
-          UPPER(modality) = 'UNPLANNED'
-          AND UPPER(impact_type) = 'FULL'
-          AND start_date_time < $2
-          AND end_date_time > $1
-        
-        UNION ALL
-        
-        -- Unplanned Partial Downtime
-        SELECT 
-          'Unplanned Partial' as downtime_type,
-          COALESCE(ROUND(SUM(
-            EXTRACT(EPOCH FROM (
-              LEAST(end_date_time, $2::timestamp) - 
-              GREATEST(start_date_time, $1::timestamp)
-            ))
-          ) / 60)::integer, 0) AS total_minutes
-        FROM downtime_report_v2
-        WHERE 
-          UPPER(modality) = 'UNPLANNED'
-          AND UPPER(impact_type) = 'PARTIAL'
-          AND start_date_time < $2
-          AND end_date_time > $1
+          AND (
+            (UPPER(modality) = 'PLANNED' AND UPPER(impact_type) = 'FULL') OR
+            (UPPER(modality) = 'PLANNED' AND UPPER(impact_type) = 'PARTIAL') OR
+            (UPPER(modality) = 'UNPLANNED' AND UPPER(impact_type) = 'FULL') OR
+            (UPPER(modality) = 'UNPLANNED' AND UPPER(impact_type) = 'PARTIAL')
+          )
       )
       SELECT 
         downtime_type,
-        total_minutes
-      FROM all_downtime
-      ORDER BY downtime_type
+        downtime_id,
+        duration_minutes AS total_minutes
+      FROM downtime_events
+      WHERE duration_minutes > 0
+      ORDER BY downtime_type, duration_minutes DESC
     `;
     
     logger.debug(`Executing ${type} downtime summary query`, {
@@ -356,9 +311,40 @@ export async function GET(request) {
       }
     });
     
-    // Calculate total downtime across all types
-    const totalDowntimeMinutes = result.rows.reduce(
-      (sum, row) => sum + (parseInt(row.total_minutes) || 0),
+    // Group by downtime type and take the event with maximum duration for each type
+    const downtimeByType = {};
+    result.rows.forEach(row => {
+      const type = row.downtime_type;
+      const minutes = parseInt(row.total_minutes) || 0;
+      
+      // Only keep the maximum duration for each type
+      if (!downtimeByType[type] || minutes > downtimeByType[type].minutes) {
+        downtimeByType[type] = {
+          type: type,
+          minutes: minutes,
+          downtime_id: row.downtime_id
+        };
+      }
+    });
+
+    // Convert to array and ensure all types are represented
+    const downtimeTypes = [
+      'Planned Full',
+      'Planned Partial', 
+      'Unplanned Full',
+      'Unplanned Partial'
+    ].map(type => ({
+      type: type,
+      minutes: downtimeByType[type]?.minutes || 0,
+      downtime_id: downtimeByType[type]?.downtime_id || null,
+      percentage: totalAvailableMinutes > 0 
+        ? Math.round(((downtimeByType[type]?.minutes || 0) / totalAvailableMinutes) * 100) 
+        : 0
+    }));
+
+    // Calculate total downtime (sum of maximum durations for each type)
+    const totalDowntimeMinutes = downtimeTypes.reduce(
+      (sum, item) => sum + item.minutes,
       0
     );
     
@@ -379,14 +365,6 @@ export async function GET(request) {
       return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
     };
     
-    const downtimeTypes = result.rows.map(row => ({
-      type: row.downtime_type,
-      minutes: parseInt(row.total_minutes) || 0,
-      percentage: totalAvailableMinutes > 0 
-        ? Math.round((parseInt(row.total_minutes) / totalAvailableMinutes) * 100) 
-        : 0
-    }));
-    
     // Add uptime as a type for the chart
     const chartData = [
       {
@@ -396,7 +374,7 @@ export async function GET(request) {
       },
       ...downtimeTypes
     ];
-    
+
     const responseData = {
       chartData,
       totalAvailableMinutes,

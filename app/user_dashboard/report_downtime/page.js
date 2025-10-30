@@ -14,6 +14,24 @@ import toast from 'react-hot-toast';
 // Force dynamic rendering to bypass prerendering
 export const dynamic = 'force-dynamic';
 
+// Add this validation function at the top of your component
+const validateDateTime = (date, fieldName) => {
+  if (!date) return { isValid: true };
+  
+  const now = new Date();
+  const selectedDate = new Date(date);
+  
+  // Check if selected date/time is in the future
+  if (selectedDate > now) {
+    return {
+      isValid: false,
+      message: 'Cannot select future date or time'
+    };
+  }
+  
+  return { isValid: true };
+};
+
 // Custom MultiSelectDropdown Component
 const MultiSelectDropdown = ({ 
   label, 
@@ -79,25 +97,31 @@ const MultiSelectDropdown = ({
           } ${isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
         >
           <div className="flex flex-wrap gap-1">
-            {selectedValues.map(value => (
-              <span 
-                key={value}
-                className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800"
-              >
-                {value}
-                <button
-                  type="button"
-                  onClick={(e) => removeOption(value, e)}
-                  className="ml-1 text-blue-600 hover:text-blue-800 text-xs w-3 h-3 flex items-center justify-center"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            {selectedValues.length === 0 && (
-              <span className="text-gray-400 text-sm">Select options...</span>
-            )}
-          </div>
+  {selectedValues.map(value => (
+    <span 
+      key={value}
+      className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+        value === 'ALL' 
+          ? 'bg-green-100 text-green-800 border border-green-300' 
+          : 'bg-blue-100 text-blue-800'
+      }`}
+    >
+      {value}
+      {value !== 'ALL' && ( // Don't show remove button for "ALL"
+        <button
+          type="button"
+          onClick={(e) => removeOption(value, e)}
+          className="ml-1 text-blue-600 hover:text-blue-800 text-xs w-3 h-3 flex items-center justify-center"
+        >
+          ×
+        </button>
+      )}
+    </span>
+  ))}
+  {selectedValues.length === 0 && (
+    <span className="text-gray-400 text-sm">Select options...</span>
+  )}
+</div>
         </div>
         
         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -134,25 +158,38 @@ const MultiSelectDropdown = ({
             </div>
             
             <div className="p-2 space-y-1">
-              {options.map(option => {
-                const isSelected = selectedValues.includes(option);
-                return (
-                  <div 
-                    key={option} 
-                    onClick={() => handleOptionClick(option)}
-                    className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {}} // Handled by parent div click
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
-                    />
-                    <span className="text-sm text-gray-700 flex-1">{option}</span>
-                  </div>
-                );
-              })}
-            </div>
+  {options.map(option => {
+    const isSelected = selectedValues.includes(option);
+    const isAllOption = option === 'ALL';
+    
+    return (
+      <div 
+        key={option} 
+        onClick={() => handleOptionClick(option)}
+        className={`flex items-center space-x-2 p-2 rounded cursor-pointer ${
+          isAllOption 
+            ? 'bg-green-50 border border-green-200' 
+            : 'hover:bg-gray-50'
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => {}}
+          className={`rounded border-gray-300 focus:ring-blue-500 pointer-events-none ${
+            isAllOption ? 'text-green-600' : 'text-blue-600'
+          }`}
+        />
+        <span className={`text-sm flex-1 ${
+          isAllOption ? 'text-green-700 font-medium' : 'text-gray-700'
+        }`}>
+          {option}
+          {isAllOption && <span className="text-green-600 text-xs ml-2">(All Options)</span>}
+        </span>
+      </div>
+    );
+  })}
+</div>
           </div>
         )}
       </div>
@@ -392,12 +429,34 @@ const serviceToCategoriesMap = {
     }
   }, [formData.categories, formData.startTime, formData.endTime]);
 
+  // Add this helper function after the state declarations
+const getOptionsForField = (fieldName) => {
+  switch (fieldName) {
+    case 'affectedChannel':
+      return allChannels;
+    case 'affectedPersona':
+      return allPersonas;
+    case 'affectedMNO':
+      return allMNOs;
+    case 'affectedPortal':
+      return allPortals;
+    case 'affectedType':
+      return allTypes;
+    case 'affectedService':
+      return getAffectedServices();
+    default:
+      return [];
+  }
+};
+
   // Handle multiple selection for dropdowns
   const handleMultiSelectChange = (name, value, isSelected) => {
   console.log(`MultiSelect Change: ${name}, ${value}, ${isSelected}`);
   
   setFormData(prev => {
     const currentValues = prev[name] || [];
+    const allOptions = getOptionsForField(name);
+    const optionsWithoutAll = allOptions.filter(option => option !== 'ALL');
     
     if (isSelected) {
       // If selecting "ALL", clear other selections and select only "ALL"
@@ -417,6 +476,18 @@ const serviceToCategoriesMap = {
       } else {
         newValues = [...currentValues.filter(item => item !== 'ALL'), value];
         console.log('Adding to selection:', value, 'Current:', currentValues, 'New:', newValues);
+      }
+      
+      // ✅ NEW: Check if user has selected ALL options (excluding "ALL")
+      const selectedWithoutAll = newValues.filter(item => item !== 'ALL');
+      const hasSelectedAllOptions = selectedWithoutAll.length === optionsWithoutAll.length;
+      
+      if (hasSelectedAllOptions && optionsWithoutAll.length > 0) {
+        console.log('User selected all options, switching to ALL');
+        return {
+          ...prev,
+          [name]: ['ALL']
+        };
       }
       
       return {
@@ -443,25 +514,26 @@ const serviceToCategoriesMap = {
   }
 };
 
-  // Handle select all for dropdowns
-  const handleSelectAll = (name, allOptions) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: [...allOptions]
-    }));
+  // Update the handleSelectAll function
+const handleSelectAll = (name, allOptions) => {
+  // ✅ Instead of selecting all individual options, just select "ALL"
+  setFormData(prev => ({
+    ...prev,
+    [name]: ['ALL']
+  }));
 
-    if (name === 'affectedService') {
-      setIsCategoriesManuallyModified(false);
-    }
-  };
+  if (name === 'affectedService') {
+    setIsCategoriesManuallyModified(false);
+  }
+};
 
-  // Handle clear all for dropdowns
-  const handleClearAll = (name) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: ['ALL']
-    }));
-  };
+  /// Update the handleClearAll function
+const handleClearAll = (name) => {
+  setFormData(prev => ({
+    ...prev,
+    [name]: ['ALL'] // Clear means select "ALL"
+  }));
+};
 
   const toggleCategory = (category) => {
     setIsCategoriesManuallyModified(true);
@@ -562,30 +634,70 @@ const serviceToCategoriesMap = {
   };
 
   const handleDateTimeChange = (name, date) => {
-    setFormData(prev => ({ ...prev, [name]: date }));
+  // Validate the selected date/time
+  const validation = validateDateTime(date, name);
+  
+  if (!validation.isValid) {
+    // Show toast notification
+    toast.error(validation.message, {
+      duration: 3000,
+      position: 'top-right',
+      icon: <FaExclamationTriangle className="text-red-500" />,
+      style: {
+        background: '#fef2f2',
+        color: '#b91c1c',
+        border: '1px solid #fecaca'
+      }
+    });
     
-    if (name === 'startTime' || name === 'endTime') {
-      const newCategoryTimes = { ...categoryTimes };
-      Object.keys(newCategoryTimes).forEach(category => {
-        newCategoryTimes[category][name] = date;
-      });
-      setCategoryTimes(newCategoryTimes);
-    }
-    
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
+    // Clear the field if invalid
+    setFormData(prev => ({ ...prev, [name]: null }));
+    return;
+  }
+  
+  // If valid, proceed with setting the date
+  setFormData(prev => ({ ...prev, [name]: date }));
+  
+  if (name === 'startTime' || name === 'endTime') {
+    const newCategoryTimes = { ...categoryTimes };
+    Object.keys(newCategoryTimes).forEach(category => {
+      newCategoryTimes[category][name] = date;
+    });
+    setCategoryTimes(newCategoryTimes);
+  }
+  
+  if (errors[name]) {
+    setErrors(prev => ({ ...prev, [name]: '' }));
+  }
+};
+
 
   const handleCategoryTimeChange = (category, name, date) => {
-    setCategoryTimes(prev => ({
-      ...prev,
-      [category]: {
-        ...prev[category],
-        [name]: date
+  // Validate the selected date/time for categories too
+  const validation = validateDateTime(date, name);
+  
+  if (!validation.isValid) {
+    toast.error(validation.message, {
+      duration: 3000,
+      position: 'top-right',
+      icon: <FaExclamationTriangle className="text-red-500" />,
+      style: {
+        background: '#fef2f2',
+        color: '#b91c1c',
+        border: '1px solid #fecaca'
       }
-    }));
-  };
+    });
+    return;
+  }
+  
+  setCategoryTimes(prev => ({
+    ...prev,
+    [category]: {
+      ...prev[category],
+      [name]: date
+    }
+  }));
+};
 
   const validateForm = () => {
     const newErrors = {};
@@ -1219,282 +1331,344 @@ setIsCategoriesManuallyModified(false);
                   </div>
                   
                   {/* Rest of the form components (time selection, impact type, etc.) remain the same */}
-                  <div className="md:col-span-2 border-t border-gray-200 pt-6 mt-6">
-                    <h3 className="font-semibold text-gray-900 mb-5 flex items-center text-lg">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                        <FaClock className="text-blue-600" />
-                      </div>
-                      Main Downtime Period
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-blue-50 rounded p-5 border border-blue-100">
-                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
-                          <FaCalendarAlt className="mr-2 text-blue-500" />
-                          Start Date & Time *
-                        </label>
-                        
-                        <div className="relative">
-                          <DatePicker
-                            selected={formData.startTime}
-                            onChange={(date) => handleDateTimeChange('startTime', date)}
-                            showTimeSelect
-                            timeFormat="HH:mm"
-                            timeIntervals={1}
-                            timeCaption="Time"
-                            dateFormat="dd/MM/yyyy HH:mm"
-                            customInput={
-                              <div className={`relative cursor-pointer ${errors.startTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
-                                <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
-                                  <FaCalendarAlt className="text-blue-500 mr-3" />
-                                  <span className="flex-grow">
-                                    {formData.startTime 
-                                      ? formatDateTime(formData.startTime) 
-                                      : 'Select start date & time'}
-                                  </span>
-                                </div>
-                              </div>
-                            }
-                            className="w-full"
-                          />
-                          
-                          {formData.startTime && (
-                            <button 
-                              type="button"
-                              onClick={() => handleDateTimeChange('startTime', null)}
-                              className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
-                              aria-label="Clear date"
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                        
-                        {errors.startTime && (
-                          <p className="mt-2 text-sm text-red-600 flex items-center">
-                            <FaExclamationTriangle className="mr-1" /> {errors.startTime}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className="bg-blue-50 rounded p-5 border border-blue-100">
-                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
-                          <FaCalendarAlt className="mr-2 text-blue-500" />
-                          End Date & Time *
-                        </label>
-                        
-                        <div className="relative">
-                          <DatePicker
-                            selected={formData.endTime}
-                            onChange={(date) => handleDateTimeChange('endTime', date)}
-                            showTimeSelect
-                            timeFormat="HH:mm"
-                            timeIntervals={1}
-                            timeCaption="Time"
-                            dateFormat="dd/MM/yyyy HH:mm"
-                            customInput={
-                              <div className={`relative cursor-pointer ${errors.endTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
-                                <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
-                                  <FaCalendarAlt className="text-blue-500 mr-3" />
-                                  <span className="flex-grow">
-                                    {formData.endTime 
-                                      ? formatDateTime(formData.endTime) 
-                                      : 'Select end date & time'}
-                                  </span>
-                                </div>
-                              </div>
-                            }
-                            className="w-full"
-                          />
-                          
-                          {formData.endTime && (
-                            <button 
-                              type="button"
-                              onClick={() => handleDateTimeChange('endTime', null)}
-                              className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
-                              aria-label="Clear date"
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                        
-                        {errors.endTime && (
-                          <p className="mt-2 text-sm text-red-600 flex items-center">
-                            <FaExclamationTriangle className="mr-1" /> {errors.endTime}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className="bg-indigo-50 rounded p-5 border border-indigo-100">
-                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
-                          <FaClock className="mr-2 text-indigo-500" />
-                          Duration (HH:MM)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            name="duration"
-                            value={formData.duration || '00:00'}
-                            readOnly
-                            className="w-full px-4 py-3 rounded border border-indigo-200 bg-white text-gray-800 font-mono shadow-sm"
-                          />
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <span className="text-gray-500">HRS</span>
-                          </div>
-                        </div>
-                        {formData.duration && (
-                          <p className="mt-2 text-sm text-indigo-600">
-                            Total downtime duration
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className={`rounded p-5 border ${
-                        formData.reliabilityImpacted === 'YES' 
-                          ? 'bg-red-50 border-red-200' 
-                          : 'bg-green-50 border-green-200'
-                      }`}>
-                        <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
-                          <FaExclamationTriangle className={`mr-2 ${
-                            formData.reliabilityImpacted === 'YES' 
-                              ? 'text-red-500' 
-                              : 'text-green-500'
-                          }`} />
-                          Reliability Impacted
-                        </label>
-                        
-                        <div className="flex items-center">
-                          <div className={`text-lg font-bold px-4 py-2 rounded ${
-                            formData.reliabilityImpacted === 'YES' 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {formData.reliabilityImpacted}
-                          </div>
-                          
-                          <div className="ml-4">
-                            {formData.reliabilityImpacted === 'YES' ? (
-                              <div className="flex items-center text-red-600">
-                                <FaExclamationTriangle className="mr-1" />
-                                <span className="text-sm">Will affect reliability metrics</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center text-green-600">
-                                <FaCheckCircle className="mr-1" />
-                                <span className="text-sm">No impact on reliability</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <p className="mt-2 text-xs text-gray-500">
-                          Auto-calculated based on impact type and modality
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Main Downtime Period */}
+<div className="md:col-span-2 border-t border-gray-200 pt-6 mt-6">
+  <h3 className="font-semibold text-gray-900 mb-5 flex items-center text-lg">
+    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+      <FaClock className="text-blue-600" />
+    </div>
+    Main Downtime Period
+  </h3>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {/* Start Date & Time */}
+    <div className="bg-blue-50 rounded p-5 border border-blue-100">
+      <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+        <FaCalendarAlt className="mr-2 text-blue-500" />
+        Start Date & Time *
+      </label>
+      
+      <div className="relative">
+        <DatePicker
+          selected={formData.startTime}
+          onChange={(date) => handleDateTimeChange('startTime', date)}
+          showTimeSelect
+          timeFormat="HH:mm"
+          timeIntervals={1}
+          timeCaption="Time"
+          dateFormat="dd/MM/yyyy HH:mm"
+          maxDate={new Date()} // Prevent future dates in the calendar
+          filterTime={(time) => {
+            // Filter out future times for the current day
+            const now = new Date();
+            const selectedTime = new Date(time);
+            return selectedTime <= now;
+          }}
+          customInput={
+            <div className={`relative cursor-pointer ${errors.startTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
+              <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
+                <FaCalendarAlt className="text-blue-500 mr-3" />
+                <span className="flex-grow">
+                  {formData.startTime 
+                    ? formatDateTime(formData.startTime) 
+                    : 'Select start date & time'}
+                </span>
+              </div>
+            </div>
+          }
+          className="w-full"
+          popperPlacement="bottom-start"
+          popperModifiers={[
+            {
+              name: 'preventOverflow',
+              options: {
+                boundary: 'viewport',
+                padding: 8,
+              },
+            },
+          ]}
+        />
+        
+        {formData.startTime && (
+          <button 
+            type="button"
+            onClick={() => handleDateTimeChange('startTime', null)}
+            className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
+            aria-label="Clear date"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      
+      <div className="mt-2 flex items-center text-xs text-blue-600">
+        <FaExclamationTriangle className="mr-1 text-xs" />
+        <span>Cannot select future dates or times</span>
+      </div>
+      
+      {errors.startTime && (
+        <p className="mt-2 text-sm text-red-600 flex items-center">
+          <FaExclamationTriangle className="mr-1" /> {errors.startTime}
+        </p>
+      )}
+    </div>
+    
+    {/* End Date & Time */}
+    <div className="bg-blue-50 rounded p-5 border border-blue-100">
+      <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+        <FaCalendarAlt className="mr-2 text-blue-500" />
+        End Date & Time *
+      </label>
+      
+      <div className="relative">
+        <DatePicker
+          selected={formData.endTime}
+          onChange={(date) => handleDateTimeChange('endTime', date)}
+          showTimeSelect
+          timeFormat="HH:mm"
+          timeIntervals={1}
+          timeCaption="Time"
+          dateFormat="dd/MM/yyyy HH:mm"
+          maxDate={new Date()} // Prevent future dates in the calendar
+          filterTime={(time) => {
+            // Filter out future times for the current day
+            const now = new Date();
+            const selectedTime = new Date(time);
+            return selectedTime <= now;
+          }}
+          customInput={
+            <div className={`relative cursor-pointer ${errors.endTime ? 'ring-2 ring-red-500 rounded' : ''}`}>
+              <div className="w-full px-4 py-3 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center shadow-sm hover:border-blue-300 transition-colors">
+                <FaCalendarAlt className="text-blue-500 mr-3" />
+                <span className="flex-grow">
+                  {formData.endTime 
+                    ? formatDateTime(formData.endTime) 
+                    : 'Select end date & time'}
+                </span>
+              </div>
+            </div>
+          }
+          className="w-full"
+          popperPlacement="bottom-start"
+          popperModifiers={[
+            {
+              name: 'preventOverflow',
+              options: {
+                boundary: 'viewport',
+                padding: 8,
+              },
+            },
+          ]}
+        />
+        
+        {formData.endTime && (
+          <button 
+            type="button"
+            onClick={() => handleDateTimeChange('endTime', null)}
+            className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
+            aria-label="Clear date"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      
+      <div className="mt-2 flex items-center text-xs text-blue-600">
+        <FaExclamationTriangle className="mr-1 text-xs" />
+        <span>Cannot select future dates or times</span>
+      </div>
+      
+      {errors.endTime && (
+        <p className="mt-2 text-sm text-red-600 flex items-center">
+          <FaExclamationTriangle className="mr-1" /> {errors.endTime}
+        </p>
+      )}
+    </div>
+    
+    {/* Duration */}
+    <div className="bg-indigo-50 rounded p-5 border border-indigo-100">
+      <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+        <FaClock className="mr-2 text-indigo-500" />
+        Duration (HH:MM)
+      </label>
+      <div className="relative">
+        <input
+          type="text"
+          name="duration"
+          value={formData.duration || '00:00'}
+          readOnly
+          className="w-full px-4 py-3 rounded border border-indigo-200 bg-white text-gray-800 font-mono shadow-sm"
+        />
+        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <span className="text-gray-500">HRS</span>
+        </div>
+      </div>
+      {formData.duration && formData.duration !== '00:00' && (
+        <p className="mt-2 text-sm text-indigo-600">
+          Total downtime duration
+        </p>
+      )}
+    </div>
+    
+    {/* Reliability Impacted */}
+    <div className={`rounded p-5 border ${
+      formData.reliabilityImpacted === 'YES' 
+        ? 'bg-red-50 border-red-200' 
+        : 'bg-green-50 border-green-200'
+    }`}>
+      <label className="block text-sm font-medium text-gray-700 mb-3 flex items-center">
+        <FaExclamationTriangle className={`mr-2 ${
+          formData.reliabilityImpacted === 'YES' 
+            ? 'text-red-500' 
+            : 'text-green-500'
+        }`} />
+        Reliability Impacted
+      </label>
+      
+      <div className="flex items-center">
+        <div className={`text-lg font-bold px-4 py-2 rounded ${
+          formData.reliabilityImpacted === 'YES' 
+            ? 'bg-red-100 text-red-800' 
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {formData.reliabilityImpacted}
+        </div>
+        
+        <div className="ml-4">
+          {formData.reliabilityImpacted === 'YES' ? (
+            <div className="flex items-center text-red-600">
+              <FaExclamationTriangle className="mr-1" />
+              <span className="text-sm">Will affect reliability metrics</span>
+            </div>
+          ) : (
+            <div className="flex items-center text-green-600">
+              <FaCheckCircle className="mr-1" />
+              <span className="text-sm">No impact on reliability</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <p className="mt-2 text-xs text-gray-500">
+        Auto-calculated based on impact type and modality
+      </p>
+    </div>
+  </div>
+</div>
                   
                   {formData.categories.length > 0 && (
-                    <div className="md:col-span-2 border-t border-gray-200 pt-4 mt-4">
-                      <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                        <FaClock className="mr-2 text-blue-600" />
-                        Per-Category Downtime Periods
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Defaults to main downtime period. Edit individual categories if needed.
-                      </p>
-                      
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Category
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Start Time
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                End Time
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Duration (HH:MM)
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {formData.categories.map(category => {
-                              const catTime = categoryTimes[category] || {};
-                              const startTime = catTime.startTime ? new Date(catTime.startTime) : null;
-                              const endTime = catTime.endTime ? new Date(catTime.endTime) : null;
-                              let duration = '';
-                              if (startTime && endTime) {
-                                const diffMs = endTime - startTime;
-                                if (diffMs > 0) {
-                                  const diffHrs = Math.floor(diffMs / 3600000);
-                                  const diffMins = Math.floor((diffMs % 3600000) / 60000);
-                                  duration = `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`;
-                                }
-                              }
-                              return (
-                                <tr key={category}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {category}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <DatePicker
-                                      selected={startTime}
-                                      onChange={(date) => handleCategoryTimeChange(category, 'startTime', date)}
-                                      showTimeSelect
-                                      timeFormat="HH:mm"
-                                      timeIntervals={1}
-                                      timeCaption="Time"
-                                      dateFormat="dd/MM/yyyy HH:mm"
-                                      customInput={
-                                        <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
-                                          <FaCalendarAlt className="text-blue-500 mr-2" />
-                                          <span className="flex-grow">
-                                            {startTime ? formatDateTime(startTime) : 'Select start'}
-                                          </span>
-                                        </div>
-                                      }
-                                      className="w-full"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <DatePicker
-                                      selected={endTime}
-                                      onChange={(date) => handleCategoryTimeChange(category, 'endTime', date)}
-                                      showTimeSelect
-                                      timeFormat="HH:mm"
-                                      timeIntervals={1}
-                                      timeCaption="Time"
-                                      dateFormat="dd/MM/yyyy HH:mm"
-                                      customInput={
-                                        <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
-                                          <FaCalendarAlt className="text-blue-500 mr-2" />
-                                          <span className="flex-grow">
-                                            {endTime ? formatDateTime(endTime) : 'Select end'}
-                                          </span>
-                                        </div>
-                                      }
-                                      className="w-full"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <div className="bg-gray-100 px-3 py-2 rounded">
-                                      {duration || 'N/A'}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+  <div className="md:col-span-2 border-t border-gray-200 pt-4 mt-4">
+    <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+      <FaClock className="mr-2 text-blue-600" />
+      Per-Category Downtime Periods
+    </h3>
+    <p className="text-sm text-gray-600 mb-4">
+      Defaults to main downtime period. Edit individual categories if needed.
+      <span className="text-red-500 ml-2">Cannot select future dates or times.</span>
+    </p>
+    
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Category
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Start Time
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              End Time
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Duration (HH:MM)
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {formData.categories.map(category => {
+            const catTime = categoryTimes[category] || {};
+            const startTime = catTime.startTime ? new Date(catTime.startTime) : null;
+            const endTime = catTime.endTime ? new Date(catTime.endTime) : null;
+            let duration = '';
+            if (startTime && endTime) {
+              const diffMs = endTime - startTime;
+              if (diffMs > 0) {
+                const diffHrs = Math.floor(diffMs / 3600000);
+                const diffMins = Math.floor((diffMs % 3600000) / 60000);
+                duration = `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`;
+              }
+            }
+            return (
+              <tr key={category}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {category}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <DatePicker
+                    selected={startTime}
+                    onChange={(date) => handleCategoryTimeChange(category, 'startTime', date)}
+                    showTimeSelect
+                    timeFormat="HH:mm"
+                    timeIntervals={1}
+                    timeCaption="Time"
+                    dateFormat="dd/MM/yyyy HH:mm"
+                    maxDate={new Date()}
+                    filterTime={(time) => {
+                      const now = new Date();
+                      const selectedTime = new Date(time);
+                      return selectedTime <= now;
+                    }}
+                    customInput={
+                      <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
+                        <FaCalendarAlt className="text-blue-500 mr-2" />
+                        <span className="flex-grow">
+                          {startTime ? formatDateTime(startTime) : 'Select start'}
+                        </span>
                       </div>
-                    </div>
-                  )}
+                    }
+                    className="w-full"
+                  />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <DatePicker
+                    selected={endTime}
+                    onChange={(date) => handleCategoryTimeChange(category, 'endTime', date)}
+                    showTimeSelect
+                    timeFormat="HH:mm"
+                    timeIntervals={1}
+                    timeCaption="Time"
+                    dateFormat="dd/MM/yyyy HH:mm"
+                    maxDate={new Date()}
+                    filterTime={(time) => {
+                      const now = new Date();
+                      const selectedTime = new Date(time);
+                      return selectedTime <= now;
+                    }}
+                    customInput={
+                      <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
+                        <FaCalendarAlt className="text-blue-500 mr-2" />
+                        <span className="flex-grow">
+                          {endTime ? formatDateTime(endTime) : 'Select end'}
+                        </span>
+                      </div>
+                    }
+                    className="w-full"
+                  />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <div className="bg-gray-100 px-3 py-2 rounded">
+                    {duration || 'N/A'}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">

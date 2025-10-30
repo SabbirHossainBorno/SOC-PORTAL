@@ -3,7 +3,11 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from './LoadingSpinner';
-import { initSessionActivityTracking, handleSessionExpiration } from '../../lib/sessionUtils';
+import { 
+  initSessionActivityTracking, 
+  handleSessionExpiration, 
+  getCookie  // ✅ ADD THIS IMPORT
+} from '../../lib/sessionUtils';
 
 const withAuth = (WrappedComponent, requiredRoles = []) => {
   const Wrapper = (props) => {
@@ -103,6 +107,22 @@ const withAuth = (WrappedComponent, requiredRoles = []) => {
             position: 'top-right'
           });
         }
+      }
+    }, []);
+
+    // Add this useEffect for debugging - ONLY IN DEVELOPMENT
+    useEffect(() => {
+      if (process.env.NODE_ENV === 'development') {
+        // Session debug logging
+        const debugInterval = setInterval(() => {
+          const lastActivity = getCookie('lastActivity'); // ✅ NOW WORKING
+          if (lastActivity) {
+            const diff = Date.now() - new Date(lastActivity).getTime();
+            console.log(`[Session Debug] Inactive: ${Math.round(diff/1000)}s | Warning: ${window.sessionWarningShown ? 'shown' : 'not shown'}`);
+          }
+        }, 30000);
+        
+        return () => clearInterval(debugInterval);
       }
     }, []);
 

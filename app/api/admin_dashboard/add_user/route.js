@@ -1,23 +1,27 @@
-//app/api/admin_dashboard/add_user/route.js
+// app/api/admin_dashboard/add_user/route.js
 import { NextResponse } from 'next/server';
 import { query } from '../../../../lib/db';
 import logger from '../../../../lib/logger';
 import sendTelegramAlert from '../../../../lib/telegramAlert';
-import { DateTime } from 'luxon';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs/promises';
 import nodemailer from 'nodemailer';
+import { getClientIP } from '../../../../lib/utils/ipUtils';
 
-// Get current time in Asia/Dhaka
-const getCurrentDateTime = () => {
-  const now = DateTime.now().setZone('Asia/Dhaka');
-  return now.toFormat("yyyy-LL-dd hh:mm:ss a") + ' (' + now.offsetNameShort + ')';
-};
-
-// Format Telegram alert message
+// Format Telegram alert message - REMOVE CODE BLOCK FORMATTING
 const formatAlertMessage = (action, email, ipAddress, userAgent, additionalInfo = {}) => {
-  const time = getCurrentDateTime();
+  const time = new Date().toLocaleString('en-BD', { 
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true 
+  }) + ' (GMT+6)';
+
   const adminId = additionalInfo.adminId || 'N/A';
   const userId = additionalInfo.userId || 'N/A';
   const role = additionalInfo.role || 'N/A';
@@ -39,13 +43,12 @@ const formatAlertMessage = (action, email, ipAddress, userAgent, additionalInfo 
 🕒 Time           : ${time}
 ${statusEmoji} Status         : ${status}`;
 
-  return `\`\`\`\n${message}\n\`\`\``;
+  return message;
 };
 
 // Generate next SOC Portal ID
 const generateSocPortalId = async () => {
   try {
-    // Fixed query to properly extract the numeric part
     const result = await query(`
       SELECT MAX(CAST(SUBSTRING(soc_portal_id FROM 2 FOR 2) AS INTEGER)) AS max_id 
       FROM user_info
@@ -149,10 +152,11 @@ const sendEmail = async ({ to, subject, html }) => {
 };
 
 export async function POST(request) {
+  // ✅ PROPERLY IMPLEMENT getClientIP
+  const ipAddress = getClientIP(request);
   const sessionId = request.cookies.get('sessionId')?.value || 'Unknown';
   const eid = request.cookies.get('eid')?.value || 'Unknown';
   const adminId = request.cookies.get('socPortalId')?.value || 'Unknown';
-  const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
   
   logger.info('User creation initiated', {
@@ -161,7 +165,8 @@ export async function POST(request) {
       sid: sessionId,
       taskName: 'CreateUser',
       details: `Admin ${adminId} creating new user`,
-      adminId
+      adminId,
+      ipAddress // ✅ Log IP address
     }
   });
 
@@ -206,7 +211,8 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: message,
-          missingFields
+          missingFields,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -225,7 +231,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details
+          details,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -243,7 +250,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid NGD ID: ${ngdId} - Must be NGD followed by 6 digits`
+          details: `Invalid NGD ID: ${ngdId} - Must be NGD followed by 6 digits`,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -261,7 +269,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid phone: ${phone} - Must be 11 digits starting with valid prefix`
+          details: `Invalid phone: ${phone} - Must be 11 digits starting with valid prefix`,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -280,7 +289,8 @@ export async function POST(request) {
             eid,
             sid: sessionId,
             taskName: 'Validation',
-            details: `Invalid emergency contact: ${emergencyContact} - Must be 11 digits starting with valid prefix`
+            details: `Invalid emergency contact: ${emergencyContact} - Must be 11 digits starting with valid prefix`,
+            ipAddress // ✅ Log IP address
           }
         });
         
@@ -301,7 +311,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: 'Password does not meet complexity requirements'
+          details: 'Password does not meet complexity requirements',
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -322,7 +333,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid role: ${roleType}`
+          details: `Invalid role: ${roleType}`,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -374,7 +386,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Email already exists: ${email}`
+          details: `Email already exists: ${email}`,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -396,7 +409,8 @@ export async function POST(request) {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `NGD ID already exists: ${ngdId}`
+          details: `NGD ID already exists: ${ngdId}`,
+          ipAddress // ✅ Log IP address
         }
       });
       
@@ -426,7 +440,8 @@ export async function POST(request) {
             eid,
             sid: sessionId,
             taskName: 'FileUpload',
-            details: error.message
+            details: error.message,
+            ipAddress // ✅ Log IP address
           }
         });
         // Continue without failing the whole process
@@ -466,22 +481,31 @@ export async function POST(request) {
     );
     const adminEmail = adminEmailResult.rows[0]?.email || 'Unknown';
 
-    // Format time for Dhaka - FIXED TIME FORMAT
-    const createdTime = DateTime.now().setZone('Asia/Dhaka').toFormat('dd/MM/yyyy, hh:mm:ss a');
+    // ✅ REMOVED LUXON DATE CONVERSION - Use server's Asia/Dhaka time directly
+    const createdTime = new Date().toLocaleString('en-BD', { 
+      timeZone: 'Asia/Dhaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true 
+    });
     
     // Log admin activity
     const activityLogQuery = `
       INSERT INTO admin_activity_log (
-        soc_portal_id, action, description, ip_address, device_info, eid, sid
+        soc_portal_id, action, description, ip_address, device_info, eid, sid, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
     `;
     
     const activityParams = [
       adminId,
       'ADD_USER',
       `Created new user: ${firstName} ${lastName} (${socPortalId})`,
-      ipAddress,
+      ipAddress, // ✅ Use proper IP address
       userAgent,
       eid,
       sessionId
@@ -492,9 +516,9 @@ export async function POST(request) {
     // Create admin notification
     const adminNotificationQuery = `
       INSERT INTO admin_notification_details (
-        notification_id, title, status
+        notification_id, title, status, created_at
       )
-      VALUES ($1, $2, $3)
+      VALUES ($1, $2, $3, NOW())
     `;
     
     const adminNotifParams = [
@@ -508,9 +532,9 @@ export async function POST(request) {
     // Create user notification
     const userNotificationQuery = `
       INSERT INTO user_notification_details (
-        notification_id, title, status, soc_portal_id
+        notification_id, title, status, soc_portal_id, created_at
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, $4, NOW())
     `;
     
     const userNotifParams = [
@@ -528,7 +552,8 @@ export async function POST(request) {
         sid: sessionId,
         taskName: 'UserNotification',
         userId: socPortalId,
-        userNotificationId
+        userNotificationId,
+        ipAddress // ✅ Log IP address
       }
     });
     
@@ -624,7 +649,8 @@ export async function POST(request) {
           meta: {
             socPortalId,
             email,
-            taskName: 'User Welcome Email'
+            taskName: 'User Welcome Email',
+            ipAddress // ✅ Log IP address
           }
         });
       } else {
@@ -632,7 +658,8 @@ export async function POST(request) {
         logger.warn('No email provided for new user', {
           meta: {
             socPortalId,
-            taskName: 'User Welcome Email'
+            taskName: 'User Welcome Email',
+            ipAddress // ✅ Log IP address
           }
         });
       }
@@ -642,7 +669,8 @@ export async function POST(request) {
         meta: {
           socPortalId,
           error: emailError.message,
-          taskName: 'User Welcome Email'
+          taskName: 'User Welcome Email',
+          ipAddress // ✅ Log IP address
         }
       });
       // Don't fail the entire process if email fails
@@ -663,7 +691,8 @@ export async function POST(request) {
           designation,
           status
         },
-        adminId
+        adminId,
+        ipAddress // ✅ Log IP address
       }
     });
     
@@ -671,7 +700,7 @@ export async function POST(request) {
     const successMessage = formatAlertMessage(
       'creation',
       email,
-      ipAddress,
+      ipAddress, // ✅ Use proper IP address
       userAgent,
       { 
         eid, 
@@ -696,7 +725,8 @@ export async function POST(request) {
       logger.error('Rollback failed', {
         meta: {
           taskName: 'Rollback',
-          details: `Error: ${err.message}`
+          details: `Error: ${err.message}`,
+          ipAddress // ✅ Log IP address
         }
       })
     );
@@ -708,7 +738,8 @@ export async function POST(request) {
         taskName: 'SystemError',
         details: `Error: ${error.message}`,
         stack: error.stack,
-        adminId
+        adminId,
+        ipAddress // ✅ Log IP address
       }
     });
     
@@ -716,7 +747,7 @@ export async function POST(request) {
     const errorMessage = formatAlertMessage(
       'creation',
       'N/A',
-      ipAddress,
+      ipAddress, // ✅ Use proper IP address
       userAgent,
       { 
         eid, 

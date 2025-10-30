@@ -284,7 +284,6 @@ export default function AddUserPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6">
-      <Toaster />
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

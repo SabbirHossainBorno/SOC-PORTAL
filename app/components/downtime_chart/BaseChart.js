@@ -165,7 +165,8 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
           backgroundColor: colors || defaultColors,
           borderColor: '#ffffff',
           borderWidth: 2,
-          hoverOffset: 20
+          hoverOffset: 8, // Reduced from 20 to prevent cut-off
+          hoverBorderWidth: 3,
         }
       ]
     };
@@ -177,7 +178,12 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
     responsive: true,
     maintainAspectRatio: false,
     layout: {
-      padding: 0
+      padding: {
+        top: 15,
+        bottom: 15,
+        left:15,
+        right: 15
+      }
     },
     plugins: {
       legend: {
@@ -225,13 +231,34 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
         color: '#ffffff',
         font: {
           weight: 'bold',
-          size: 12
+          size: 11 // Slightly smaller font
         },
         textAlign: 'center',
         textStrokeColor: '#000',
         textStrokeWidth: 2,
         textShadowBlur: 4,
         textShadowColor: 'rgba(0,0,0,0.5)'
+      }
+    },
+    // Add animation configurations to prevent excessive movement
+    animation: {
+      animateScale: false,
+      animateRotate: true,
+      duration: 1000,
+      easing: 'easeOutQuart'
+    },
+    // Add hover configuration to control the effect
+    hover: {
+      animateRotation: true,
+      animateScale: false // Disable scale animation on hover
+    },
+    // Add elements configuration for better control
+    elements: {
+      arc: {
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverBorderWidth: 3,
+        hoverBorderColor: '#ffffff'
       }
     }
   };
@@ -383,184 +410,150 @@ const BaseChart = ({ title, apiEndpoint, colors, isSummaryChart = false }) => {
         </div>
       )}
       
-      {loading ? (
-        <div className="py-12 text-center">
-          <SmallSpinner />
-          <p className="mt-2 text-gray-500">Loading downtime data...</p>
-        </div>
-      ) : dataArray.length > 0 ? (
-        <div className="flex-1 flex flex-col">
-          <div className="h-[350px] w-full flex items-center justify-center">
-            <div className="w-[350px] h-[350px]">
-              <Pie 
-                ref={chartRef}
-                data={chartDataForDisplay} 
-                options={options} 
-                plugins={[ChartDataLabels]}
-              />
-            </div>
+      {/* MAIN CONTENT AREA - This will grow to fill available space */}
+      <div className="flex-1 flex flex-col">
+        {loading ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-12">
+            <SmallSpinner />
+            <p className="mt-2 text-gray-500">Loading downtime data...</p>
           </div>
-          
-          <div className="mt-4 pt-3 pb-3 border-t border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {dataArray.map((item, index) => (
-                <div key={index} className="flex items-center group">
-                  <div 
-                    className="w-3 h-3 rounded-full flex-shrink-0 mr-2 shadow-sm" 
-                    style={{ backgroundColor: colors?.[index] || defaultColors[index] }}
-                  ></div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-xs font-medium text-gray-800 truncate group-hover:text-gray-900 transition-colors">
-                        {item[getLabelKey()]}
-                      </span>
-                      <span className="text-xs font-semibold text-gray-800 ml-2">
-                        {item.minutes} min
-                      </span>
-                    </div>
-                    <div className="flex items-center mt-1">
-                      <div className="h-1.5 bg-gray-200 rounded-full flex-1 overflow-hidden">
-                        <div 
-                          className="h-full rounded-full transition-all duration-500 ease-out"
-                          style={{ 
-                            width: `${item.percentage}%`,
-                            backgroundColor: colors?.[index] || defaultColors[index]
-                          }}
-                        ></div>
+        ) : dataArray.length > 0 ? (
+          <>
+            {/* Chart Section - Increased container size with proper padding */}
+            <div className="h-[450px] w-full flex items-center justify-center p-2">
+  <div className="w-[400px] h-[400px]"> {/* Maximum practical size */}
+                <Pie 
+                  ref={chartRef}
+                  data={chartDataForDisplay} 
+                  options={options} 
+                  plugins={[ChartDataLabels]}
+                />
+              </div>
+            </div>
+            
+            {/* Legend Section */}
+            <div className="mt-4 pt-3 pb-3 border-t border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {dataArray.map((item, index) => (
+                  <div key={index} className="flex items-center group">
+                    <div 
+                      className="w-3 h-3 rounded-full flex-shrink-0 mr-2 shadow-sm" 
+                      style={{ backgroundColor: colors?.[index] || defaultColors[index] }}
+                    ></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-xs font-medium text-gray-800 truncate group-hover:text-gray-900 transition-colors">
+                          {item[getLabelKey()]}
+                        </span>
+                        <span className="text-xs font-semibold text-gray-800 ml-2">
+                          {item.minutes} min
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-700 ml-2 w-8 font-medium">
-                        {item.percentage}%
-                      </span>
+                      <div className="flex items-center mt-1">
+                        <div className="h-1.5 bg-gray-200 rounded-full flex-1 overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all duration-500 ease-out"
+                            style={{ 
+                              width: `${item.percentage}%`,
+                              backgroundColor: colors?.[index] || defaultColors[index]
+                            }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-700 ml-2 w-8 font-medium">
+                          {item.percentage}%
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="mt-auto">
-            <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
-              {isSummaryChart && (
-                <>
-                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-green-700">Service Uptime</p>
-                    <p className="text-lg font-bold text-green-900 mt-1">{chartData?.uptimePercentage || 0}%</p>
-                    <p className="text-xs text-green-800 mt-1">{chartData?.uptimeDuration || '0m'}</p>
-                  </div>
-                  
-                  <div className="bg-red-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-red-700">Total Downtime</p>
-                    <p className="text-lg font-bold text-red-900 mt-1">{chartData?.downtimePercentage || 0}%</p>
-                    <p className="text-xs text-red-800 mt-1">{chartData?.totalDowntimeDuration || '0m'}</p>
-                  </div>
-                  
-                  <div className="bg-blue-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-blue-700">Availability</p>
-                    <p className="text-lg font-bold text-blue-900 mt-1">{chartData?.summary?.availabilityStatus || 'N/A'}</p>
-                    <p className="text-xs text-blue-800 mt-1 flex items-center gap-1">
-                      SLA: {chartData?.summary?.sla || '99.9%'}
-                      {chartData?.summary?.meetsSla ? (
-                        <span className="text-green-600">✓</span>
-                      ) : (
-                        <span className="text-red-600">✗</span>
-                      )}
-                    </p>
-                  </div>
-                </>
-              )}
-              
-              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded flex flex-col items-center`}>
-                <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
-                  {isSummaryChart ? 'Total Time' : 'Total Downtime'}
-                </p>
-                <p className={`text-lg font-bold ${isSummaryChart ? 'text-gray-900' : 'text-blue-900'} mt-1`}>
-                  {isSummaryChart ? chartData?.totalAvailableDuration || '0m' : `${totalMinutes} min`}
-                </p>
-                {isSummaryChart && chartData?.calculation?.expectedMinutes && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    Expected: {Math.round(chartData.calculation.expectedMinutes / 60)}h
-                  </p>
-                )}
+                ))}
               </div>
-              
-              {!isSummaryChart && (
-                <>
-                  <div className="bg-gray-100 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-gray-700">Channels</p>
-                    <p className="text-lg font-bold text-gray-900 mt-1">{dataArray.length}</p>
-                  </div>
-                  
-                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-green-700">Date Range</p>
-                    <p className="text-xs font-medium text-green-900 mt-1 text-center">
-                      {formatDateRange()}
-                    </p>
-                  </div>
-                </>
-              )}
             </div>
+          </>
+        ) : (
+          /* No Data State - This will take the available space and center content */
+          <div className="flex-1 flex flex-col items-center justify-center py-10">
+            <div className="bg-gray-200 border-2 border-dashed rounded w-16 h-16 mb-4 flex items-center justify-center">
+              <FaSignal className="text-green-500 w-8 h-8" />
+            </div>
+            <p className="text-gray-700 font-medium text-sm">No downtime data</p>
+            <p className="text-xs text-gray-600 mt-1">Try a different time range</p>
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center py-10">
-          <div className="bg-gray-200 border-2 border-dashed rounded w-16 h-16 mb-4 flex items-center justify-center">
-      <FaSignal className="text-green-500 w-8 h-8" />
-    </div>
-          <p className="text-gray-700 font-medium text-sm">No downtime data</p>
-          <p className="text-xs text-gray-600 mt-1">Try a different time range</p>
-          
-          <div className="mt-4 pt-3 border-t border-gray-200 w-full">
-            <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
-              {isSummaryChart && (
-                <>
-                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-green-700">Service Uptime</p>
-                    <p className="text-lg font-bold text-green-900 mt-1">0%</p>
-                    <p className="text-xs text-green-800 mt-1">0m</p>
-                  </div>
-                  
-                  <div className="bg-red-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-red-700">Total Downtime</p>
-                    <p className="text-lg font-bold text-red-900 mt-1">0%</p>
-                    <p className="text-xs text-red-800 mt-1">0m</p>
-                  </div>
-                  
-                  <div className="bg-blue-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-blue-700">Availability</p>
-                    <p className="text-lg font-bold text-blue-900 mt-1">N/A</p>
-                    <p className="text-xs text-blue-800 mt-1">SLA: 99.9%</p>
-                  </div>
-                </>
-              )}
-              
-              <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded flex flex-col items-center`}>
-                <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
-                  {isSummaryChart ? 'Total Time' : 'Total Downtime'}
+        )}
+      </div>
+
+      {/* BOTTOM STATS SECTION - ALWAYS AT THE BOTTOM */}
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        <div className={`grid gap-3 ${isSummaryChart ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
+          {isSummaryChart && (
+            <>
+              <div className="bg-green-50 p-3 rounded flex flex-col items-center">
+                <p className="text-xs font-semibold text-green-700">Service Uptime</p>
+                <p className="text-lg font-bold text-green-900 mt-1">
+                  {chartData?.uptimePercentage || 0}%
                 </p>
-                <p className={`text-lg font-bold ${isSummaryChart ? 'text-gray-900' : 'text-blue-900'} mt-1`}>
-                  {isSummaryChart ? '0m' : '0 min'}
+                <p className="text-xs text-green-800 mt-1">
+                  {chartData?.uptimeDuration || '0m'}
                 </p>
               </div>
               
-              {!isSummaryChart && (
-                <>
-                  <div className="bg-gray-100 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-gray-700">Channels</p>
-                    <p className="text-lg font-bold text-gray-900 mt-1">0</p>
-                  </div>
-                  
-                  <div className="bg-green-50 p-3 rounded flex flex-col items-center">
-                    <p className="text-xs font-semibold text-green-700">Date Range</p>
-                    <p className="text-xs font-medium text-green-900 mt-1 text-center">
-                      {formatDateRange()}
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
+              <div className="bg-red-50 p-3 rounded flex flex-col items-center">
+                <p className="text-xs font-semibold text-red-700">Total Downtime</p>
+                <p className="text-lg font-bold text-red-900 mt-1">
+                  {chartData?.downtimePercentage || 0}%
+                </p>
+                <p className="text-xs text-red-800 mt-1">
+                  {chartData?.totalDowntimeDuration || '0m'}
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 p-3 rounded flex flex-col items-center">
+                <p className="text-xs font-semibold text-blue-700">Availability</p>
+                <p className="text-lg font-bold text-blue-900 mt-1">
+                  {chartData?.summary?.availabilityStatus || 'N/A'}
+                </p>
+                <p className="text-xs text-blue-800 mt-1 flex items-center gap-1">
+                  SLA: {chartData?.summary?.sla || '99.9%'}
+                  {chartData?.summary?.meetsSla ? (
+                    <span className="text-green-600">✓</span>
+                  ) : (
+                    <span className="text-red-600">✗</span>
+                  )}
+                </p>
+              </div>
+            </>
+          )}
+          
+          <div className={`${isSummaryChart ? 'bg-gray-100' : 'bg-blue-50'} p-3 rounded flex flex-col items-center`}>
+            <p className={`text-xs font-semibold ${isSummaryChart ? 'text-gray-700' : 'text-blue-700'}`}>
+              {isSummaryChart ? 'Total Time' : 'Total Downtime'}
+            </p>
+            <p className={`text-lg font-bold ${isSummaryChart ? 'text-gray-900' : 'text-blue-900'} mt-1`}>
+              {isSummaryChart ? chartData?.totalAvailableDuration || '0m' : `${totalMinutes} min`}
+            </p>
+            {isSummaryChart && chartData?.calculation?.expectedMinutes && (
+              <p className="text-xs text-gray-600 mt-1">
+                Expected: {Math.round(chartData.calculation.expectedMinutes / 60)}h
+              </p>
+            )}
           </div>
+          
+          {!isSummaryChart && (
+            <>
+              <div className="bg-gray-100 p-3 rounded flex flex-col items-center">
+                <p className="text-xs font-semibold text-gray-700">Channels</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">{dataArray.length}</p>
+              </div>
+              
+              <div className="bg-green-50 p-3 rounded flex flex-col items-center">
+                <p className="text-xs font-semibold text-green-700">Date Range</p>
+                <p className="text-xs font-medium text-green-900 mt-1 text-center">
+                  {formatDateRange()}
+                </p>
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
     </motion.div>
   );
 };

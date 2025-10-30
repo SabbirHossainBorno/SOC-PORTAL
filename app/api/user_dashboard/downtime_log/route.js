@@ -428,12 +428,12 @@ export async function GET(request) {
       WITH date_ranges AS (
         SELECT 
           -- Current week (Sunday to Saturday)
-          date_trunc('week', CURRENT_DATE) as current_week_start,
-          date_trunc('week', CURRENT_DATE) + INTERVAL '6 days' + INTERVAL '23 hours 59 minutes 59 seconds' as current_week_end,
+          (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer) as current_week_start,
+          (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer + 6) + INTERVAL '23 hours 59 minutes 59 seconds' as current_week_end,
           
-          -- Previous week
-          date_trunc('week', CURRENT_DATE) - INTERVAL '7 days' as previous_week_start,
-          date_trunc('week', CURRENT_DATE) - INTERVAL '1 second' as previous_week_end,
+          -- Previous week (Sunday to Saturday)
+          (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer - 7) as previous_week_start,
+          (CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::integer - 1) + INTERVAL '23 hours 59 minutes 59 seconds' as previous_week_end,
           
           -- Current month
           date_trunc('month', CURRENT_DATE) as current_month_start,

@@ -580,7 +580,7 @@ export default function DeviceTracker() {
       {unbindPopup.open && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
           
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-300">
+          <div className="bg-white rounded shadow-2xl max-w-md w-full border border-gray-300">
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
@@ -594,7 +594,7 @@ export default function DeviceTracker() {
               </p>
               
               {unbindPopup.device && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="bg-red-50 border border-red-200 rounded p-4 mb-4">
                   <p className="font-medium text-red-800 mb-2">Device Information:</p>
                   <div className="space-y-1 text-sm text-red-700">
                     <p><strong>Device ID:</strong> {unbindPopup.device.dt_id}</p>
@@ -616,14 +616,14 @@ export default function DeviceTracker() {
                 <button
                   onClick={() => setUnbindPopup({ open: false, device: null, field: null, simNumber: null, loading: false })}
                   disabled={unbindPopup.loading}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUnbindSim}
                   disabled={unbindPopup.loading}
-                  className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="flex items-center px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   {unbindPopup.loading ? (
                     <>
@@ -644,14 +644,14 @@ export default function DeviceTracker() {
       )}
 
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-300">
+        <div className="bg-white rounded shadow-lg overflow-hidden border border-gray-300">
           {/* Header */}
           <div className="relative px-8 py-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white border-b border-white/10 shadow-md">
             <div className="relative flex flex-col md:flex-row md:items-center md:justify-between">
               <div className="flex items-center">
                 <button
                   onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
-                  className="mr-4 p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors"
+                  className="mr-4 p-2 bg-white/20 rounded hover:bg-white/30 transition-colors"
                 >
                   <FaArrowLeft />
                 </button>
@@ -665,7 +665,7 @@ export default function DeviceTracker() {
                 </div>
               </div>
               <div className="mt-4 md:mt-0 flex items-center space-x-2">
-                <div className="p-2 bg-white/20 rounded-lg">
+                <div className="p-2 bg-white/20 rounded">
                   <FaMobile className="text-xl" />
                 </div>
               </div>
@@ -676,7 +676,7 @@ export default function DeviceTracker() {
           <div className="p-8">
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Device Information Section */}
-              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+              <div className="bg-blue-50 p-6 rounded border border-blue-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
                     <FaMobile className="text-blue-700" />
@@ -694,7 +694,7 @@ export default function DeviceTracker() {
                       name="brand_name"
                       value={formData.brand_name}
                       onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded-lg border ${
+                      className={`w-full px-4 py-3 rounded border ${
                         errors.brand_name ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                       } transition-all placeholder-gray-500 text-gray-900`}
                       placeholder="e.g., Samsung, Apple, Xiaomi"
@@ -715,7 +715,7 @@ export default function DeviceTracker() {
                       name="device_model"
                       value={formData.device_model}
                       onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded-lg border ${
+                      className={`w-full px-4 py-3 rounded border ${
                         errors.device_model ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                       } transition-all placeholder-gray-500 text-gray-900`}
                       placeholder="e.g., Galaxy S23, iPhone 15"
@@ -737,7 +737,7 @@ export default function DeviceTracker() {
                       value={formData.imei_1}
                       onChange={handleChange}
                       maxLength={15}
-                      className={`w-full px-4 py-3 rounded-lg border ${
+                      className={`w-full px-4 py-3 rounded border ${
                         errors.imei_1 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                       } transition-all placeholder-gray-500 text-gray-900`}
                       placeholder="15-digit IMEI number"
@@ -760,7 +760,7 @@ export default function DeviceTracker() {
                       value={formData.imei_2}
                       onChange={handleChange}
                       maxLength={15}
-                      className={`w-full px-4 py-3 rounded-lg border ${
+                      className={`w-full px-4 py-3 rounded border ${
                         errors.imei_2 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                       } transition-all placeholder-gray-500 text-gray-900`}
                       placeholder="15-digit IMEI number (optional)"
@@ -783,7 +783,7 @@ export default function DeviceTracker() {
                       value={deviceStatusOptions.find(opt => opt.value === formData.device_status)}
                       onChange={handleStatusChange}
                       styles={customStyles}
-                      className="rounded-lg"
+                      className="rounded"
                       classNamePrefix="select"
                       placeholder="Select device status..."
                     />
@@ -800,7 +800,7 @@ export default function DeviceTracker() {
                         value={formData.device_status_details}
                         onChange={handleChange}
                         rows={3}
-                        className={`w-full px-4 py-3 rounded-lg border ${
+                        className={`w-full px-4 py-3 rounded border ${
                           errors.device_status_details ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                         } transition-all placeholder-gray-500 text-gray-900 resize-none`}
                         placeholder="Please provide details about why the device is not working..."
@@ -823,7 +823,7 @@ export default function DeviceTracker() {
                       value={formData.purpose}
                       onChange={handleChange}
                       rows={3}
-                      className={`w-full px-4 py-3 rounded-lg border ${
+                      className={`w-full px-4 py-3 rounded border ${
                         errors.purpose ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                       } transition-all placeholder-gray-500 text-gray-900 resize-none`}
                       placeholder="Describe the purpose of this device"
@@ -838,7 +838,7 @@ export default function DeviceTracker() {
               </div>
 
               {/* SIM Information Section */}
-              <div className="bg-green-50 p-6 rounded-xl border border-green-200">
+              <div className="bg-green-50 p-6 rounded border border-green-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
                     <FaSimCard className="text-green-700" />
@@ -864,7 +864,7 @@ export default function DeviceTracker() {
                         value={formData.sim_1}
                         onChange={handleChange}
                         maxLength={11}
-                        className={`w-full px-4 py-3 rounded-lg border ${
+                        className={`w-full px-4 py-3 rounded border ${
                           errors.sim_1 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                         } transition-all placeholder-gray-500 text-gray-900`}
                         placeholder="11-digit SIM number"
@@ -889,7 +889,7 @@ export default function DeviceTracker() {
                         value={personaOptions.find(opt => opt.value === formData.sim_1_persona)}
                         onChange={(selected) => handlePersonaChange('sim_1_persona', selected)}
                         styles={customStyles}
-                        className="rounded-lg"
+                        className="rounded"
                         classNamePrefix="select"
                         placeholder="Select persona type..."
                         isClearable
@@ -914,7 +914,7 @@ export default function DeviceTracker() {
                         value={formData.sim_2}
                         onChange={handleChange}
                         maxLength={11}
-                        className={`w-full px-4 py-3 rounded-lg border ${
+                        className={`w-full px-4 py-3 rounded border ${
                           errors.sim_2 ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                         } transition-all placeholder-gray-500 text-gray-900`}
                         placeholder="11-digit SIM number"
@@ -939,7 +939,7 @@ export default function DeviceTracker() {
                         value={personaOptions.find(opt => opt.value === formData.sim_2_persona)}
                         onChange={(selected) => handlePersonaChange('sim_2_persona', selected)}
                         styles={customStyles}
-                        className="rounded-lg"
+                        className="rounded"
                         classNamePrefix="select"
                         placeholder="Select persona type..."
                         isClearable
@@ -950,7 +950,7 @@ export default function DeviceTracker() {
               </div>
 
               {/* Handover Information Section */}
-              <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+              <div className="bg-purple-50 p-6 rounded border border-purple-200">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-3">
                     <FaUser className="text-purple-700" />
@@ -968,7 +968,7 @@ export default function DeviceTracker() {
                       name="handover_to"
                       value={formData.handover_to}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900"
+                      className="w-full px-4 py-3 rounded border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900"
                       placeholder="Person receiving the device (optional)"
                     />
                   </div>
@@ -983,7 +983,7 @@ export default function DeviceTracker() {
                         name="handover_date"
                         value={formData.handover_date}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-900"
+                        className="w-full px-4 py-3 rounded border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-900"
                       />
                     </div>
                     
@@ -996,7 +996,7 @@ export default function DeviceTracker() {
                         name="return_date"
                         value={formData.return_date}
                         onChange={handleChange}
-                        className={`w-full px-4 py-3 rounded-lg border ${
+                        className={`w-full px-4 py-3 rounded border ${
                           errors.return_date ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
                         } transition-all text-gray-900`}
                       />
@@ -1011,7 +1011,7 @@ export default function DeviceTracker() {
               </div>
 
               {/* Additional Information */}
-              <div className="bg-gray-50 p-6 rounded-xl border border-gray-300">
+              <div className="bg-gray-50 p-6 rounded border border-gray-300">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-6">
                   <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
                     <FaInfoCircle className="text-gray-700" />
@@ -1028,14 +1028,14 @@ export default function DeviceTracker() {
                     value={formData.remark}
                     onChange={handleChange}
                     rows={4}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900 resize-none"
+                    className="w-full px-4 py-3 rounded border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900 resize-none"
                     placeholder="Any additional remarks or notes..."
                   />
                 </div>
                 
                 {/* Tracked By Info */}
                 {userInfo && (
-                  <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+                  <div className="mt-6 p-4 bg-white rounded border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-700">Tracked By</p>
@@ -1046,7 +1046,7 @@ export default function DeviceTracker() {
                           SOC Portal ID: {userInfo.id || userInfo.soc_portal_id || 'N/A'}
                         </p>
                       </div>
-                      <div className="p-3 bg-blue-100 rounded-lg">
+                      <div className="p-3 bg-blue-100 rounded">
                         <FaIdCard className="text-blue-600 text-2xl" />
                       </div>
                     </div>
@@ -1059,14 +1059,14 @@ export default function DeviceTracker() {
                 <button
                   type="button"
                   onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker')}
-                  className="mr-4 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                  className="mr-4 px-6 py-3 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || Object.values(duplicateChecks).some(check => check.exists)}
-                  className="flex items-center px-8 py-3 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-70 font-medium"
+                  className="flex items-center px-8 py-3 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded shadow-md hover:shadow-lg transition-all disabled:opacity-70 font-medium"
                 >
                   {isSubmitting ? (
                     <>

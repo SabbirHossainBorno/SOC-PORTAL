@@ -3,7 +3,7 @@
 
 import { FaHome, FaUsers, FaCog, FaChartBar, FaDatabase, FaShieldAlt, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { RxActivityLog } from "react-icons/rx";
-import { MdOutlineAssignmentLate } from "react-icons/md";
+import { MdOutlineAssignmentLate, MdLogin  } from "react-icons/md";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,6 +32,12 @@ const navItems = [
     icon: <RxActivityLog className="text-xl" />, 
     path: '/admin_dashboard/activity_log',
     color: 'text-purple-500'
+  },
+  {
+    label: 'Login Tracker',
+    icon: <MdLogin className="text-xl" />,  // Login-specific icon
+    path: '/admin_dashboard/login-tracker',
+    color: 'text-indigo-500'  // Professional and noticeable
   },
   { 
     label: 'Roles & Permissions', 

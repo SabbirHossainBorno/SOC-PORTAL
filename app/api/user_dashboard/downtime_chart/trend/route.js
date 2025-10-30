@@ -35,12 +35,12 @@ const getTrendTimeRanges = (trendType, view) => {
       ranges.current = { 
         start: currentSunday, 
         end: currentSaturday,
-        label: `This Week (${formatDateRange(currentSunday, currentSaturday)})`
+        label: `Current (${formatDateRange(currentSunday, currentSaturday)})`
       };
       ranges.previous = { 
         start: previousSunday, 
         end: previousSaturday,
-        label: `Last Week (${formatDateRange(previousSunday, previousSaturday)})`
+        label: `Previous (${formatDateRange(previousSunday, previousSaturday)})`
       };
 
     } else {
@@ -64,7 +64,7 @@ const getTrendTimeRanges = (trendType, view) => {
       }
     }
   } else {
-    // Monthly logic (unchanged)
+    // Monthly logic
     if (view === 'comparison') {
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -109,76 +109,118 @@ const getTrendTimeRanges = (trendType, view) => {
   return ranges;
 };
 
-// Enhanced downtime calculation that checks for data existence
+// Fixed downtime calculation with proper channel mapping
 const calculateDowntimeForRange = async (startDate, endDate, rangeLabel = '') => {
   const allChannels = ['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
   
+  const startDateStr = startDate.toISOString();
+  const endDateStr = endDate.toISOString();
+  
+  logger.info('Querying downtime for range', {
+    meta: {
+      task: 'DOWNTIME_CALCULATION',
+      rangeLabel,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      channels: allChannels,
+      timestamp: new Date().toISOString()
+    }
+  });
+
   const queryStr = `
-    WITH all_channels AS (
-      SELECT unnest(ARRAY[$3, $4, $5, $6, $7, $8]) AS channel
-    ),
-    downtime_events AS (
+    WITH downtime_events AS (
       SELECT 
         downtime_id,
         affected_channel,
         EXTRACT(EPOCH FROM (
-          LEAST(end_date_time, $2::timestamp) - 
-          GREATEST(start_date_time, $1::timestamp)
+          LEAST(end_date_time, $1::timestamp) - 
+          GREATEST(start_date_time, $2::timestamp)
         )) AS duration_seconds
       FROM downtime_report_v2
       WHERE 
-        start_date_time < $2
-        AND end_date_time > $1
+        start_date_time < $1
+        AND end_date_time > $2
+        AND EXTRACT(EPOCH FROM (
+          LEAST(end_date_time, $1::timestamp) - 
+          GREATEST(start_date_time, $2::timestamp)
+        )) > 0
     ),
-    channel_expansion AS (
+    expanded_channels AS (
       SELECT 
         downtime_id,
-        UNNEST(
+        duration_seconds,
+        TRIM(UPPER(UNNEST(
           CASE 
-            WHEN UPPER(affected_channel) = 'ALL' 
-            THEN ARRAY[$3, $4, $5, $6, $7, $8]
-            WHEN affected_channel LIKE '%,%' 
-            THEN string_to_array(UPPER(REPLACE(affected_channel, ' ', '')), ',')
+            WHEN UPPER(affected_channel) = 'ALL' THEN $3::text[]
+            WHEN affected_channel LIKE '%,%' THEN string_to_array(REPLACE(affected_channel, ' ', ''), ',')
             ELSE ARRAY[UPPER(affected_channel)]
           END
-        ) AS channel,
-        duration_seconds
+        ))) AS channel
       FROM downtime_events
     ),
-    max_duration_per_downtime AS (
+    max_duration_per_downtime_channel AS (
       SELECT 
+        channel,
         downtime_id,
-        channel,
-        MAX(duration_seconds) AS max_duration_seconds
-      FROM channel_expansion
-      GROUP BY downtime_id, channel
+        MAX(duration_seconds) as max_duration_seconds
+      FROM expanded_channels
+      GROUP BY channel, downtime_id
     ),
-    channel_downtime AS (
+    channel_totals AS (
       SELECT 
         channel,
-        COALESCE(ROUND(SUM(max_duration_seconds) / 60)::integer, 0) AS total_minutes,
+        ROUND(SUM(max_duration_seconds) / 60) AS total_minutes,
         COUNT(DISTINCT downtime_id) AS incident_count
-      FROM max_duration_per_downtime
+      FROM max_duration_per_downtime_channel
       GROUP BY channel
+    ),
+    all_channels AS (
+      SELECT UNNEST($3::text[]) AS channel
     )
     SELECT 
       ac.channel,
-      COALESCE(cd.total_minutes, 0) AS total_minutes,
-      COALESCE(cd.incident_count, 0) AS incident_count
+      COALESCE(ct.total_minutes, 0) AS total_minutes,
+      COALESCE(ct.incident_count, 0) AS incident_count
     FROM all_channels ac
-    LEFT JOIN channel_downtime cd ON ac.channel = cd.channel
-    ORDER BY ac.channel
+    LEFT JOIN channel_totals ct ON ac.channel = ct.channel
+    ORDER BY ac.channel;
   `;
 
   try {
-    const result = await query(queryStr, [
-      startDate.toISOString(),
-      endDate.toISOString(),
-      ...allChannels
-    ]);
+    logger.debug('Executing SQL query for downtime calculation', {
+      meta: {
+        task: 'DOWNTIME_QUERY_EXECUTION',
+        rangeLabel,
+        endDate: endDateStr,
+        startDate: startDateStr,
+        channels: allChannels,
+        query: 'downtime_trend_calculation',
+        timestamp: new Date().toISOString()
+      }
+    });
 
+    const result = await query(queryStr, [endDateStr, startDateStr, allChannels]);
+
+    const rowsWithData = result.rows.filter(row => row.total_minutes > 0);
     const totalMinutes = result.rows.reduce((sum, row) => sum + parseInt(row.total_minutes), 0);
     const hasData = totalMinutes > 0;
+
+    logger.info('Successfully calculated downtime for range', {
+      meta: {
+        task: 'DOWNTIME_CALCULATION_RESULT',
+        rangeLabel,
+        rowCount: result.rows.length,
+        rowsWithDataCount: rowsWithData.length,
+        totalMinutes,
+        hasData,
+        channelsWithData: rowsWithData.map(row => ({
+          channel: row.channel,
+          minutes: row.total_minutes,
+          incidents: row.incident_count
+        })),
+        timestamp: new Date().toISOString()
+      }
+    });
 
     return {
       label: rangeLabel,
@@ -189,22 +231,27 @@ const calculateDowntimeForRange = async (startDate, endDate, rangeLabel = '') =>
       endDate: endDate
     };
   } catch (error) {
-    logger.error(`Error calculating downtime for range ${rangeLabel}`, {
+    logger.error('Database query error for downtime calculation', {
       meta: {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+        task: 'DOWNTIME_CALCULATION_ERROR',
         rangeLabel,
-        error: error.message
+        startDate: startDateStr,
+        endDate: endDateStr,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
       }
     });
     
+    const zeroData = allChannels.map(channel => ({
+      channel,
+      total_minutes: 0,
+      incident_count: 0
+    }));
+    
     return {
       label: rangeLabel,
-      data: allChannels.map(channel => ({
-        channel,
-        total_minutes: 0,
-        incident_count: 0
-      })),
+      data: zeroData,
       totalMinutes: 0,
       hasData: false,
       startDate: startDate,
@@ -215,7 +262,6 @@ const calculateDowntimeForRange = async (startDate, endDate, rangeLabel = '') =>
 
 const findWeeksWithData = async (trendType) => {
   const now = new Date();
-  const allChannels = ['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
   
   // Get today's date
   const today = new Date();
@@ -240,13 +286,15 @@ const findWeeksWithData = async (trendType) => {
   previousSunday.setDate(previousSaturday.getDate() - 6);
   previousSunday.setHours(0, 0, 0, 0);
 
-  console.log('CORRECTED Date calculations:', {
-    today: today.toDateString(),
-    daysUntilSaturday,
-    currentSunday: currentSunday.toDateString(),
-    currentSaturday: currentSaturday.toDateString(),
-    previousSunday: previousSunday.toDateString(),
-    previousSaturday: previousSaturday.toDateString()
+  logger.debug('Calculated week date ranges for analysis', {
+    meta: {
+      task: 'WEEK_RANGE_CALCULATION',
+      today: today.toDateString(),
+      currentWeek: `${currentSunday.toDateString()} to ${currentSaturday.toDateString()}`,
+      previousWeek: `${previousSunday.toDateString()} to ${previousSaturday.toDateString()}`,
+      daysUntilSaturday,
+      timestamp: new Date().toISOString()
+    }
   });
 
   const formatDateRange = (start, end) => {
@@ -258,6 +306,30 @@ const findWeeksWithData = async (trendType) => {
     calculateDowntimeForRange(currentSunday, currentSaturday, `Current (${formatDateRange(currentSunday, currentSaturday)})`),
     calculateDowntimeForRange(previousSunday, previousSaturday, `Previous (${formatDateRange(previousSunday, previousSaturday)})`)
   ]);
+
+  logger.info('Weekly comparison data retrieved', {
+    meta: {
+      task: 'WEEKLY_COMPARISON_DATA',
+      currentWeek: {
+        label: currentData.label,
+        totalMinutes: currentData.totalMinutes,
+        channelsWithData: currentData.data.filter(d => d.total_minutes > 0).map(d => ({
+          channel: d.channel,
+          minutes: d.total_minutes
+        }))
+      },
+      previousWeek: {
+        label: previousData.label,
+        totalMinutes: previousData.totalMinutes,
+        channelsWithData: previousData.data.filter(d => d.total_minutes > 0).map(d => ({
+          channel: d.channel,
+          minutes: d.total_minutes
+        }))
+      },
+      foundData: currentData.hasData || previousData.hasData,
+      timestamp: new Date().toISOString()
+    }
+  });
 
   return {
     current: currentData,
@@ -276,8 +348,28 @@ export async function GET(request) {
     const trendType = searchParams.get('trendType') || 'weekly';
     const view = searchParams.get('view') || 'comparison';
 
+    logger.info('API Request received for downtime trend analysis', {
+      meta: {
+        task: taskName,
+        type,
+        trendType,
+        view,
+        url: request.url,
+        timestamp: new Date().toISOString()
+      }
+    });
+
     // Validate parameters
     if (!['weekly', 'monthly'].includes(trendType)) {
+      logger.warn('Invalid trendType parameter received', {
+        meta: {
+          task: taskName,
+          trendType,
+          allowedValues: ['weekly', 'monthly'],
+          timestamp: new Date().toISOString()
+        }
+      });
+
       return new Response(JSON.stringify({
         success: false,
         message: 'Invalid trendType. Must be "weekly" or "monthly"'
@@ -288,6 +380,15 @@ export async function GET(request) {
     }
 
     if (!['comparison', 'trend'].includes(view)) {
+      logger.warn('Invalid view parameter received', {
+        meta: {
+          task: taskName,
+          view,
+          allowedValues: ['comparison', 'trend'],
+          timestamp: new Date().toISOString()
+        }
+      });
+
       return new Response(JSON.stringify({
         success: false,
         message: 'Invalid view. Must be "comparison" or "trend"'
@@ -300,12 +401,30 @@ export async function GET(request) {
     const allChannels = ['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
     let responseData;
 
+    logger.debug('Starting trend data processing', {
+      meta: {
+        task: taskName,
+        trendType,
+        view,
+        allChannels,
+        timestamp: new Date().toISOString()
+      }
+    });
+
     if (view === 'comparison' && trendType === 'weekly') {
       // Use flexible week detection for weekly comparison
       const weekComparison = await findWeeksWithData(trendType);
       
-      const currentMinutes = weekComparison.current.data.map(row => parseInt(row.total_minutes));
-      const previousMinutes = weekComparison.previous.data.map(row => parseInt(row.total_minutes));
+      // Extract data in the correct order
+      const currentMinutes = allChannels.map(channel => {
+        const channelData = weekComparison.current.data.find(d => d.channel === channel);
+        return channelData ? parseInt(channelData.total_minutes) : 0;
+      });
+      
+      const previousMinutes = allChannels.map(channel => {
+        const channelData = weekComparison.previous.data.find(d => d.channel === channel);
+        return channelData ? parseInt(channelData.total_minutes) : 0;
+      });
       
       const changes = currentMinutes.map((current, index) => current - previousMinutes[index]);
       const totalCurrent = currentMinutes.reduce((sum, minutes) => sum + minutes, 0);
@@ -350,16 +469,40 @@ export async function GET(request) {
         }
       };
 
+      logger.info('Weekly comparison data processed successfully', {
+        meta: {
+          task: taskName,
+          trendType: 'weekly',
+          view: 'comparison',
+          channels: responseData.channels,
+          currentData: responseData.comparison.current,
+          previousData: responseData.comparison.previous,
+          totalCurrent,
+          totalPrevious,
+          improvementRate,
+          summary: responseData.summary,
+          timestamp: new Date().toISOString()
+        }
+      });
+
     } else if (view === 'comparison' && trendType === 'monthly') {
-      // Monthly comparison logic (existing)
+      // Monthly comparison logic
       const timeRanges = getTrendTimeRanges(trendType, view);
       const [currentPeriod, previousPeriod] = await Promise.all([
         calculateDowntimeForRange(timeRanges.current.start, timeRanges.current.end, timeRanges.current.label),
         calculateDowntimeForRange(timeRanges.previous.start, timeRanges.previous.end, timeRanges.previous.label)
       ]);
 
-      const currentMinutes = currentPeriod.data.map(row => parseInt(row.total_minutes));
-      const previousMinutes = previousPeriod.data.map(row => parseInt(row.total_minutes));
+      const currentMinutes = allChannels.map(channel => {
+        const channelData = currentPeriod.data.find(d => d.channel === channel);
+        return channelData ? parseInt(channelData.total_minutes) : 0;
+      });
+      
+      const previousMinutes = allChannels.map(channel => {
+        const channelData = previousPeriod.data.find(d => d.channel === channel);
+        return channelData ? parseInt(channelData.total_minutes) : 0;
+      });
+      
       const changes = currentMinutes.map((current, index) => current - previousMinutes[index]);
       const totalCurrent = currentMinutes.reduce((sum, minutes) => sum + minutes, 0);
       const totalPrevious = previousMinutes.reduce((sum, minutes) => sum + minutes, 0);
@@ -403,8 +546,20 @@ export async function GET(request) {
         }
       };
 
+      logger.info('Monthly comparison data processed successfully', {
+        meta: {
+          task: taskName,
+          trendType: 'monthly',
+          view: 'comparison',
+          totalCurrent,
+          totalPrevious,
+          improvementRate,
+          summary: responseData.summary,
+          timestamp: new Date().toISOString()
+        }
+      });
     } else {
-      // Trend view logic (existing)
+      // Trend view logic
       const timeRanges = getTrendTimeRanges(trendType, view);
       const periodPromises = Object.entries(timeRanges).map(([key, range]) =>
         calculateDowntimeForRange(range.start, range.end, range.label)
@@ -413,9 +568,10 @@ export async function GET(request) {
       const periodResults = await Promise.all(periodPromises);
 
       const trendData = allChannels.map((channel, channelIndex) => {
-        const channelData = periodResults.map(period => 
-          parseInt(period.data[channelIndex]?.total_minutes || 0)
-        );
+        const channelData = periodResults.map(period => {
+          const channelRow = period.data.find(d => d.channel === channel);
+          return channelRow ? parseInt(channelRow.total_minutes) : 0;
+        });
         
         const total = channelData.reduce((sum, minutes) => sum + minutes, 0);
         
@@ -475,15 +631,36 @@ export async function GET(request) {
         },
         comparison: comparisonData
       };
+
+      logger.info('Trend view data processed successfully', {
+        meta: {
+          task: taskName,
+          trendType,
+          view: 'trend',
+          periodCount: periodResults.length,
+          totalDowntime,
+          summary: responseData.summary,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
 
     const duration = Date.now() - startTime;
-    logger.info(`Fetched ${type} trend data`, {
+    
+    logger.info('Successfully processed trend data', {
       meta: {
+        task: taskName,
+        type,
         trendType,
         view,
         duration,
-        hasData: responseData.summary.hasData
+        hasData: responseData.summary.hasData,
+        channelsWithData: responseData.comparison?.current?.filter((val, idx) => val > 0).map((val, idx) => ({
+          channel: responseData.channels[idx],
+          minutes: val
+        })),
+        totalDowntime: responseData.summary.totalDowntime,
+        timestamp: new Date().toISOString()
       }
     });
 
@@ -501,10 +678,15 @@ export async function GET(request) {
   } catch (error) {
     const duration = Date.now() - startTime;
     
-    logger.error(`Failed to fetch ${type} trend data`, {
+    logger.error('Failed to fetch trend data', {
       meta: {
+        task: taskName,
+        type,
+        duration,
         error: error.message,
-        duration
+        stack: error.stack,
+        url: request.url,
+        timestamp: new Date().toISOString()
       }
     });
 

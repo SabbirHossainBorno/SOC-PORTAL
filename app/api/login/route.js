@@ -213,22 +213,22 @@ const baseDomain = '167.88.38.114';
   });
 
   const sessionCookieConfig = {
-    httpOnly: true,
-    secure: false, // Set to false for HTTP, will be true when you use HTTPS
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    path: '/',
+  httpOnly: true,
+  secure: false, // Keep false for both dev and production
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+  path: '/',
 };
 
 const clientCookieConfig = {
-    httpOnly: false,
-    secure: false, // Set to false for HTTP
-    sameSite: 'lax', 
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    path: '/',
+  httpOnly: false,
+  secure: false, // Keep false for both dev and production  
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+  path: '/',
 };
 
-  // Set cookies
+  // Set cookies with the same config
   response.cookies.set('sessionId', sessionId, sessionCookieConfig);
   response.cookies.set('email', email, clientCookieConfig);
   response.cookies.set('eid', eid, clientCookieConfig);

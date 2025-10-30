@@ -15,6 +15,9 @@ import SmallSpinner from '../../components/SmallSpinner';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
+// Fixed channel order - MUST match backend
+const CHANNEL_ORDER = ['APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
+
 const DowntimeTrendChart = () => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +38,7 @@ const DowntimeTrendChart = () => {
         view: chartView
       });
       
-      console.log('Fetching trend data from API:', {
+      console.log('🚀 [FRONTEND] Fetching trend data from API:', {
         url: `/api/user_dashboard/downtime_chart/trend?${params.toString()}`,
         trendType,
         chartView
@@ -49,14 +52,44 @@ const DowntimeTrendChart = () => {
       
       const data = await response.json();
       
+      console.log('📥 [FRONTEND] Raw API response:', {
+        success: data.success,
+        dataStructure: data.data ? {
+          channels: data.data.channels,
+          comparison: data.data.comparison ? {
+            current: data.data.comparison.current,
+            previous: data.data.comparison.previous,
+            currentPeriod: data.data.comparison.currentPeriod,
+            previousPeriod: data.data.comparison.previousPeriod
+          } : null,
+          summary: data.data.summary
+        } : null
+      });
+
       if (data.success) {
+        // Validate and ensure data integrity
+        if (data.data && data.data.channels && data.data.comparison) {
+          console.log('🔍 [FRONTEND] Validating data structure:', {
+            expectedChannels: CHANNEL_ORDER,
+            actualChannels: data.data.channels,
+            currentDataLength: data.data.comparison.current?.length,
+            previousDataLength: data.data.comparison.previous?.length,
+            dataMatches: data.data.channels.length === data.data.comparison.current?.length
+          });
+
+          // Ensure data arrays match channel length
+          if (data.data.channels.length !== data.data.comparison.current?.length) {
+            console.warn('⚠️ [FRONTEND] Data length mismatch, attempting to fix...');
+          }
+        }
+
         setChartData(data.data);
-        console.log('Trend data fetched successfully:', data.data);
+        console.log('✅ [FRONTEND] Trend data set successfully');
       } else {
         throw new Error(data.message || 'Failed to fetch trend data');
       }
     } catch (error) {
-      console.error('Error fetching trend data:', error);
+      console.error('❌ [FRONTEND] Error fetching trend data:', error);
       setError(error.message);
       setChartData(null);
     } finally {
@@ -65,18 +98,35 @@ const DowntimeTrendChart = () => {
   };
 
   useEffect(() => {
-  if (chartData) {
-    console.log('📊 Chart Data Structure:', {
-      view: chartView,
-      trendType: trendType,
-      hasComparison: !!chartData.comparison,
-      hasTrend: !!chartData.trend,
-      comparisonData: chartData.comparison,
-      trendData: chartData.trend,
-      summary: chartData.summary
-    });
-  }
-}, [chartData, chartView, trendType]);
+    if (chartData) {
+      console.log('📊 [FRONTEND] Chart Data Structure Analysis:', {
+        view: chartView,
+        trendType: trendType,
+        hasComparison: !!chartData.comparison,
+        hasTrend: !!chartData.trend,
+        channels: chartData.channels,
+        comparisonData: chartData.comparison ? {
+          current: chartData.comparison.current,
+          previous: chartData.comparison.previous,
+          currentPeriod: chartData.comparison.currentPeriod,
+          previousPeriod: chartData.comparison.previousPeriod
+        } : null,
+        summary: chartData.summary
+      });
+
+      // Detailed channel-by-channel analysis
+      if (chartData.channels && chartData.comparison) {
+        console.log('🔬 [FRONTEND] Channel Data Mapping:', 
+          chartData.channels.map((channel, index) => ({
+            channel,
+            current: chartData.comparison.current[index],
+            previous: chartData.comparison.previous[index],
+            change: chartData.comparison.changes?.[index]
+          }))
+        );
+      }
+    }
+  }, [chartData, chartView, trendType]);
   
   useEffect(() => {
     fetchTrendData();
@@ -103,16 +153,28 @@ const DowntimeTrendChart = () => {
     }
   };
 
-  // Prepare comparison chart data
+  // Fixed comparison chart data preparation
   const prepareComparisonChartData = () => {
     if (!chartData?.comparison) {
+      console.log('❌ [FRONTEND] No comparison data available');
       return { labels: [], datasets: [] };
     }
 
     const data = chartData.comparison;
 
+    console.log('🎨 [FRONTEND] Preparing comparison chart data:', {
+      channels: chartData.channels,
+      currentData: data.current,
+      previousData: data.previous,
+      currentPeriod: data.currentPeriod,
+      previousPeriod: data.previousPeriod
+    });
+
+    // Use the channels from the data (should be same as CHANNEL_ORDER)
+    const labels = chartData.channels || CHANNEL_ORDER;
+
     return {
-      labels: chartData.channels || [],
+      labels: labels,
       datasets: [
         {
           label: data.previousPeriod || 'Previous Period',
@@ -195,7 +257,9 @@ const DowntimeTrendChart = () => {
         cornerRadius: 8,
         callbacks: {
           label: (context) => {
-            return `${context.dataset.label}: ${context.parsed.y} minutes`;
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value} minutes`;
           }
         }
       }
@@ -325,15 +389,23 @@ const DowntimeTrendChart = () => {
   };
 
   const handleTrendTypeChange = (newTrendType) => {
+    console.log('🔄 [FRONTEND] Changing trend type to:', newTrendType);
     setTrendType(newTrendType);
   };
 
   const handleChartViewChange = (newView) => {
+    console.log('🔄 [FRONTEND] Changing chart view to:', newView);
     setChartView(newView);
   };
 
   const comparisonChartData = prepareComparisonChartData();
   const trendChartData = prepareTrendChartData();
+
+  console.log('📈 [FRONTEND] Final chart data for rendering:', {
+    chartView,
+    comparisonChartData,
+    trendChartData
+  });
 
   return (
     <motion.div 
@@ -437,6 +509,109 @@ const DowntimeTrendChart = () => {
           </button>
         </div>
       </div>
+
+{/* Data Debug Panel - Remove in production */}
+{chartData && (
+  <div className="mb-4 border border-blue-200 rounded overflow-hidden">
+    <button
+      onClick={() => setShowInfo(!showInfo)}
+      className="w-full bg-blue-50 hover:bg-blue-100 px-3 py-2 flex items-center justify-between transition-colors"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-blue-800 font-bold">🔧 Data Debug Panel</span>
+        <span className="text-blue-600 text-xs bg-blue-200 px-2 py-1 rounded">
+          {showInfo ? 'Hide' : 'Show'} Details
+        </span>
+      </div>
+      {showInfo ? (
+        <FaArrowUp className="text-blue-600" size={12} />
+      ) : (
+        <FaArrowDown className="text-blue-600" size={12} />
+      )}
+    </button>
+    
+    {showInfo && (
+      <div className="bg-blue-50 p-4 border-t border-blue-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="space-y-3">
+            <div>
+              <strong className="text-blue-900 block mb-1">Channels Order:</strong>
+              <div className="text-blue-800 bg-blue-100 px-3 py-2 rounded text-xs font-mono">
+                {chartData.channels?.join(' → ')}
+              </div>
+            </div>
+            
+            <div>
+              <strong className="text-blue-900 block mb-1">Current Period Data:</strong>
+              <div className="space-y-1">
+                {chartData.comparison?.current?.map((val, idx) => (
+                  val > 0 && (
+                    <div key={idx} className="flex justify-between text-blue-800 text-xs">
+                      <span className="font-medium">{chartData.channels[idx]}:</span>
+                      <span className="bg-blue-200 px-2 py-1 rounded">{val} minutes</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <strong className="text-blue-900 block mb-1">Previous Period Data:</strong>
+              <div className="space-y-1">
+                {chartData.comparison?.previous?.map((val, idx) => (
+                  val > 0 && (
+                    <div key={idx} className="flex justify-between text-blue-800 text-xs">
+                      <span className="font-medium">{chartData.channels[idx]}:</span>
+                      <span className="bg-blue-200 px-2 py-1 rounded">{val} minutes</span>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <strong className="text-blue-900 block mb-1">Expected Values:</strong>
+              <div className="text-blue-800 text-xs bg-blue-100 px-3 py-2 rounded">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="font-semibold">Current:</span>
+                    <div>APP: 35min</div>
+                    <div>USSD: 35min</div>
+                    <div>SMS: 25min</div>
+                  </div>
+                  <div>
+                    <span className="font-semibold">Previous:</span>
+                    <div>APP: 36min</div>
+                    <div>USSD: 36min</div>
+                    <div>SMS: 63min</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Data Mismatch Warning */}
+        {chartData.comparison?.current && 
+         (chartData.comparison.current[0] !== 35 || 
+          chartData.comparison.current[1] !== 35 || 
+          chartData.comparison.current[3] !== 25) && (
+          <div className="mt-3 p-2 bg-red-100 border border-red-300 rounded">
+            <div className="flex items-center gap-2 text-red-800 text-xs font-semibold">
+              <FaExclamationTriangle className="text-red-600" />
+              <span>DATA MISMATCH DETECTED</span>
+            </div>
+            <div className="text-red-700 text-xs mt-1">
+              Current data doesn&apos;t match expected values. Check console for details.
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+)}
       
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
@@ -516,54 +691,54 @@ const DowntimeTrendChart = () => {
           </div>
 
           {/* Main Chart */}
-<div className="bg-gray-50 rounded p-4 border border-gray-200">
-  <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-    {chartView === 'comparison' 
-      ? `${
-          trendType === 'weekly' ? 'Weekly' : 'Monthly'
-        } Comparison: ${chartData.comparison?.currentPeriod} vs ${chartData.comparison?.previousPeriod}`
-      : `${
-          trendType === 'weekly' ? 'Weekly' : 'Monthly'
-        } Trend Analysis (${chartData.trend?.labels?.length || 0} periods)`
-    }
-  </h4>
-  
-  <div className="h-80 w-full">
-    {chartView === 'comparison' ? (
-      chartData.summary?.hasData ? (
-        <Bar 
-          ref={chartRef}
-          data={comparisonChartData} 
-          options={comparisonChartOptions} 
-        />
-      ) : (
-        <div className="flex flex-col items-center justify-center h-full text-center">
-          <FaChartLine className="text-gray-400 text-4xl mb-3" />
-          <p className="text-gray-600 font-medium">No Downtime Data</p>
-          <p className="text-gray-500 text-sm mt-1">
-            No reliability-impacting downtime found for the selected periods.
-          </p>
-          <p className="text-gray-400 text-xs mt-2">
-            {chartData.comparison?.currentPeriod} vs {chartData.comparison?.previousPeriod}
-          </p>
-        </div>
-      )
-    ) : chartData.summary?.hasData ? (
-      <Line 
-        data={trendChartData} 
-        options={trendChartOptions} 
-      />
-    ) : (
-      <div className="flex flex-col items-center justify-center h-full text-center">
-        <FaChartLine className="text-gray-400 text-4xl mb-3" />
-        <p className="text-gray-600 font-medium">No Trend Data</p>
-        <p className="text-gray-500 text-sm mt-1">
-          No reliability-impacting downtime found in the selected time range.
-        </p>
-      </div>
-    )}
-  </div>
-</div>
+          <div className="bg-gray-50 rounded p-4 border border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              {chartView === 'comparison' 
+                ? `${
+                    trendType === 'weekly' ? 'Weekly' : 'Monthly'
+                  } Comparison: ${chartData.comparison?.currentPeriod} vs ${chartData.comparison?.previousPeriod}`
+                : `${
+                    trendType === 'weekly' ? 'Weekly' : 'Monthly'
+                  } Trend Analysis (${chartData.trend?.labels?.length || 0} periods)`
+              }
+            </h4>
+            
+            <div className="h-80 w-full">
+              {chartView === 'comparison' ? (
+                chartData.summary?.hasData ? (
+                  <Bar 
+                    ref={chartRef}
+                    data={comparisonChartData} 
+                    options={comparisonChartOptions} 
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <FaChartLine className="text-gray-400 text-4xl mb-3" />
+                    <p className="text-gray-600 font-medium">No Downtime Data</p>
+                    <p className="text-gray-500 text-sm mt-1">
+                      No reliability-impacting downtime found for the selected periods.
+                    </p>
+                    <p className="text-gray-400 text-xs mt-2">
+                      {chartData.comparison?.currentPeriod} vs {chartData.comparison?.previousPeriod}
+                    </p>
+                  </div>
+                )
+              ) : chartData.summary?.hasData ? (
+                <Line 
+                  data={trendChartData} 
+                  options={trendChartOptions} 
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <FaChartLine className="text-gray-400 text-4xl mb-3" />
+                  <p className="text-gray-600 font-medium">No Trend Data</p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    No reliability-impacting downtime found in the selected time range.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Detailed Channel Analysis */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -591,6 +766,7 @@ const DowntimeTrendChart = () => {
                       if (chartView === 'trend') {
                         tableData = chartData.trend?.data || [];
                       } else {
+                        // Create table data from comparison view
                         tableData = chartData.channels?.map((channel, index) => ({
                           channel,
                           total: chartData.comparison?.current?.[index] || 0,
@@ -600,39 +776,52 @@ const DowntimeTrendChart = () => {
                         })) || [];
                       }
                       
-                      return tableData
-                        .sort((a, b) => b.total - a.total)
-                        .map((channel, index) => (
-                          <tr key={index} className="hover:bg-gray-50 transition-colors">
-                            <td className="py-2 px-3 font-medium text-gray-900">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  channel.total > 200 ? 'bg-red-500' :
-                                  channel.total > 100 ? 'bg-orange-500' :
-                                  channel.total > 50 ? 'bg-yellow-500' : 'bg-green-500'
-                                }`}></div>
-                                {channel.channel}
-                              </div>
-                            </td>
-                            <td className="py-2 px-3 text-right font-semibold text-gray-900">
-                              {formatDuration(channel.total)}
-                            </td>
-                            <td className="py-2 px-3 text-right text-gray-700">
-                              {formatDuration(channel.avg)}
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                {getTrendIcon(channel.trend)}
-                                <span className={`text-xs font-medium ${
-                                  channel.trend === 'improving' ? 'text-green-600' : 
-                                  channel.trend === 'deteriorating' ? 'text-red-600' : 'text-gray-600'
-                                }`}>
-                                  {channel.trend.charAt(0).toUpperCase() + channel.trend.slice(1)}
-                                </span>
-                              </div>
+                      // Filter out channels with no data and sort by total
+                      const filteredData = tableData
+                        .filter(channel => channel.total > 0)
+                        .sort((a, b) => b.total - a.total);
+                      
+                      if (filteredData.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="4" className="py-4 px-3 text-center text-gray-500">
+                              No downtime data available for selected period
                             </td>
                           </tr>
-                        ));
+                        );
+                      }
+                      
+                      return filteredData.map((channel, index) => (
+                        <tr key={index} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-2 px-3 font-medium text-gray-900">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                channel.total > 200 ? 'bg-red-500' :
+                                channel.total > 100 ? 'bg-orange-500' :
+                                channel.total > 50 ? 'bg-yellow-500' : 'bg-green-500'
+                              }`}></div>
+                              {channel.channel}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-right font-semibold text-gray-900">
+                            {formatDuration(channel.total)}
+                          </td>
+                          <td className="py-2 px-3 text-right text-gray-700">
+                            {formatDuration(channel.avg)}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {getTrendIcon(channel.trend)}
+                              <span className={`text-xs font-medium ${
+                                channel.trend === 'improving' ? 'text-green-600' : 
+                                channel.trend === 'deteriorating' ? 'text-red-600' : 'text-gray-600'
+                              }`}>
+                                {channel.trend.charAt(0).toUpperCase() + channel.trend.slice(1)}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
                     })()}
                   </tbody>
                 </table>
@@ -652,6 +841,9 @@ const DowntimeTrendChart = () => {
                   const change = comparison?.changes?.[index] || 0;
                   const current = comparison?.current?.[index] || 0;
                   const previous = comparison?.previous?.[index] || 0;
+                  
+                  // Only show channels with data in either period
+                  if (current === 0 && previous === 0) return null;
                   
                   return (
                     <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
@@ -680,7 +872,7 @@ const DowntimeTrendChart = () => {
                       </div>
                     </div>
                   );
-                })}
+                }).filter(Boolean)}
               </div>
 
               {/* Overall Summary */}
