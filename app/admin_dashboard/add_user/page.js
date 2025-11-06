@@ -666,8 +666,8 @@ export default function AddUserPage() {
                       <option value="">Select Role Type</option>
                       <option value="SOC">SOC</option>
                       <option value="OPS">OPS</option>
+                      <option value="INTERN">INTERN</option>
                       <option value="CTO">CTO</option>
-                      <option value="BI">BI</option>
                     </select>
                   </motion.div>
                   {errors.roleType && (

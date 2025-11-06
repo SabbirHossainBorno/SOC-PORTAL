@@ -1,6 +1,6 @@
 // app/api/admin_dashboard/add_user/route.js
 import { NextResponse } from 'next/server';
-import { query } from '../../../../lib/db';
+import { getDbConnection } from '../../../../lib/db';
 import logger from '../../../../lib/logger';
 import sendTelegramAlert from '../../../../lib/telegramAlert';
 import bcrypt from 'bcryptjs';
@@ -9,7 +9,7 @@ import fs from 'fs/promises';
 import nodemailer from 'nodemailer';
 import { getClientIP } from '../../../../lib/utils/ipUtils';
 
-// Format Telegram alert message - REMOVE CODE BLOCK FORMATTING
+// Format Telegram alert message
 const formatAlertMessage = (action, email, ipAddress, userAgent, additionalInfo = {}) => {
   const time = new Date().toLocaleString('en-BD', { 
     timeZone: 'Asia/Dhaka',
@@ -47,9 +47,9 @@ ${statusEmoji} Status         : ${status}`;
 };
 
 // Generate next SOC Portal ID
-const generateSocPortalId = async () => {
+const generateSocPortalId = async (client) => {
   try {
-    const result = await query(`
+    const result = await client.query(`
       SELECT MAX(CAST(SUBSTRING(soc_portal_id FROM 2 FOR 2) AS INTEGER)) AS max_id 
       FROM user_info
       WHERE soc_portal_id ~ '^U[0-9]{2}SOCP$'
@@ -64,9 +64,9 @@ const generateSocPortalId = async () => {
 };
 
 // Generate next notification ID based on serial column
-const generateNotificationId = async (prefix, table) => {
+const generateNotificationId = async (prefix, table, client) => {
   try {
-    const result = await query(`SELECT MAX(serial) AS max_serial FROM ${table}`);
+    const result = await client.query(`SELECT MAX(serial) AS max_serial FROM ${table}`);
     const maxSerial = result.rows[0]?.max_serial || 0;
     const nextId = (maxSerial + 1).toString().padStart(4, '0');
     return `${prefix}${nextId}SOCP`;
@@ -113,6 +113,75 @@ const saveProfilePhoto = async (file, userId) => {
   }
 };
 
+// Add new column to roster_schedule table for new user
+const addUserColumnToRosterSchedule = async (client, shortName) => {
+  try {
+    const columnName = shortName.toLowerCase();
+    
+    logger.info('Checking roster_schedule table for new user column', {
+      meta: {
+        taskName: 'RosterTableUpdate',
+        details: `Checking if column '${columnName}' exists in roster_schedule table`
+      }
+    });
+
+    // Check if column already exists
+    const checkColumnQuery = `
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'roster_schedule' AND column_name = $1
+    `;
+    
+    const columnCheck = await client.query(checkColumnQuery, [columnName]);
+    
+    if (columnCheck.rows.length > 0) {
+      logger.info('Column already exists in roster_schedule table', {
+        meta: {
+          taskName: 'RosterTableUpdate',
+          details: `Column '${columnName}' already exists in roster_schedule table, no action needed`
+        }
+      });
+      return { success: true, action: 'exists', columnName };
+    }
+
+    // Column doesn't exist, so add it
+    logger.info('Adding new column to roster_schedule table', {
+      meta: {
+        taskName: 'RosterTableUpdate',
+        details: `Adding column '${columnName}' to roster_schedule table`
+      }
+    });
+
+    const alterTableQuery = `
+      ALTER TABLE roster_schedule 
+      ADD COLUMN ${columnName} VARCHAR(20)
+    `;
+    
+    await client.query(alterTableQuery);
+
+    logger.info('Successfully added new column to roster_schedule table', {
+      meta: {
+        taskName: 'RosterTableUpdate',
+        details: `Column '${columnName}' successfully added to roster_schedule table`
+      }
+    });
+
+    return { success: true, action: 'created', columnName };
+    
+  } catch (error) {
+    logger.error('Failed to add column to roster_schedule table', {
+      meta: {
+        taskName: 'RosterTableUpdate',
+        details: `Error adding column '${shortName.toLowerCase()}': ${error.message}`,
+        error: error.message,
+        stack: error.stack
+      }
+    });
+    
+    throw new Error(`Failed to add column to roster_schedule: ${error.message}`);
+  }
+};
+
 // Send email function
 const sendEmail = async ({ to, subject, html }) => {
   try {
@@ -152,7 +221,6 @@ const sendEmail = async ({ to, subject, html }) => {
 };
 
 export async function POST(request) {
-  // ✅ PROPERLY IMPLEMENT getClientIP
   const ipAddress = getClientIP(request);
   const sessionId = request.cookies.get('sessionId')?.value || 'Unknown';
   const eid = request.cookies.get('eid')?.value || 'Unknown';
@@ -166,10 +234,11 @@ export async function POST(request) {
       taskName: 'CreateUser',
       details: `Admin ${adminId} creating new user`,
       adminId,
-      ipAddress // ✅ Log IP address
+      ipAddress
     }
   });
 
+  let client;
   try {
     const formData = await request.formData();
     
@@ -212,7 +281,7 @@ export async function POST(request) {
           taskName: 'Validation',
           details: message,
           missingFields,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -232,7 +301,7 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -242,7 +311,7 @@ export async function POST(request) {
       );
     }
 
-    // Add NGD ID validation after email validation
+    // Add NGD ID validation
     const ngdIdRegex = /^NGD\d{6}$/;
     if (!ngdIdRegex.test(ngdId)) {
       logger.warn('Invalid NGD ID format', {
@@ -251,7 +320,7 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: `Invalid NGD ID: ${ngdId} - Must be NGD followed by 6 digits`,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -261,7 +330,7 @@ export async function POST(request) {
       );
     }
 
-    // Add phone number validation after NGD ID validation
+    // Add phone number validation
     const phoneRegex = /^(017|013|019|014|018|016|015)\d{8}$/;
     if (!phoneRegex.test(phone)) {
       logger.warn('Invalid phone number', {
@@ -270,7 +339,7 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: `Invalid phone: ${phone} - Must be 11 digits starting with valid prefix`,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -290,7 +359,7 @@ export async function POST(request) {
             sid: sessionId,
             taskName: 'Validation',
             details: `Invalid emergency contact: ${emergencyContact} - Must be 11 digits starting with valid prefix`,
-            ipAddress // ✅ Log IP address
+            ipAddress
           }
         });
         
@@ -312,7 +381,7 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: 'Password does not meet complexity requirements',
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -326,7 +395,7 @@ export async function POST(request) {
     }
 
     // Validate role type
-    const validRoles = ['SOC', 'OPS', 'CTO', 'BI'];
+    const validRoles = ['SOC', 'OPS', 'INTERN', 'CTO'];
     if (!validRoles.includes(roleType)) {
       logger.warn('Invalid role type', {
         meta: {
@@ -334,7 +403,7 @@ export async function POST(request) {
           sid: sessionId,
           taskName: 'Validation',
           details: `Invalid role: ${roleType}`,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -374,20 +443,25 @@ export async function POST(request) {
       }
     }
     
-    // Check for existing email
-    const emailCheck = await query(
+    // Get database client for transaction
+    client = await getDbConnection().connect();
+    await client.query('BEGIN');
+
+    // Check for existing email using transaction client
+    const emailCheck = await client.query(
       `SELECT * FROM user_info WHERE email = $1`,
       [email]
     );
     
     if (emailCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
       logger.warn('Email conflict', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
           details: `Email already exists: ${email}`,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -397,20 +471,21 @@ export async function POST(request) {
       );
     }
     
-    // Check for existing NGD ID
-    const ngdCheck = await query(
+    // Check for existing NGD ID using transaction client
+    const ngdCheck = await client.query(
       `SELECT * FROM user_info WHERE ngd_id = $1`,
       [ngdId]
     );
     
     if (ngdCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
       logger.warn('NGD ID conflict', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
           details: `NGD ID already exists: ${ngdId}`,
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       
@@ -420,10 +495,10 @@ export async function POST(request) {
       );
     }
     
-    // Generate IDs
-    const socPortalId = await generateSocPortalId();
-    const adminNotificationId = await generateNotificationId('AN', 'admin_notification_details');
-    const userNotificationId = await generateNotificationId('UN', 'user_notification_details');
+    // Generate IDs using transaction client
+    const socPortalId = await generateSocPortalId(client);
+    const adminNotificationId = await generateNotificationId('AN', 'admin_notification_details', client);
+    const userNotificationId = await generateNotificationId('UN', 'user_notification_details', client);
     
     // Hash password
     const salt = await bcrypt.genSalt(10);
@@ -441,17 +516,14 @@ export async function POST(request) {
             sid: sessionId,
             taskName: 'FileUpload',
             details: error.message,
-            ipAddress // ✅ Log IP address
+            ipAddress
           }
         });
         // Continue without failing the whole process
       }
     }
     
-    // Start transaction
-    await query('BEGIN');
-    
-    // Insert user into database
+    // Insert user into database using transaction client
     const insertQuery = `
       INSERT INTO user_info (
         soc_portal_id, ngd_id, first_name, last_name, short_name, date_of_birth,
@@ -468,31 +540,36 @@ export async function POST(request) {
       bloodGroup, gender, hashedPassword, status, roleType, profilePhotoUrl
     ];
     
-    const newUser = await query(insertQuery, userParams);
+    const newUser = await client.query(insertQuery, userParams);
     
     if (newUser.rows.length === 0) {
+      await client.query('ROLLBACK');
       throw new Error('Failed to create user in database');
     }
 
+    // ✅ ADD NEW COLUMN TO ROSTER_SCHEDULE TABLE FOR THE NEW USER
+    // This is now part of the transaction - if it fails, everything rolls back
+    const rosterUpdateResult = await addUserColumnToRosterSchedule(client, shortName);
+    
+    logger.info('Roster schedule table updated successfully for new user', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'RosterTableUpdate',
+        details: `Column action: ${rosterUpdateResult.action}, Column: ${rosterUpdateResult.columnName}`,
+        userId: socPortalId,
+        columnName: rosterUpdateResult.columnName,
+        ipAddress
+      }
+    });
+
     // Get admin email for notification
-    const adminEmailResult = await query(
+    const adminEmailResult = await client.query(
       'SELECT email FROM admin_info WHERE soc_portal_id = $1',
       [adminId]
     );
     const adminEmail = adminEmailResult.rows[0]?.email || 'Unknown';
 
-    // ✅ REMOVED LUXON DATE CONVERSION - Use server's Asia/Dhaka time directly
-    const createdTime = new Date().toLocaleString('en-BD', { 
-      timeZone: 'Asia/Dhaka',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true 
-    });
-    
     // Log admin activity
     const activityLogQuery = `
       INSERT INTO admin_activity_log (
@@ -505,13 +582,13 @@ export async function POST(request) {
       adminId,
       'ADD_USER',
       `Created new user: ${firstName} ${lastName} (${socPortalId})`,
-      ipAddress, // ✅ Use proper IP address
+      ipAddress,
       userAgent,
       eid,
       sessionId
     ];
     
-    await query(activityLogQuery, activityParams);
+    await client.query(activityLogQuery, activityParams);
     
     // Create admin notification
     const adminNotificationQuery = `
@@ -527,7 +604,7 @@ export async function POST(request) {
       'Unread'
     ];
     
-    await query(adminNotificationQuery, adminNotifParams);
+    await client.query(adminNotificationQuery, adminNotifParams);
     
     // Create user notification
     const userNotificationQuery = `
@@ -544,7 +621,7 @@ export async function POST(request) {
       socPortalId
     ];
     
-    await query(userNotificationQuery, userNotifParams);
+    await client.query(userNotificationQuery, userNotifParams);
     
     logger.info('User notification created', {
       meta: {
@@ -553,14 +630,14 @@ export async function POST(request) {
         taskName: 'UserNotification',
         userId: socPortalId,
         userNotificationId,
-        ipAddress // ✅ Log IP address
+        ipAddress
       }
     });
     
-    // Commit transaction
-    await query('COMMIT');
+    // Commit transaction - ALL operations including roster table update
+    await client.query('COMMIT');
 
-    // Email notification to new user
+    // Email notification to new user (this is outside transaction since it's not critical)
     try {
       console.log('[User Email Notification] Preparing to send welcome email');
       
@@ -650,7 +727,7 @@ export async function POST(request) {
             socPortalId,
             email,
             taskName: 'User Welcome Email',
-            ipAddress // ✅ Log IP address
+            ipAddress
           }
         });
       } else {
@@ -659,7 +736,7 @@ export async function POST(request) {
           meta: {
             socPortalId,
             taskName: 'User Welcome Email',
-            ipAddress // ✅ Log IP address
+            ipAddress
           }
         });
       }
@@ -670,7 +747,7 @@ export async function POST(request) {
           socPortalId,
           error: emailError.message,
           taskName: 'User Welcome Email',
-          ipAddress // ✅ Log IP address
+          ipAddress
         }
       });
       // Don't fail the entire process if email fails
@@ -692,7 +769,7 @@ export async function POST(request) {
           status
         },
         adminId,
-        ipAddress // ✅ Log IP address
+        ipAddress
       }
     });
     
@@ -700,7 +777,7 @@ export async function POST(request) {
     const successMessage = formatAlertMessage(
       'creation',
       email,
-      ipAddress, // ✅ Use proper IP address
+      ipAddress,
       userAgent,
       { 
         eid, 
@@ -720,16 +797,18 @@ export async function POST(request) {
     });
     
   } catch (error) {
-    // Rollback on error
-    await query('ROLLBACK').catch(err => 
-      logger.error('Rollback failed', {
-        meta: {
-          taskName: 'Rollback',
-          details: `Error: ${err.message}`,
-          ipAddress // ✅ Log IP address
-        }
-      })
-    );
+    // Rollback on error - this will rollback ALL operations including user creation and roster table update
+    if (client) {
+      await client.query('ROLLBACK').catch(err => 
+        logger.error('Rollback failed', {
+          meta: {
+            taskName: 'Rollback',
+            details: `Error: ${err.message}`,
+            ipAddress
+          }
+        })
+      );
+    }
     
     logger.error('User creation failed', {
       meta: {
@@ -739,7 +818,7 @@ export async function POST(request) {
         details: `Error: ${error.message}`,
         stack: error.stack,
         adminId,
-        ipAddress // ✅ Log IP address
+        ipAddress
       }
     });
     
@@ -747,7 +826,7 @@ export async function POST(request) {
     const errorMessage = formatAlertMessage(
       'creation',
       'N/A',
-      ipAddress, // ✅ Use proper IP address
+      ipAddress,
       userAgent,
       { 
         eid, 
@@ -767,5 +846,22 @@ export async function POST(request) {
       },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        logger.error('Error releasing database client', {
+          error: releaseError.message,
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'ClientRelease',
+            details: 'Failed to release database connection',
+            ipAddress
+          }
+        });
+      }
+    }
   }
 }

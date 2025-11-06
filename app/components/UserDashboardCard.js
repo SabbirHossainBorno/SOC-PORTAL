@@ -31,6 +31,7 @@ const UserDashboardCard = ({
   type, 
   data, 
   hideForOps = false,
+  hideForIntern = false,
   isLoading = false
 }) => {
   // Get icon based on card type

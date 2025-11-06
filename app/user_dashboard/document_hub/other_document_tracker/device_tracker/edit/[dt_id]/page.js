@@ -18,7 +18,8 @@ const personaOptions = [
   { value: 'Agent', label: 'Agent' },
   { value: 'DSO', label: 'DSO' },
   { value: 'Merchant', label: 'Merchant' },
-  { value: 'Distributor', label: 'Distributor' }
+  { value: 'Distributor', label: 'Distributor' },
+  { value: 'Super Distributor', label: 'Super Distributor' }
 ];
 
 const deviceStatusOptions = [

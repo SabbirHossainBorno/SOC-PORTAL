@@ -8,7 +8,7 @@ import {
   FaEdit, FaSpinner, FaSync,
   FaFilter, FaDownload, FaPlus, FaTimes,
   FaCheckCircle, FaExclamationTriangle,
-  FaCaretDown, FaCaretUp
+  FaCaretDown, FaCaretUp, FaUser
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 
@@ -295,6 +295,7 @@ export default function DeviceTrackerLog() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [handedOverCount, setHandedOverCount] = useState(0); // Add this line
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sortField, setSortField] = useState('created_at');
@@ -302,40 +303,41 @@ export default function DeviceTrackerLog() {
   const [statusFilter, setStatusFilter] = useState('all');
 
   const fetchDevices = async (page = 1, search = '', limit = itemsPerPage) => {
-    try {
-      setLoading(true);
-      const queryParams = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        sort: sortField,
-        order: sortDirection,
-        ...(search && { search }),
-        ...(statusFilter !== 'all' && { status: statusFilter })
-      });
+  try {
+    setLoading(true);
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      sort: sortField,
+      order: sortDirection,
+      ...(search && { search }),
+      ...(statusFilter !== 'all' && { status: statusFilter })
+    });
 
-      const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/device_tracker_log?${queryParams}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch devices');
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setDevices(result.data);
-        setTotalPages(result.pagination.pages);
-        setTotalCount(result.pagination.total);
-        setCurrentPage(page);
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (error) {
-      console.error('Error fetching devices:', error);
-      toast.error('Failed to load device tracker logs');
-    } finally {
-      setLoading(false);
+    const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/device_tracker_log?${queryParams}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch devices');
     }
-  };
+
+    const result = await response.json();
+    
+    if (result.success) {
+      setDevices(result.data);
+      setTotalPages(result.pagination.pages);
+      setTotalCount(result.pagination.total);
+      setHandedOverCount(result.stats?.handedOver || 0); // Add this line
+      setCurrentPage(page);
+    } else {
+      throw new Error(result.message);
+    }
+  } catch (error) {
+    console.error('Error fetching devices:', error);
+    toast.error('Failed to load device tracker logs');
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchDevices();
@@ -448,43 +450,57 @@ export default function DeviceTrackerLog() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Devices</p>
-                <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
-              </div>
-              <div className="p-4 bg-blue-50 rounded">
-                <FaMobile className="text-2xl text-blue-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Working Devices</p>
-                <p className="text-3xl font-bold text-emerald-600 mt-2">{workingDevices}</p>
-              </div>
-              <div className="p-4 bg-emerald-50 rounded">
-                <FaCheckCircle className="text-2xl text-emerald-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Not Working</p>
-                <p className="text-3xl font-bold text-rose-600 mt-2">{notWorkingDevices}</p>
-              </div>
-              <div className="p-4 bg-rose-50 rounded">
-                <FaExclamationTriangle className="text-2xl text-rose-600" />
-              </div>
-            </div>
-          </div>
-        </div>
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Devices</p>
+        <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
+      </div>
+      <div className="p-4 bg-blue-50 rounded">
+        <FaMobile className="text-2xl text-blue-600" />
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Working Devices</p>
+        <p className="text-3xl font-bold text-emerald-600 mt-2">{workingDevices}</p>
+      </div>
+      <div className="p-4 bg-emerald-50 rounded">
+        <FaCheckCircle className="text-2xl text-emerald-600" />
+      </div>
+    </div>
+  </div>
+  
+  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Not Working</p>
+        <p className="text-3xl font-bold text-rose-600 mt-2">{notWorkingDevices}</p>
+      </div>
+      <div className="p-4 bg-rose-50 rounded">
+        <FaExclamationTriangle className="text-2xl text-rose-600" />
+      </div>
+    </div>
+  </div>
+
+  {/* New Handed Over Count Card */}
+  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Handed Over</p>
+        <p className="text-3xl font-bold text-amber-600 mt-2">{handedOverCount}</p>
+        <p className="text-xs text-slate-500 mt-1">Not returned yet</p>
+      </div>
+      <div className="p-4 bg-amber-50 rounded">
+        <FaUser className="text-2xl text-amber-600" />
+      </div>
+    </div>
+  </div>
+</div>
 
         {/* Enhanced Search and Filters */}
         <div className="bg-white rounded shadow-lg p-6 border border-slate-200 mb-6">

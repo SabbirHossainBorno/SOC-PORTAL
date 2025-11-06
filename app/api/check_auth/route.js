@@ -193,7 +193,7 @@ export async function GET(request) {
       if (userRes.rows.length > 0) {
         const user = userRes.rows[0];
         userType = 'user';
-        role = 'User'; // Normalize to 'User'
+        role = user.role_type; // ✅ Use actual role from database
         userStatus = user.status;
         dbSocPortalId = user.soc_portal_id;
       }
@@ -276,28 +276,30 @@ export async function GET(request) {
     }
 
     logger.info('AUTHENTICATION_SUCCESSFUL', {
-      email,
-      socPortalId: dbSocPortalId,
-      eid,
-      sid: sessionId,
-      taskName: 'AuthCheck',
-      userType,
-      role,
-      status: userStatus,
-      severity: 'LOW',
-      details: `Authentication successful for ${userType} with role ${role}`
-    });
+  email,
+  socPortalId: dbSocPortalId,
+  eid,
+  sid: sessionId, // Use the sessionId from cookies
+  taskName: 'AuthCheck',
+  userType,
+  role,
+  status: userStatus,
+  severity: 'LOW',
+  details: `Authentication successful for ${userType} with role ${role}`
+});
 
-    // ✅ CRITICAL FIX: Create response and reset activity timer
-    const response = NextResponse.json(
-      { 
-        authenticated: true, 
-        role: role,
-        userType: userType,
-        socPortalId: dbSocPortalId || 'Unknown'
-      },
-      { headers: securityHeaders }
-    );
+// ✅ CRITICAL FIX: Create response and reset activity timer
+const response = NextResponse.json(
+  { 
+    authenticated: true, 
+    role: role,
+    userType: userType,
+    socPortalId: dbSocPortalId || 'Unknown',
+    eid: eid || 'N/A',        // Return EID in response
+    sid: sessionId || 'N/A'   // Return SID in response
+  },
+  { headers: securityHeaders }
+);
 
     // ✅ RESET ACTIVITY TIMER to extend session
     response.cookies.set('lastActivity', new Date().toISOString(), {

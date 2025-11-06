@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
+import { TbDeviceHeartMonitorFilled } from "react-icons/tb";
 
 const navItems = [
   { 
@@ -27,12 +28,6 @@ const navItems = [
       { label: 'Add User', path: '/admin_dashboard/add_user' },
     ]
   },
-  { 
-    label: 'Activity Logs', 
-    icon: <RxActivityLog className="text-xl" />, 
-    path: '/admin_dashboard/activity_log',
-    color: 'text-purple-500'
-  },
   {
     label: 'Login Tracker',
     icon: <MdLogin className="text-xl" />,  // Login-specific icon
@@ -43,8 +38,26 @@ const navItems = [
     label: 'Roles & Permissions', 
     icon: <MdOutlineAssignmentLate className="text-xl" />, 
     path: '/admin_dashboard/role_permission',
-    color: 'text-blue-500'
+    color: 'text-blue-500',
+    children: [
+      { label: 'Role Management', path: '/admin_dashboard/role_permission/role_management' },
+      { label: 'Roster Upload', path: '/admin_dashboard/role_permission/roster_upload' },
+    ]
   },
+  {
+    label: 'System Watchdog',
+    icon: <TbDeviceHeartMonitorFilled className="text-xl" />,  // Login-specific icon
+    path: '/admin_dashboard/system_watchdog',
+    color: 'text-red-500'  // Professional and noticeable
+  },
+  { 
+    label: 'Activity Logs', 
+    icon: <RxActivityLog className="text-xl" />, 
+    path: '/admin_dashboard/activity_log',
+    color: 'text-purple-500'
+  },
+
+  /*
   { 
     label: 'Analytics', 
     icon: <FaChartBar className="text-xl" />, 
@@ -78,6 +91,8 @@ const navItems = [
     path: '/admin_dashboard/settings',
     color: 'text-cyan-500'
   },
+
+  */
 ];
 
 export default function AdminDashboardSidebar() {

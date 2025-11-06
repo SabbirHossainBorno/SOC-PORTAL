@@ -7,7 +7,8 @@ import {
   FaChartPie, 
   FaSync, 
   FaExclamationTriangle,
-  FaCalendarAlt
+  FaCalendarAlt,
+  FaUserGraduate
 } from 'react-icons/fa';
 import UnplannedPartialChart from '../components/downtime_chart/UnplannedPartial';
 import UnplannedFullChart from '../components/downtime_chart/UnplannedFull';
@@ -101,7 +102,8 @@ export default function UserDashboard() {
       type: 'todaysRoster',
       title: 'Today\'s Roster',
       dataKey: 'todaysRoster',
-      hideForOps: true
+      hideForOps: true,
+      hideForIntern: true
     },
     {
       type: 'assignedTask',
@@ -122,7 +124,8 @@ export default function UserDashboard() {
     {
       type: 'mailQueue',
       title: 'Mail Queue',
-      dataKey: 'mailQueue'
+      dataKey: 'mailQueue',
+      hideForIntern: true
     },
     {
       type: 'document',
@@ -137,9 +140,11 @@ export default function UserDashboard() {
   ];
 
   // Filter cards based on user role
-  const filteredCards = cardConfigs.filter(card => 
-    !(roleType === 'OPS' && card.hideForOps)
-  );
+  const filteredCards = cardConfigs.filter(card => {
+    if (roleType === 'OPS' && card.hideForOps) return false;
+    if (roleType === 'INTERN' && card.hideForIntern) return false;
+    return true;
+  });
 
   const handleRefresh = () => {
     fetchCardsData(true);
@@ -148,7 +153,6 @@ export default function UserDashboard() {
   if (loading) {
     return <LoadingSpinner />;
   }
-
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -216,6 +220,31 @@ export default function UserDashboard() {
           </motion.div>
         </motion.div>
 
+        {/* Role-based Information Banner */}
+        <AnimatePresence>
+          {roleType === 'INTERN' && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-blue-50 border border-blue-200 rounded p-4 mb-6"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded">
+                  <FaUserGraduate className="text-blue-600" size={18} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-blue-900 mb-1">Intern Access</h3>
+                  <p className="text-blue-700 text-sm">
+                    You are viewing the intern dashboard with essential metrics for learning and development. 
+                    Some advanced features are limited as per company policy.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Quick Stats Cards Section */}
         <motion.section 
           initial={{ opacity: 0 }}
@@ -282,6 +311,7 @@ export default function UserDashboard() {
                     data={cardsData?.[card.dataKey]}
                     lastUpdated={lastUpdated}
                     hideForOps={card.hideForOps}
+                    hideForIntern={card.hideForIntern}
                     isLoading={!cardsData}
                   />
                 ))}
@@ -359,7 +389,7 @@ export default function UserDashboard() {
           </div>
         </motion.section>
 
-        {/* Information Section */}
+        {/* Information Section for OPS Users */}
         {roleType === 'OPS' && (
           <motion.div
             initial={{ opacity: 0 }}

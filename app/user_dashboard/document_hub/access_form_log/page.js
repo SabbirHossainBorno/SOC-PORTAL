@@ -155,7 +155,7 @@ const combineAuditEvents = (auditTrail) => {
   return combined;
 };
 
-export default function AccessFormLog() {
+export default function AccessFormLog({ authInfo }) {
   const [accessForms, setAccessForms] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [optionsLoading, setOptionsLoading] = useState(true);
@@ -188,6 +188,8 @@ export default function AccessFormLog() {
 const [uploadFile, setUploadFile] = useState(null);
 const [uploadRemark, setUploadRemark] = useState('');
 const [isUploading, setIsUploading] = useState(false);
+
+const canCreateAccessForm = ['SOC', 'INTERN'].includes(authInfo?.role);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -604,13 +606,17 @@ const handleFileChange = (e, version, currentRemark) => {
                 <p className="text-gray-600 mt-2">Track and manage all access form records in one place</p>
               </div>
               <div className="flex items-center space-x-3">
-                <button 
-                  onClick={() => router.push('/user_dashboard/document_hub/access_form_tracker')}
-                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                  <FaPlus className="mr-2" />
-                  New Access Form
-                </button>
+                {/* Conditionally show New Access Form button */}
+                {canCreateAccessForm && (
+                  <button 
+                    onClick={() => router.push('/user_dashboard/document_hub/access_form_tracker')}
+                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    <FaPlus className="mr-2" />
+                    New Access Form
+                  </button>
+                )}
+                
                 <button
                   onClick={() => setShowFilters(!showFilters)}
                   className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors shadow-sm"
@@ -618,6 +624,7 @@ const handleFileChange = (e, version, currentRemark) => {
                   <FaFilter className="mr-2" />
                   {showFilters ? 'Hide Filters' : 'Show Filters'}
                 </button>
+                
                 <button
                   onClick={() => fetchAccessForms(1)}
                   className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors shadow-sm"

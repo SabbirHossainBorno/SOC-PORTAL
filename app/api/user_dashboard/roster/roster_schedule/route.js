@@ -37,10 +37,72 @@ const generateRosterId = (month, year) => {
   return `ROS${monthStr}${year}SOCP`;
 };
 
-// Parse Excel file with exceljs
+// Get team member columns from database schema
+const getTeamMemberColumns = async () => {
+  try {
+    const result = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'roster_schedule' 
+      AND table_schema = 'public'
+      AND column_name NOT IN (
+        'serial', 'roster_id', 'date', 'day', 'upload_by', 
+        'created_at', 'updated_at'
+      )
+      ORDER BY ordinal_position
+    `);
+    
+    const teamMemberColumns = {};
+    result.rows.forEach(row => {
+      const columnName = row.column_name;
+      teamMemberColumns[columnName] = columnName;
+    });
+    
+    console.log('Team member columns from database:', teamMemberColumns);
+    return teamMemberColumns;
+  } catch (error) {
+    console.error('Error fetching team member columns:', error);
+    return {};
+  }
+};
+
+// Check if user has permission to upload roster
+const checkUploadPermission = async (userId, userRole) => {
+  try {
+    // OPS team members are not allowed
+    if (userRole === 'OPS') {
+      return { allowed: false, message: 'OPS team members are not eligible to upload roster schedule' };
+    }
+
+    // Check permission from roster_schedule_permission table
+    const permissionQuery = `
+      SELECT permission 
+      FROM roster_schedule_permission 
+      WHERE soc_portal_id = $1 AND status = 'Active'
+    `;
+    
+    const permissionResult = await query(permissionQuery, [userId]);
+    
+    if (permissionResult.rows.length === 0) {
+      return { allowed: false, message: 'You are not eligible to upload roster schedule' };
+    }
+    
+    const permission = permissionResult.rows[0].permission;
+    if (permission !== 'ALLOW') {
+      return { allowed: false, message: 'You are not eligible to upload roster schedule' };
+    }
+    
+    return { allowed: true };
+  } catch (error) {
+    console.error('Error checking upload permission:', error);
+    return { allowed: false, message: 'Error checking upload permissions' };
+  }
+};
+
+// Parse Excel file with column mapping
 const parseExcelFile = async (file) => {
   try {
-    console.log('Starting Excel file parsing...');
+    console.log('Starting Excel file parsing with column mapping...');
     console.log('File details:', file.name, file.type, file.size);
     
     const arrayBuffer = await file.arrayBuffer();
@@ -54,22 +116,80 @@ const parseExcelFile = async (file) => {
     console.log('Worksheet name:', worksheet.name);
     console.log('Worksheet row count:', worksheet.rowCount);
     
-    const data = [];
+    // Get team member columns from database
+    const teamMemberColumns = await getTeamMemberColumns();
     
-    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      const rowData = row.values;
-      // Remove the first element (it's the row number in exceljs)
-      rowData.shift();
-      data.push(rowData);
-      
-      // Log first few rows for debugging
-      if (rowNumber <= 5) {
-        console.log(`Row ${rowNumber}:`, rowData);
+    // Get header row to identify columns
+    const headerRow = worksheet.getRow(1);
+    const headers = headerRow.values.slice(1); // Remove first empty element
+    
+    console.log('Excel headers found:', headers);
+    
+    // Map headers to column indices
+    const columnMapping = {};
+    const foundMembers = [];
+    
+    headers.forEach((header, index) => {
+      if (header) {
+        const headerName = String(header).trim().toLowerCase();
+        
+        // Find matching team member in database columns
+        for (const [dbColumn] of Object.entries(teamMemberColumns)) {
+          if (headerName.includes(dbColumn.toLowerCase())) {
+            columnMapping[index] = dbColumn;
+            foundMembers.push(header);
+            console.log(`Mapped header "${header}" to database column "${dbColumn}" at index ${index}`);
+            break;
+          }
+        }
       }
     });
     
-    console.log('Total rows parsed:', data.length);
-    return data;
+    console.log('Column mapping:', columnMapping);
+    console.log('Found team members in upload:', foundMembers);
+    
+    if (Object.keys(columnMapping).length === 0) {
+      throw new Error('No valid team member columns found in the Excel file');
+    }
+    
+    // Process data rows
+    const data = [];
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      const rowData = row.values.slice(1); // Remove first empty element
+      
+      if (rowData.length === 0 || !rowData.some(cell => cell !== undefined && cell !== null && cell !== '')) {
+        console.log(`Skipping empty row ${rowNumber}`);
+        continue;
+      }
+      
+      const mappedRow = {};
+      
+      // Map data based on column mapping
+      Object.entries(columnMapping).forEach(([excelIndex, dbColumn]) => {
+        const valueIndex = parseInt(excelIndex);
+        if (valueIndex < rowData.length && rowData[valueIndex] !== undefined) {
+          mappedRow[dbColumn] = String(rowData[valueIndex]).trim().toUpperCase() || null;
+        } else {
+          mappedRow[dbColumn] = null;
+        }
+      });
+      
+      data.push(mappedRow);
+      
+      // Log first few rows for debugging
+      if (rowNumber <= 5) {
+        console.log(`Row ${rowNumber} mapped data:`, mappedRow);
+      }
+    }
+    
+    console.log('Total data rows parsed:', data.length);
+    return {
+      data: data,
+      columnMapping: columnMapping,
+      foundMembers: foundMembers
+    };
+    
   } catch (error) {
     console.error('Excel parsing error:', error);
     throw new Error(`Failed to parse Excel file: ${error.message}`);
@@ -95,15 +215,39 @@ const generateDatesForMonth = (month, year) => {
   return dates;
 };
 
-// Check if a row is a header row
-const isHeaderRow = (row) => {
-  if (!row || row.length === 0) return false;
+// Create base roster item with all team member columns set to null
+const createBaseRosterItem = async (rosterId, date, day, userId) => {
+  const teamMemberColumns = await getTeamMemberColumns();
+  const baseItem = {
+    roster_id: rosterId,
+    date: date,
+    day: day,
+    upload_by: userId
+  };
   
-  const teamMembers = ['Tanvir', 'Sizan', 'Nazmul', 'Maruf', 'Bishwajit', 'Borno', 'Anupom', 'Nafiz', 'Prattay', 'Siam', 'Minhadul'];
-  const firstCell = String(row[0]).toUpperCase();
+  // Initialize all team member columns to null
+  Object.keys(teamMemberColumns).forEach(column => {
+    baseItem[column] = null;
+  });
   
-  // Check if the first cell matches any team member name
-  return teamMembers.some(member => firstCell.includes(member.toUpperCase()));
+  return baseItem;
+};
+
+// Generate insert query dynamically based on available columns
+const generateInsertQuery = async () => {
+  const teamMemberColumns = await getTeamMemberColumns();
+  const columns = Object.keys(teamMemberColumns);
+  
+  // Add non-team member columns
+  const allColumns = ['roster_id', 'date', 'day', ...columns, 'upload_by'];
+  
+  const placeholders = allColumns.map((_, index) => `$${index + 1}`).join(', ');
+  
+  return `
+    INSERT INTO roster_schedule 
+    (${allColumns.join(', ')})
+    VALUES (${placeholders})
+  `;
 };
 
 export async function GET(request) {
@@ -279,25 +423,52 @@ export async function POST(request) {
     const userShortName = userInfoResult.rows[0].short_name;
     const userRole = userInfoResult.rows[0].role_type;
 
-    // Check if user is allowed to upload roster
-    const allowedSocUsers = ['Borno', 'Sizan', 'Tanvir', 'Nazmul'];
-    if (userRole === 'SOC' && !allowedSocUsers.includes(userShortName)) {
-      await client.query('ROLLBACK');
-      client.release();
-      return NextResponse.json(
-        { success: false, message: 'You are not eligible to upload roster schedule' },
-        { status: 403 }
-      );
-    }
+    // Check if user has permission to upload roster using the new permission table
+    const permissionCheck = await checkUploadPermission(userId, userRole);
+    if (!permissionCheck.allowed) {
+      // Log the unauthorized upload attempt
+      logger.warn('Unauthorized roster upload attempt', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'UploadRosterDenied',
+          details: `User ${userId} (${userShortName}) attempted to upload roster but was denied. Reason: ${permissionCheck.message}`,
+          userId,
+          userShortName,
+          userRole,
+          ipAddress,
+          userAgent,
+          month,
+          year,
+          fileName: file ? file.name : 'No file',
+          reason: permissionCheck.message
+        }
+      });
 
-    if (userRole === 'OPS') {
+      // Log to user_activity_log table
+      const activityLogQuery = `
+        INSERT INTO user_activity_log 
+        (soc_portal_id, action, description, ip_address, device_info, eid, sid)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `;
+      
+      await query(activityLogQuery, [
+        userId,
+        'ROSTER_UPLOAD_DENIED',
+        `Attempted to upload roster for ${month}/${year} but was denied. Reason: ${permissionCheck.message}`,
+        ipAddress,
+        userAgent,
+        eid,
+        sessionId
+      ]);
+
       await client.query('ROLLBACK');
-      client.release();
-      return NextResponse.json(
-        { success: false, message: 'OPS team members are not eligible to upload roster schedule' },
-        { status: 403 }
-      );
-    }
+        client.release();
+        return NextResponse.json(
+          { success: false, message: permissionCheck.message },
+          { status: 403 }
+        );
+      }
     
     // Generate roster ID
     const rosterId = generateRosterId(month, year);
@@ -322,89 +493,86 @@ export async function POST(request) {
       );
     }
     
-    // Read and process Excel file
-    console.log('Processing Excel file...');
-    const data = await parseExcelFile(file);
+    // Read and process Excel file with column mapping
+    console.log('Processing Excel file with column mapping...');
+    const parseResult = await parseExcelFile(file);
+    const { data: excelData, columnMapping, foundMembers } = parseResult;
+    
+    console.log('Found team members in upload:', foundMembers);
+    console.log('Column mapping used:', columnMapping);
     
     // Generate dates for the month
     console.log('Generating dates for month:', month, year);
     const dates = generateDatesForMonth(parseInt(month), parseInt(year));
     console.log('Generated dates:', dates.length);
     
-    // Process the data (skip header rows)
-    console.log('Processing roster data...');
+    // Get team member columns for creating base roster items
+    const teamMemberColumns = await getTeamMemberColumns();
+    
+    // Process the data
+    console.log('Processing roster data with column mapping...');
     const rosterData = [];
-    let dataRowIndex = 0;
     
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      console.log(`Processing row ${i}:`, row);
+    // Check if we have enough data for all dates
+    if (excelData.length < dates.length) {
+      console.warn(`Warning: Only ${excelData.length} rows processed for ${dates.length} dates in month`);
+    }
+    
+    for (let i = 0; i < dates.length; i++) {
+      const currentDate = dates[i];
+      const excelRow = excelData[i] || {}; // Use empty object if no data for this date
       
-      // Skip header rows
-      if (isHeaderRow(row)) {
-        console.log(`Skipping row ${i} - header row`);
-        continue;
-      }
+      // Create base roster item with all team members set to null initially
+      const rosterItem = {
+        roster_id: rosterId,
+        date: currentDate.date,
+        day: currentDate.day,
+        upload_by: userId
+      };
       
-      // Check if we have enough data for all dates
-      if (dataRowIndex >= dates.length) {
-        console.log('Warning: More data rows than dates in month');
-        break;
-      }
+      // Initialize all team member columns to null
+      Object.keys(teamMemberColumns).forEach(column => {
+        rosterItem[column] = null;
+      });
       
-      // Check if we have enough columns
-      if (row && row.length >= 10) {
-        const currentDate = dates[dataRowIndex];
-        
-        rosterData.push({
-          roster_id: rosterId,
-          date: currentDate.date,
-          day: currentDate.day,
-          tanvir: row[0],
-          sizan: row[1],
-          nazmul: row[2],
-          maruf: row[3],
-          bishwajit: row[4],
-          borno: row[5],
-          anupom: row[6],
-          nafiz: row[7],
-          prattay: row[8],
-          siam: row[9],
-          minhadul: row[10],
-          upload_by: userId
-        });
-        
-        console.log(`Row ${i} processed successfully for date ${currentDate.date}`);
-        dataRowIndex++;
-      } else {
-        console.warn(`Skipping row ${i} - insufficient columns:`, row);
+      // Override with data from Excel based on column mapping
+      Object.entries(excelRow).forEach(([dbColumn, value]) => {
+        if (rosterItem.hasOwnProperty(dbColumn)) {
+          rosterItem[dbColumn] = value;
+        }
+      });
+      
+      rosterData.push(rosterItem);
+      
+      // Log first few items for debugging
+      if (i < 3) {
+        console.log(`Roster item ${i} for date ${currentDate.date}:`, rosterItem);
       }
     }
     
-    console.log('Total rows to insert:', rosterData.length);
+    console.log('Total roster items to insert:', rosterData.length);
     
-    // Check if we have data for all dates
-    if (rosterData.length !== dates.length) {
-      console.warn(`Warning: Only ${rosterData.length} rows processed for ${dates.length} dates in month`);
-    }
+    // Generate dynamic insert query
+    const insertQuery = await generateInsertQuery();
+    console.log('Generated insert query:', insertQuery);
     
-
     // Insert data into database
     console.log('Inserting roster data...');
     for (const item of rosterData) {
-      const insertQuery = `
-        INSERT INTO roster_schedule 
-        (roster_id, date, day, tanvir, sizan, nazmul, maruf, bishwajit, borno, anupom, nafiz, prattay, siam, minhadul, upload_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      `;
+      // Get team member columns for building parameter array
+      const teamMemberColumns = await getTeamMemberColumns();
+      const columns = Object.keys(teamMemberColumns);
       
-      console.log('Inserting row:', item);
+      // Build parameter array in the correct order
+      const params = [
+        item.roster_id, 
+        item.date, 
+        item.day,
+        ...columns.map(col => item[col]),
+        item.upload_by
+      ];
       
-      await client.query(insertQuery, [
-        item.roster_id, item.date, item.day, item.tanvir, item.sizan, item.nazmul,
-        item.maruf, item.bishwajit, item.borno, item.anupom, item.nafiz,
-        item.prattay, item.siam, item.minhadul, item.upload_by
-      ]);
+      await client.query(insertQuery, params);
     }
     
     await client.query('COMMIT');
@@ -421,7 +589,7 @@ export async function POST(request) {
     await query(activityLogQuery, [
       userId,
       'ROSTER_UPLOAD',
-      `Uploaded roster for ${month}/${year}`,
+      `Uploaded roster for ${month}/${year}. Found members: ${foundMembers.join(', ')}`,
       ipAddress,
       userAgent,
       eid,
@@ -445,19 +613,22 @@ export async function POST(request) {
         eid,
         sid: sessionId,
         taskName: 'UploadRoster',
-        details: `User ${userId} uploaded roster ${rosterId}`,
+        details: `User ${userId} uploaded roster ${rosterId}. Found members: ${foundMembers.join(', ')}`,
         rosterId,
-        recordCount: rosterData.length
+        recordCount: rosterData.length,
+        foundMembers: foundMembers
       }
     });
     
     console.log('Roster upload completed successfully');
+    console.log('Found team members:', foundMembers);
     
     return NextResponse.json({
       success: true,
       message: 'Roster uploaded successfully',
       rosterId: rosterId,
-      recordCount: rosterData.length
+      recordCount: rosterData.length,
+      foundMembers: foundMembers
     });
     
   } catch (error) {

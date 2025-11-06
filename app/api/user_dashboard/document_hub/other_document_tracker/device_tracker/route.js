@@ -1,5 +1,5 @@
 // app/api/user_dashboard/document_hub/other_document_tracker/device_tracker/route.js
-import { query, getDbConnection } from '../../../../../../lib/db';
+import { getDbConnection } from '../../../../../../lib/db';
 import logger from '../../../../../../lib/logger';
 import sendTelegramAlert from '../../../../../../lib/telegramAlert';
 import { getCurrentDateTime } from '../../../../../../lib/auditUtils';
@@ -118,6 +118,98 @@ const generateNotificationId = async (prefix, table, client) => {
       }
     });
     throw new Error(`Error generating notification ID: ${error.message}`);
+  }
+};
+
+// Check and update SIM records with device tag
+const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim2) => {
+  try {
+    logger.debug('Starting SIM records update with device tag', {
+      meta: {
+        taskName: 'DeviceTracker',
+        details: `Updating SIM records for device: ${deviceTrackingId}, SIM1: ${sim1}, SIM2: ${sim2}`
+      }
+    });
+
+    const updatedSims = [];
+
+    // Update SIM 1 if provided
+    if (sim1) {
+      const sim1Check = await client.query(
+        'SELECT st_id FROM sim_info WHERE msisdn = $1',
+        [sim1]
+      );
+
+      if (sim1Check.rows.length > 0) {
+        await client.query(
+          'UPDATE sim_info SET device_tag = $1, updated_at = NOW() WHERE msisdn = $2',
+          [deviceTrackingId, sim1]
+        );
+        updatedSims.push({ msisdn: sim1, st_id: sim1Check.rows[0].st_id });
+        logger.debug('SIM 1 updated with device tag', {
+          meta: {
+            taskName: 'DeviceTracker',
+            details: `SIM ${sim1} (${sim1Check.rows[0].st_id}) updated with device tag: ${deviceTrackingId}`
+          }
+        });
+      } else {
+        logger.debug('SIM 1 not found in SIM table', {
+          meta: {
+            taskName: 'DeviceTracker',
+            details: `SIM ${sim1} not found in sim_info table, skipping device tag update`
+          }
+        });
+      }
+    }
+
+    // Update SIM 2 if provided
+    if (sim2) {
+      const sim2Check = await client.query(
+        'SELECT st_id FROM sim_info WHERE msisdn = $1',
+        [sim2]
+      );
+
+      if (sim2Check.rows.length > 0) {
+        await client.query(
+          'UPDATE sim_info SET device_tag = $1, updated_at = NOW() WHERE msisdn = $2',
+          [deviceTrackingId, sim2]
+        );
+        updatedSims.push({ msisdn: sim2, st_id: sim2Check.rows[0].st_id });
+        logger.debug('SIM 2 updated with device tag', {
+          meta: {
+            taskName: 'DeviceTracker',
+            details: `SIM ${sim2} (${sim2Check.rows[0].st_id}) updated with device tag: ${deviceTrackingId}`
+          }
+        });
+      } else {
+        logger.debug('SIM 2 not found in SIM table', {
+          meta: {
+            taskName: 'DeviceTracker',
+            details: `SIM ${sim2} not found in sim_info table, skipping device tag update`
+          }
+        });
+      }
+    }
+
+    logger.info('SIM records update completed', {
+      meta: {
+        taskName: 'DeviceTracker',
+        details: `Updated ${updatedSims.length} SIM records with device tag: ${deviceTrackingId}`,
+        updatedSims
+      }
+    });
+
+    return updatedSims;
+  } catch (error) {
+    logger.error('Error updating SIM records with device tag', {
+      error: error.message,
+      stack: error.stack,
+      meta: {
+        taskName: 'DeviceTracker',
+        details: 'Failed to update SIM records with device tag'
+      }
+    });
+    throw new Error(`Error updating SIM records: ${error.message}`);
   }
 };
 
@@ -316,7 +408,8 @@ export async function POST(request) {
       }
     });
     
-    client = await getDbConnection();
+    client = await getDbConnection().connect();
+    await client.query(`SET TIME ZONE 'Asia/Dhaka';`);
     await client.query('BEGIN');
 
     logger.debug('Querying user information', {
@@ -376,7 +469,7 @@ export async function POST(request) {
       }
     });
     
-    // Insert into device_info table - UPDATED with new columns
+    // Insert into device_info table
     const insertQuery = `
       INSERT INTO device_info (
         dt_id, brand_name, device_model, imei_1, imei_2, 
@@ -428,6 +521,23 @@ export async function POST(request) {
         deviceTrackingId
       }
     });
+
+    // NEW LOGIC: Update SIM records with device tag
+    logger.debug('Starting SIM records update with device tag', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'DeviceTracker',
+        details: `Checking and updating SIM records for device: ${deviceTrackingId}`
+      }
+    });
+
+    const updatedSims = await updateSimRecordsWithDeviceTag(
+      client, 
+      deviceTrackingId, 
+      formData.sim_1, 
+      formData.sim_2
+    );
 
     // Create notifications
     logger.debug('Generating notification IDs', {
@@ -567,9 +677,10 @@ export async function POST(request) {
         eid,
         sid: sessionId,
         taskName: 'DeviceTracker',
-        details: `Device tracker submission completed in ${requestDuration}ms | Device ID: ${deviceTrackingId} | User: ${socPortalId}`,
+        details: `Device tracker submission completed in ${requestDuration}ms | Device ID: ${deviceTrackingId} | User: ${socPortalId} | Updated SIMs: ${updatedSims.length}`,
         userId: socPortalId,
         deviceTrackingId,
+        updatedSimsCount: updatedSims.length,
         duration: requestDuration
       }
     });
@@ -577,7 +688,8 @@ export async function POST(request) {
     return new Response(JSON.stringify({
       success: true,
       message: 'Device information saved successfully',
-      device_tracking_id: deviceTrackingId
+      device_tracking_id: deviceTrackingId,
+      updated_sims: updatedSims
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

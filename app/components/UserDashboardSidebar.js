@@ -4,7 +4,7 @@
 import { 
   FaHome, FaExclamationTriangle, FaTasks, FaEnvelope, 
   FaFileAlt, FaChartLine, FaCalendarAlt, FaChevronDown,
-  FaBook, FaHistory  // Added new icons
+  FaBook, FaHistory
 } from 'react-icons/fa';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -12,102 +12,106 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const navItems = [
-  { 
-    label: 'Dashboard', 
-    icon: <FaHome className="text-xl" />, 
-    path: '/user_dashboard',
-    color: 'text-blue-500'
-  },
-  { 
-    label: 'Service Downtime', 
-    icon: <FaExclamationTriangle className="text-xl" />, 
-    path: '/user_dashboard/downtime',
-    color: 'text-red-500',
-    children: [
-      { label: 'Report Downtime', path: '/user_dashboard/report_downtime' },
-      { label: 'Downtime Logs', path: '/user_dashboard/downtime_log' }
-    ]
-  },
-  { 
-    label: 'Task Management', 
-    icon: <FaTasks className="text-xl" />, 
-    path: '/user_dashboard/tasks',
-    color: 'text-purple-500',
-    children: [
-      { label: 'Assign Task', path: '/user_dashboard/assign_task' },
-      { label: 'My Tasks', path: '/user_dashboard/my_task' },
-      { label: 'Task Archive', path: '/user_dashboard/task_history' }
-    ]
-  },
-  { 
-    label: 'Mail Center', 
-    icon: <FaEnvelope className="text-xl" />, 
-    path: '/user_dashboard/mail',
-    color: 'text-yellow-500',
-    children: [
-      { label: "Track Today's Mail", path: '/user_dashboard/track_todays_mail' },
-      { label: 'Mail Log', path: '/user_dashboard/mail_log' },
-      { label: 'Mail Queue', path: '/user_dashboard/mail_queue' }
-    ]
-  },
-  { 
-    label: 'Document Hub', 
-    icon: <FaFileAlt className="text-xl" />, 
-    path: '/user_dashboard/documents',
-    color: 'text-green-500',
-    children: [
-      { label: 'Access Form Tracker', path: '/user_dashboard/document_hub/access_form_tracker' },
-      { label: 'Access Form Log', path: '/user_dashboard/document_hub/access_form_log' },
-      { label: 'Document Tracker', path: '/user_dashboard/document_hub/other_document_tracker' },
-      { label: 'Document Log', path: '/user_dashboard/document_hub/other_document_log' }
-    ]
-  },
-  { 
-    label: 'Performance Reports', 
-    icon: <FaChartLine className="text-xl" />, 
-    path: '/user_dashboard/reports',
-    color: 'text-cyan-500',
-    children: [
-      { label: 'Weekly Analysis', path: '/user_dashboard/weekly_report' },
-      { label: 'Monthly Summary', path: '/user_dashboard/monthly_report' },
-      { label: 'Annual Review', path: '/user_dashboard/annual_report' }
-    ]
-  },
-  { 
-    label: 'Roster Management', 
-    icon: <FaCalendarAlt className="text-xl" />, 
-    path: '/user_dashboard/roster',
-    color: 'text-orange-500',
-    children: [
-      { label: 'Roster Schedule', path: '/user_dashboard/roster/roster_schedule' },
-      { label: 'My Roster', path: '/user_dashboard/roster/my_roster' },
-      { label: 'Create Roster', path: '/user_dashboard/roster/create_roster' }
-    ]
-  },
-  // NEW: Knowledge Station
-  { 
-    label: 'Knowledge Station', 
-    icon: <FaBook className="text-xl" />, 
-    path: '/user_dashboard/knowledge_station',
-    color: 'text-indigo-500'
-  },
-  // NEW: Activity Log
-  { 
-    label: 'Activity Log', 
-    icon: <FaHistory className="text-xl" />, 
-    path: '/user_dashboard/activity_log',
-    color: 'text-amber-500'
-  },
-];
-
-export default function UserDashboardSidebar() {
+const UserDashboardSidebar = () => {
   const pathname = usePathname();
   const [openDropdowns, setOpenDropdowns] = useState({});
+  const [allowedMenus, setAllowedMenus] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const allNavItems = [
+    { 
+      label: 'Dashboard', 
+      icon: <FaHome className="text-xl" />, 
+      path: '/user_dashboard',
+      color: 'text-blue-500'
+    },
+    { 
+      label: 'Service Downtime', 
+      icon: <FaExclamationTriangle className="text-xl" />, 
+      path: '/user_dashboard/downtime',
+      color: 'text-red-500',
+      children: [
+        { label: 'Report Downtime', path: '/user_dashboard/report_downtime' },
+        { label: 'Downtime Logs', path: '/user_dashboard/downtime_log' }
+      ]
+    },
+    { 
+      label: 'Task Management', 
+      icon: <FaTasks className="text-xl" />, 
+      path: '/user_dashboard/tasks',
+      color: 'text-purple-500',
+      children: [
+        { label: 'Assign Task', path: '/user_dashboard/assign_task' },
+        { label: 'My Tasks', path: '/user_dashboard/my_task' },
+        { label: 'Task Archive', path: '/user_dashboard/task_history' }
+      ]
+    },
+    { 
+      label: 'Mail Center', 
+      icon: <FaEnvelope className="text-xl" />, 
+      path: '/user_dashboard/mail',
+      color: 'text-yellow-500',
+      children: [
+        { label: "Track Today's Mail", path: '/user_dashboard/track_todays_mail' },
+        { label: 'Mail Log', path: '/user_dashboard/mail_log' },
+        { label: 'Mail Queue', path: '/user_dashboard/mail_queue' }
+      ]
+    },
+    { 
+      label: 'Document Hub', 
+      icon: <FaFileAlt className="text-xl" />, 
+      path: '/user_dashboard/documents',
+      color: 'text-green-500',
+      children: [
+        { label: 'Access Form Tracker', path: '/user_dashboard/document_hub/access_form_tracker' },
+        { label: 'Access Form Log', path: '/user_dashboard/document_hub/access_form_log' },
+        { label: 'Document Tracker', path: '/user_dashboard/document_hub/other_document_tracker' },
+        { label: 'Document Log', path: '/user_dashboard/document_hub/other_document_log' }
+      ]
+    },
+    { 
+      label: 'Performance Reports', 
+      icon: <FaChartLine className="text-xl" />, 
+      path: '/user_dashboard/reports',
+      color: 'text-cyan-500',
+      children: [
+        { label: 'Weekly Analysis', path: '/user_dashboard/weekly_report' },
+        { label: 'Monthly Summary', path: '/user_dashboard/monthly_report' },
+        { label: 'Annual Review', path: '/user_dashboard/annual_report' }
+      ]
+    },
+    { 
+      label: 'Roster Management', 
+      icon: <FaCalendarAlt className="text-xl" />, 
+      path: '/user_dashboard/roster',
+      color: 'text-orange-500',
+      children: [
+        { label: 'Roster Schedule', path: '/user_dashboard/roster/roster_schedule' },
+        { label: 'My Roster', path: '/user_dashboard/roster/my_roster' },
+        { label: 'Create Roster', path: '/user_dashboard/roster/create_roster' }
+      ]
+    },
+    { 
+      label: 'Knowledge Station', 
+      icon: <FaBook className="text-xl" />, 
+      path: '/user_dashboard/knowledge_station',
+      color: 'text-indigo-500'
+    },
+    { 
+      label: 'Activity Log', 
+      icon: <FaHistory className="text-xl" />, 
+      path: '/user_dashboard/activity_log',
+      color: 'text-amber-500'
+    },
+  ];
+
+  useEffect(() => {
+    fetchUserPermissions();
+  }, []);
 
   useEffect(() => {
     const initialStates = {};
-    navItems.forEach(item => {
+    allNavItems.forEach(item => {
       const isActive = pathname.startsWith(item.path) || 
         (item.children && item.children.some(child => pathname.startsWith(child.path)));
 
@@ -118,23 +122,87 @@ export default function UserDashboardSidebar() {
     setOpenDropdowns(initialStates);
   }, [pathname]);
 
+  const fetchUserPermissions = async () => {
+    try {
+      // Get user info from cookies
+      const cookies = document.cookie.split(';');
+      const socPortalIdCookie = cookies.find(c => c.trim().startsWith('socPortalId='));
+      const roleTypeCookie = cookies.find(c => c.trim().startsWith('roleType='));
+      
+      if (socPortalIdCookie && roleTypeCookie) {
+        const socPortalId = socPortalIdCookie.split('=')[1];
+        const roleType = roleTypeCookie.split('=')[1];
+
+        const response = await fetch(
+          `/api/admin_dashboard/role_permission/role_management/user_permissions?soc_portal_id=${socPortalId}&role_type=${roleType}`
+        );
+        const data = await response.json();
+        
+        if (data.success) {
+          setAllowedMenus(data.permissions);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const toggleDropdown = (label) => {
     setOpenDropdowns(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  const isItemActive = (item) => {
-  if (item.children) {
-    // If it has children, check if any child path matches the current pathname
-    return item.children.some(child => pathname.startsWith(child.path));
-  } else {
-    // For items without children, match exact path only
-    return pathname === item.path;
-  }
-};
+  const isItemAllowed = (item) => {
+    if (loading) return false;
+    
+    // Check if the item itself is allowed
+    const itemAllowed = allowedMenus.includes(item.path);
+    
+    // If item has children, check if any child is allowed
+    if (item.children && item.children.length > 0) {
+      const hasAllowedChild = item.children.some(child => allowedMenus.includes(child.path));
+      return itemAllowed || hasAllowedChild;
+    }
+    
+    return itemAllowed;
+  };
 
-const isChildActive = (childPath) => {
-  return pathname.startsWith(childPath);
-};
+  const isItemActive = (item) => {
+    if (item.children) {
+      return item.children.some(child => pathname.startsWith(child.path));
+    } else {
+      return pathname === item.path;
+    }
+  };
+
+  const isChildActive = (childPath) => {
+    return pathname.startsWith(childPath);
+  };
+
+  // Filter nav items based on permissions
+  const navItems = allNavItems.filter(isItemAllowed);
+
+  if (loading) {
+    return (
+      <aside className="h-full flex flex-col bg-white border-r border-gray-100 shadow-sm">
+        <div className="p-4 border-b border-gray-100 flex flex-col items-center">
+          <div className="flex items-center justify-center">
+            <Image
+              src="/logo/Nagad_Horizontal_Logo.svg"
+              alt="Nagad Logo"
+              width={150}
+              height={40}
+              priority
+            />
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="h-full flex flex-col bg-white border-r border-gray-100 shadow-sm">
@@ -187,7 +255,9 @@ const isChildActive = (childPath) => {
                       className="overflow-hidden"
                     >
                       <div className="pl-8 py-2 space-y-1">
-                        {item.children.map((child) => (
+                        {item.children
+                          .filter(child => allowedMenus.includes(child.path)) // Filter children based on permissions
+                          .map((child) => (
                           <Link key={child.label} href={child.path}>
                             <motion.div
                               className={`flex items-center pl-5 pr-3 py-2.5 rounded text-sm font-medium cursor-pointer transition-all relative ${
@@ -197,16 +267,12 @@ const isChildActive = (childPath) => {
                               }`}
                               whileHover={{ x: 5 }}
                             >
-                              {/* Connection line */}
                               <div className="absolute left-0 top-1/2 w-4 h-[1px] bg-gray-300"></div>
-                              
-                              {/* Indicator */}
                               <div className={`absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-2 rounded-full ${
                                 isChildActive(child.path) 
                                   ? 'bg-blue-500 border-2 border-white shadow' 
                                   : 'bg-gray-300'
                               }`}></div>
-                              
                               <span className="ml-4">{child.label}</span>
                             </motion.div>
                           </Link>
@@ -235,4 +301,6 @@ const isChildActive = (childPath) => {
       </nav>
     </aside>
   );
-}
+};
+
+export default UserDashboardSidebar;

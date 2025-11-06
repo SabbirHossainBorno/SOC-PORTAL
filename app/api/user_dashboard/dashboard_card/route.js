@@ -146,13 +146,18 @@ export async function GET(request) {
       SELECT * FROM period_totals
     `;
 
-    // 2. Mail Queue Count
-    const mailQuery = `
-      SELECT COUNT(*) as count 
-      FROM mail_tracking 
-      WHERE status = 'IN-PROGRESS' 
-      AND assigned_team = $1
-    `;
+    // 2. Mail Queue Count (only for non-INTERN users)
+    let mailQueue = 0;
+    if (roleType !== 'INTERN') {
+      const mailQuery = `
+        SELECT COUNT(*) as count 
+        FROM mail_tracking 
+        WHERE status = 'IN-PROGRESS' 
+        AND assigned_team = $1
+      `;
+      const mailResult = await query(mailQuery, [roleType]);
+      mailQueue = parseInt(mailResult.rows[0]?.count) || 0;
+    }
 
     // 3. Document Count
     const documentQuery = `
@@ -185,16 +190,14 @@ export async function GET(request) {
       }
     });
 
-    // Execute all queries in parallel (except roster which is handled conditionally)
+    // Execute queries in parallel (except mail which is conditional)
     const [
       downtimeResult,
-      mailResult,
       documentResult,
       deviceResult,
       activityResult
     ] = await Promise.all([
       query(downtimeQuery),
-      query(mailQuery, [roleType]),
       query(documentQuery),
       query(deviceQuery),
       query(activityQuery, [socPortalId])
@@ -202,7 +205,6 @@ export async function GET(request) {
 
     // Process results
     const downtimeData = downtimeResult.rows[0] || {};
-    const mailQueue = parseInt(mailResult.rows[0]?.count) || 0;
     const documentCount = parseInt(documentResult.rows[0]?.count) || 0;
     const deviceData = deviceResult.rows[0] || {};
     const totalActivity = parseInt(activityResult.rows[0]?.count) || 0;
@@ -235,9 +237,9 @@ export async function GET(request) {
     };
 
     const myPerformance = {
-      score: 92,
-      grade: 'Excellent',
-      level: 'excellent'
+      score: roleType === 'INTERN' ? 85 : 92, // Slightly lower score for interns
+      grade: roleType === 'INTERN' ? 'Good' : 'Excellent',
+      level: roleType === 'INTERN' ? 'good' : 'excellent'
     };
 
     // Base response data for all users
@@ -260,8 +262,8 @@ export async function GET(request) {
         lastMonth: secondsToMinutes(downtimeData.last_month_seconds) || 0
       },
       
-      // Card 4: Mail Queue
-      mailQueue,
+      // Card 4: Mail Queue (only for non-INTERN)
+      ...(roleType !== 'INTERN' && { mailQueue }),
       
       // Card 5: Document
       document: documentCount,
@@ -287,6 +289,15 @@ export async function GET(request) {
     if (roleType === 'SOC') {
       baseResponseData.assignedTask = assignedTask;
       baseResponseData.todaysRoster = todaysRoster;
+    }
+
+    // Add assigned tasks for INTERN users
+    if (roleType === 'INTERN') {
+      baseResponseData.assignedTask = {
+        total: 8,
+        solved: 5,
+        pending: 3
+      };
     }
 
     const responseData = {

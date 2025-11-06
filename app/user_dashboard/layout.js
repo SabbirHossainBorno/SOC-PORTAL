@@ -6,10 +6,10 @@ import UserDashboardSidebar from '../components/UserDashboardSidebar';
 import UserDashboardNavbar from '../components/UserDashboardNavbar';
 import { motion, AnimatePresence } from 'framer-motion';
 import withAuth from '../components/WithAuth';
-import { Toaster } from 'react-hot-toast'; // Add this import
+import { Toaster } from 'react-hot-toast';
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
 
-function UserDashboardLayout({ children }) {
+function UserDashboardLayout({ children, authInfo }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -88,38 +88,38 @@ function UserDashboardLayout({ children }) {
       
       {/* Add Toaster component here */}
       <Toaster
-    position="top-right"
-    toastOptions={{
-      duration: 5000,
-      style: {
-        background: '#f0fdf4',
-        color: '#15803d',
-        padding: '16px',
-        border: '1px solid #bbf7d0',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        fontSize: '14px',
-      },
-      success: {
-        duration: 5000,
-        icon: <FaCheckCircle className="text-green-500" />,
-      },
-      error: {
-        duration: 5000,
-        icon: <FaTimesCircle className="text-red-500" />,
-        style: {
-          background: '#fef2f2',
-          color: '#b91c1c',
-          border: '1px solid #fecaca',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          padding: '16px',
-          fontSize: '14px',
-        },
-      },
-    }}
-  />
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: '#f0fdf4',
+            color: '#15803d',
+            padding: '16px',
+            border: '1px solid #bbf7d0',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            fontSize: '14px',
+          },
+          success: {
+            duration: 5000,
+            icon: <FaCheckCircle className="text-green-500" />,
+          },
+          error: {
+            duration: 5000,
+            icon: <FaTimesCircle className="text-red-500" />,
+            style: {
+              background: '#fef2f2',
+              color: '#b91c1c',
+              border: '1px solid #fecaca',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              padding: '16px',
+              fontSize: '14px',
+            },
+          },
+        }}
+      />
     </div>
   );
 }
 
-// Wrap with Auth HOC and allow multiple roles
-export default withAuth(UserDashboardLayout, ['User']);
+// Wrap with Auth HOC and allow all user roles
+export default withAuth(UserDashboardLayout, ['SOC', 'OPS', 'INTERN', 'CTO', 'User']);

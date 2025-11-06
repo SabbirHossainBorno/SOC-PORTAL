@@ -63,6 +63,8 @@ export async function GET(request) {
     `;
     
     let countQuery = `SELECT COUNT(*) as total FROM device_info WHERE 1=1`;
+    let handedOverCountQuery = `SELECT COUNT(*) as handed_over_count FROM device_info WHERE handover_to IS NOT NULL AND handover_to != '' AND return_date IS NULL`;
+    
     let queryParams = [];
     let paramCount = 0;
 
@@ -91,6 +93,17 @@ export async function GET(request) {
         track_by ILIKE $${paramCount} OR
         purpose ILIKE $${paramCount}
       )`;
+      handedOverCountQuery += ` AND (
+        brand_name ILIKE $${paramCount} OR 
+        device_model ILIKE $${paramCount} OR 
+        dt_id ILIKE $${paramCount} OR
+        imei_1 ILIKE $${paramCount} OR
+        imei_2 ILIKE $${paramCount} OR
+        sim_1 ILIKE $${paramCount} OR
+        sim_2 ILIKE $${paramCount} OR
+        track_by ILIKE $${paramCount} OR
+        purpose ILIKE $${paramCount}
+      )`;
       queryParams.push(`%${search}%`);
     }
 
@@ -99,6 +112,7 @@ export async function GET(request) {
       paramCount++;
       queryString += ` AND device_status = $${paramCount}`;
       countQuery += ` AND device_status = $${paramCount}`;
+      handedOverCountQuery += ` AND device_status = $${paramCount}`;
       queryParams.push(status);
     }
 
@@ -106,9 +120,13 @@ export async function GET(request) {
     queryString += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
     queryParams.push(limit, offset);
 
-    // Execute count query
+    // Execute count queries
     const countResult = await query(countQuery, queryParams.slice(0, search ? (status ? 2 : 1) : (status ? 1 : 0)));
     const totalCount = parseInt(countResult.rows[0]?.total || 0);
+
+    // Execute handed over count query
+    const handedOverCountResult = await query(handedOverCountQuery, queryParams.slice(0, search ? (status ? 2 : 1) : (status ? 1 : 0)));
+    const handedOverCount = parseInt(handedOverCountResult.rows[0]?.handed_over_count || 0);
 
     // Execute main query
     const result = await query(queryString, queryParams);
@@ -119,13 +137,17 @@ export async function GET(request) {
         eid,
         sid: sessionId,
         taskName: 'DeviceTrackerLog',
-        details: `Fetched ${devices.length} devices out of ${totalCount} total, Status filter: ${status}`
+        details: `Fetched ${devices.length} devices out of ${totalCount} total, Handed Over: ${handedOverCount}, Status filter: ${status}`
       }
     });
 
     return new Response(JSON.stringify({
       success: true,
       data: devices,
+      stats: {
+        total: totalCount,
+        handedOver: handedOverCount
+      },
       pagination: {
         page,
         limit,

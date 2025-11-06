@@ -697,8 +697,8 @@ const handleSubmit = async (e) => {
                       <option value="">Select Role Type</option>
                       <option value="SOC">SOC</option>
                       <option value="OPS">OPS</option>
-                      <option value="CTO">CTO</option>
-                      <option value="BI">BI</option>
+                      <option value="INTERN">INTERN</option>
+                      <option value="CTO">CTO</option> 
                     </select>
                     {errors.roleType && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">

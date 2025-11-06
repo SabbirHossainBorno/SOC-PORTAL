@@ -10,7 +10,7 @@ import {
   FaNetworkWired, FaDatabase, FaStickyNote, FaUser,
   FaServer, FaMobile, FaGlobe, FaEnvelope, FaCog,
   FaExternalLinkAlt, FaCalendar, FaUserCircle,
-  FaChartPie, FaHistory, FaSignal, FaLayerGroup
+  FaChartPie, FaHistory, FaSignal, FaLayerGroup, FaChevronDown, FaChevronUp, FaCalendarCheck
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
@@ -129,8 +129,28 @@ const DowntimeLog = () => {
     total: 0
   });
   const [selectedDowntime, setSelectedDowntime] = useState(null);
+  const [filterExpanded, setFilterExpanded] = useState(false);
   
   const colorMap = useRef(new Map());
+
+  // Custom DatePicker Input Component - add this before the DowntimeLog component
+const CustomDateInput = ({ value, onClick, placeholder }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="w-full px-3 py-2.5 text-left bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm flex items-center justify-between hover:border-gray-400 transition-colors"
+  >
+    <span className={value ? "text-gray-800" : "text-gray-500"}>
+      {value || placeholder}
+    </span>
+    <FaCalendarCheck className="text-gray-400 text-sm" />
+  </button>
+);
+
+// Count active filters for the badge
+const activeFilterCount = Object.values(filters).filter(value => 
+  value !== '' && value !== null && value !== undefined
+).length - (filters.timeRange === 'custom' ? 0 : 2); // Adjust for date fields when not in custom mode
 
   const categories = [
     'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
@@ -530,7 +550,7 @@ const DowntimeLog = () => {
             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded p-5 shadow-md border border-indigo-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">Current Week</h3>
+                  <h3 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">This Week</h3>
                   <p className="text-3xl font-bold text-gray-900 mt-2">{summary.currentWeekDuration}</p>
                   <p className="text-sm font-medium text-indigo-700 mt-1">{summary.currentWeekMinutes} minutes</p>
                   <p className="text-xs text-indigo-600 mt-1">{summary.currentWeekRange}</p>
@@ -589,7 +609,7 @@ const DowntimeLog = () => {
               </div>
             </div>
 
-            {/* Top Channels Card */}
+            {/* Top Channels Card 
             <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded p-4 shadow-sm border border-orange-200">
               <div className="flex items-start justify-between mb-3">
                 <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Top Channels</h3>
@@ -626,205 +646,303 @@ const DowntimeLog = () => {
                 </div>
               </div>
             </div>
+            */}
           </div>
         )}
+        
+        
 
-        <div className="bg-white rounded shadow-md mb-6 overflow-hidden">
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaSearch className="text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search by ID, title or category..."
-                  value={filters.search}
-                  onChange={(e) => handleFilterChange('search', e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                />
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={resetFilters}
-                  className="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-sm"
-                >
-                  Reset Filters
-                </button>
-                <button 
-                  onClick={handleExportFiltered}
-                  disabled={!isCustomDateRangeActive}
-                  className={`flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm ${
-                    isCustomDateRangeActive 
-                      ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer' 
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                  title={!isCustomDateRangeActive ? 'Select custom date range to export' : 'Export filtered data'}
-                >
-                  <FaFileExcel />
-                  Export Filtered
-                </button>
-              </div>
+        {/* Filter Section */}
+<div className="bg-white rounded shadow-lg mb-6 overflow-hidden border border-gray-200">
+  {/* Filter Header */}
+  <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <FaFilter className="text-blue-600 text-lg" />
+          <h2 className="text-xl font-bold text-gray-900">Filters</h2>
+        </div>
+        {activeFilterCount > 0 && (
+          <span className="bg-blue-600 text-white text-xs font-medium px-3 py-1 rounded-full">
+            {activeFilterCount} active
+          </span>
+        )}
+      </div>
+      
+      <div className="flex items-center gap-3">
+        <button 
+          onClick={() => setFilterExpanded(!filterExpanded)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
+        >
+          {filterExpanded ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
+          {filterExpanded ? 'Hide Filters' : 'Show Filters'}
+        </button>
+        
+        <button 
+          onClick={resetFilters}
+          className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-sm font-medium"
+        >
+          Reset All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {/* Search and Quick Actions - Always Visible */}
+  <div className="p-4 border-b border-gray-200">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <FaSearch className="text-gray-400" />
+          </div>
+          <input
+            type="text"
+            placeholder="Search by ID, title, category, or description..."
+            value={filters.search}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm bg-white shadow-sm"
+          />
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={handleExportFiltered}
+          disabled={!isCustomDateRangeActive}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded transition-colors text-sm font-medium shadow-sm ${
+            isCustomDateRangeActive 
+              ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 cursor-pointer' 
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}
+          title={!isCustomDateRangeActive ? 'Select custom date range to export' : 'Export filtered data'}
+        >
+          <FaFileExcel />
+          Export Filtered
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {/* Expandable Filter Controls */}
+  {filterExpanded && (
+    <div className="p-6 bg-gray-50/50">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Time Range Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaClock className="inline mr-2 text-blue-500 text-sm" />
+            Time Range
+          </label>
+          <select
+            value={filters.timeRange}
+            onChange={(e) => handleFilterChange('timeRange', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            {timeRangeOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Custom Date Range */}
+        {filters.timeRange === 'custom' && (
+          <>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                <FaCalendar className="inline mr-2 text-green-500 text-sm" />
+                Start Date
+              </label>
+              <DatePicker
+                selected={filters.startDate}
+                onChange={(date) => handleFilterChange('startDate', date)}
+                selectsStart
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+                customInput={<CustomDateInput placeholder="Select start date" />}
+                popperClassName="!z-[9999]"
+                popperPlacement="bottom-start"
+                showPopperArrow={false}
+                calendarClassName="!border !border-gray-200 !shadow-xl !rounded !p-3"
+                dayClassName={() => "!text-sm !py-2 hover:!bg-blue-50 rounded"}
+                wrapperClassName="w-full"
+              />
             </div>
             
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 relative">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Time Range
-                </label>
-                <select
-                  value={filters.timeRange}
-                  onChange={(e) => handleFilterChange('timeRange', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  {timeRangeOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              {filters.timeRange === 'custom' && (
-                <>
-                  <div className="relative z-[100]">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Start Date
-                    </label>
-                    <DatePicker
-                      selected={filters.startDate}
-                      onChange={(date) => handleFilterChange('startDate', date)}
-                      selectsStart
-                      startDate={filters.startDate}
-                      endDate={filters.endDate}
-                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                      placeholderText="Select start date"
-                      popperClassName="!z-[999]"
-                      popperPlacement="bottom-start"
-                      portalId="root"
-                    />
-                  </div>
-                  
-                  <div className="relative z-[100]">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      End Date
-                    </label>
-                    <DatePicker
-                      selected={filters.endDate}
-                      onChange={(date) => handleFilterChange('endDate', date)}
-                      selectsEnd
-                      startDate={filters.startDate}
-                      endDate={filters.endDate}
-                      minDate={filters.startDate}
-                      className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                      placeholderText="Select end date"
-                      popperClassName="!z-[999]"
-                      popperPlacement="bottom-start"
-                      portalId="root"
-                    />
-                  </div>
-                </>
-              )}
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Category
-                </label>
-                <select
-                  value={filters.category}
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Impact Type
-                </label>
-                <select
-                  value={filters.impactType}
-                  onChange={(e) => handleFilterChange('impactType', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Types</option>
-                  {impactTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Modality
-                </label>
-                <select
-                  value={filters.modality}
-                  onChange={(e) => handleFilterChange('modality', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Modalities</option>
-                  {modalities.map(mod => (
-                    <option key={mod} value={mod}>{mod}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Reliability Impacted
-                </label>
-                <select
-                  value={filters.reliability}
-                  onChange={(e) => handleFilterChange('reliability', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All</option>
-                  {reliabilityOptions.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Affected Channel
-                </label>
-                <select
-                  value={filters.channel}
-                  onChange={(e) => handleFilterChange('channel', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All Channels</option>
-                  {channelOptions.map(channel => (
-                    <option key={channel.value} value={channel.value}>{channel.label}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Affected MNO
-                </label>
-                <select
-                  value={filters.affectedMNO}
-                  onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm"
-                >
-                  <option value="">All MNOs</option>
-                  {mnoOptions.map(mno => (
-                    <option key={mno} value={mno}>
-                      {getMNOShortName(mno)} ({mno})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                <FaCalendar className="inline mr-2 text-red-500 text-sm" />
+                End Date
+              </label>
+              <DatePicker
+                selected={filters.endDate}
+                onChange={(date) => handleFilterChange('endDate', date)}
+                selectsEnd
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+                minDate={filters.startDate}
+                customInput={<CustomDateInput placeholder="Select end date" />}
+                popperClassName="!z-[9999]"
+                popperPlacement="bottom-start"
+                showPopperArrow={false}
+                calendarClassName="!border !border-gray-200 !shadow-xl !rounded !p-3"
+                dayClassName={() => "!text-sm !py-2 hover:!bg-blue-50 rounded"}
+                wrapperClassName="w-full"
+              />
             </div>
-          </div>
+          </>
+        )}
+
+        {/* Category Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaList className="inline mr-2 text-purple-500 text-sm" />
+            Category
+          </label>
+          <select
+            value={filters.category}
+            onChange={(e) => handleFilterChange('category', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All Categories</option>
+            {categories.map(category => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
         </div>
+
+        {/* Impact Type Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaExclamationTriangle className="inline mr-2 text-orange-500 text-sm" />
+            Impact Type
+          </label>
+          <select
+            value={filters.impactType}
+            onChange={(e) => handleFilterChange('impactType', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All Types</option>
+            {impactTypes.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Modality Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaCog className="inline mr-2 text-indigo-500 text-sm" />
+            Modality
+          </label>
+          <select
+            value={filters.modality}
+            onChange={(e) => handleFilterChange('modality', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All Modalities</option>
+            {modalities.map(mod => (
+              <option key={mod} value={mod}>{mod}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Reliability Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaChartBar className="inline mr-2 text-teal-500 text-sm" />
+            Reliability Impacted
+          </label>
+          <select
+            value={filters.reliability}
+            onChange={(e) => handleFilterChange('reliability', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All</option>
+            {reliabilityOptions.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Channel Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaNetworkWired className="inline mr-2 text-cyan-500 text-sm" />
+            Affected Channel
+          </label>
+          <select
+            value={filters.channel}
+            onChange={(e) => handleFilterChange('channel', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All Channels</option>
+            {channelOptions.map(channel => (
+              <option key={channel.value} value={channel.value}>{channel.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* MNO Filter */}
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            <FaMobile className="inline mr-2 text-pink-500 text-sm" />
+            Affected MNO
+          </label>
+          <select
+            value={filters.affectedMNO}
+            onChange={(e) => handleFilterChange('affectedMNO', e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 text-sm shadow-sm"
+          >
+            <option value="">All MNOs</option>
+            {mnoOptions.map(mno => (
+              <option key={mno} value={mno}>
+                {getMNOShortName(mno)} ({mno})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Quick Filter Actions */}
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Filters:</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => handleFilterChange('timeRange', 'today')}
+            className="px-4 py-2 bg-blue-100 text-blue-700 rounded text-sm font-medium hover:bg-blue-200 transition-colors border border-blue-200"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handleFilterChange('timeRange', 'thisWeek')}
+            className="px-4 py-2 bg-green-100 text-green-700 rounded text-sm font-medium hover:bg-green-200 transition-colors border border-green-200"
+          >
+            This Week
+          </button>
+          <button
+            onClick={() => handleFilterChange('modality', 'UNPLANNED')}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded text-sm font-medium hover:bg-red-200 transition-colors border border-red-200"
+          >
+            Unplanned Only
+          </button>
+          <button
+            onClick={() => handleFilterChange('impactType', 'FULL')}
+            className="px-4 py-2 bg-orange-100 text-orange-700 rounded text-sm font-medium hover:bg-orange-200 transition-colors border border-orange-200"
+          >
+            Full Impact Only
+          </button>
+          <button
+            onClick={() => handleFilterChange('reliability', 'YES')}
+            className="px-4 py-2 bg-purple-100 text-purple-700 rounded text-sm font-medium hover:bg-purple-200 transition-colors border border-purple-200"
+          >
+            Reliability Impacted
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+</div>
 
         <div className="bg-white rounded shadow-md overflow-hidden">
           <div className="overflow-x-auto">
