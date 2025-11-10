@@ -48,6 +48,8 @@ export default function ListUserPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  
+
   // Fetch users from API
   useEffect(() => {
     const fetchUsers = async () => {
@@ -180,16 +182,19 @@ export default function ListUserPage() {
       <div className="flex items-start">
         <div className="flex-shrink-0 mr-4">
           <div className="h-14 w-14 rounded-full overflow-hidden border-2 border-white shadow relative">
-            <Image 
-              src={user.profile_photo_url || '/storage/user_dp/default_DP.png'} 
-              alt={`${user.first_name} ${user.last_name}`}
-              fill
-              style={{objectFit: 'cover'}}
-              onError={(e) => {
-                e.target.src = '/storage/user_dp/default_DP.png';
-              }}
-            />
-          </div>
+  <Image 
+    src={user.profile_photo_url}
+    alt={`${user.first_name} ${user.last_name}`}
+    fill
+    style={{objectFit: 'cover'}}
+    unoptimized
+    priority={false}
+    onError={(e) => {
+      e.target.onerror = null;
+      e.target.src = '/api/storage/user_dp/default_DP.png';
+    }}
+  />
+</div>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between">
@@ -766,16 +771,19 @@ export default function ListUserPage() {
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
                                 <div className="flex-shrink-0 h-10 w-10 relative">
-                                  <Image 
-                                    className="rounded-full object-cover" 
-                                    src={user.profile_photo_url || '/storage/user_dp/default_DP.png'} 
-                                    alt={`${user.first_name} ${user.last_name}`}
-                                    fill
-                                    onError={(e) => {
-                                      e.target.src = '/storage/user_dp/default_DP.png';
-                                    }}
-                                  />
-                                </div>
+  <Image 
+    className="rounded-full object-cover" 
+    src={user.profile_photo_url}
+    alt={`${user.first_name} ${user.last_name}`}
+    fill
+    unoptimized
+    priority={false}
+    onError={(e) => {
+      e.target.onerror = null;
+      e.target.src = '/api/storage/user_dp/default_DP.png';
+    }}
+  />
+</div>
                                 <div className="ml-4">
                                   <div className="text-sm font-medium text-gray-900">
                                     {user.first_name} {user.last_name}

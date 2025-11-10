@@ -154,19 +154,24 @@ const UserDashboardSidebar = () => {
   };
 
   const isItemAllowed = (item) => {
-    if (loading) return false;
-    
-    // Check if the item itself is allowed
-    const itemAllowed = allowedMenus.includes(item.path);
-    
-    // If item has children, check if any child is allowed
-    if (item.children && item.children.length > 0) {
-      const hasAllowedChild = item.children.some(child => allowedMenus.includes(child.path));
-      return itemAllowed || hasAllowedChild;
-    }
-    
-    return itemAllowed;
-  };
+  if (loading) return false;
+  
+  // Skip hidden items entirely
+  if (item.isHidden) return false;
+  
+  // Check if the item itself is allowed
+  const itemAllowed = allowedMenus.includes(item.path);
+  
+  // If item has children, check if any child is allowed (and not hidden)
+  if (item.children && item.children.length > 0) {
+    const hasAllowedChild = item.children.some(child => 
+      !child.isHidden && allowedMenus.includes(child.path)
+    );
+    return itemAllowed || hasAllowedChild;
+  }
+  
+  return itemAllowed;
+};
 
   const isItemActive = (item) => {
     if (item.children) {

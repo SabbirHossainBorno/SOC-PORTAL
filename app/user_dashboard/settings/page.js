@@ -1,424 +1,571 @@
 //app/user_dashboard/settings/page.js
 'use client';
-import { useState, useEffect, useRef } from 'react';
+
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { FaUser, FaCamera, FaCheck, FaArrowLeft, FaExclamationTriangle } from 'react-icons/fa';
+import { 
+  FaUser, FaPhone, FaSave, FaSpinner, FaExclamationTriangle, 
+  FaCheckCircle, FaImage, FaArrowLeft, FaShieldAlt,
+  FaUserCircle, FaMobileAlt, FaIdCard
+} from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
-// Force dynamic rendering to bypass prerendering
+// Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const fileInputRef = useRef(null);
-  const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [userData, setUserData] = useState({
+    profilePhotoUrl: '',
+    emergencyContact: '',
+    phone: ''
+  });
+  const [formData, setFormData] = useState({
+    profilePhoto: null,
+    emergencyContact: ''
+  });
+  const [previewImage, setPreviewImage] = useState('');
+  const [errors, setErrors] = useState({});
+  const [hasChanges, setHasChanges] = useState(false);
 
-  // Get cookies with proper decoding
-  const getCookie = (name) => {
-    try {
-      if (typeof document === 'undefined') return null;
-      
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      
-      if (parts.length === 2) {
-        const cookieValue = decodeURIComponent(parts.pop().split(';').shift());
-        console.debug('Retrieved cookie:', { name, value: cookieValue });
-        return cookieValue;
-      }
-      console.debug('Cookie not found:', name);
-      return null;
-    } catch (error) {
-      console.error('Error reading cookie:', { name, error });
-      return null;
-    }
-  };
-
+  // Fetch current user settings
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchUserSettings = async () => {
       try {
         setLoading(true);
-        console.debug('Fetching user data');
-        const userId = getCookie('socPortalId');
-        
-        if (!userId) {
-          console.warn('[SETTINGS] No user ID found in cookies');
-          toast.error('Please log in to access settings', {
-            duration: 4000,
-            position: 'top-right'
-          });
-          router.push('/');
-          return;
-        }
-
-        const response = await fetch(`/api/user_dashboard/user_info?id=${userId}`);
-        
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setUserData(data);
-        console.debug('User data fetched successfully:', data);
-
-      } catch (error) {
-        console.error('[SETTINGS] Failed to fetch user data:', error);
-        toast.error('Failed to load user information', {
-          duration: 4000,
-          position: 'top-right'
+        const response = await fetch('/api/user_dashboard/settings', {
+          credentials: 'include'
         });
         
-        // Fallback to cookies
-        const email = getCookie('email');
-        const id = getCookie('socPortalId');
-        const role = getCookie('roleType');
+        const data = await response.json();
         
-        if (id) {
-          const fallbackData = {
-            email: email || 'Unknown',
-            id: id,
-            role: role || 'User',
-            firstName: 'User',
-            lastName: 'User',
+        if (response.ok && data.success) {
+          setUserData(data.settings);
+          setFormData({
             profilePhoto: null,
-            ngdId: 'N/A'
-          };
-          setUserData(fallbackData);
-          console.debug('Set fallback user data:', fallbackData);
+            emergencyContact: data.settings.emergencyContact || ''
+          });
+          setPreviewImage(data.settings.profilePhotoUrl);
+        } else {
+          throw new Error(data.message || 'Failed to load settings');
         }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        toast.error('Failed to load settings');
       } finally {
         setLoading(false);
-        console.debug('User data fetch completed, loading set to false');
       }
     };
 
-    fetchUserData();
-  }, [router]);
+    fetchUserSettings();
+  }, []);
 
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      console.debug('No file selected');
+  // Check for changes
+  useEffect(() => {
+    const changes = 
+      formData.profilePhoto !== null ||
+      formData.emergencyContact !== userData.emergencyContact;
+    
+    setHasChanges(changes);
+  }, [formData, userData]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file
+    if (!file.type.match('image.*')) {
+      setErrors(prev => ({ ...prev, profilePhoto: 'Only image files are allowed' }));
       return;
     }
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Only JPG, PNG, and WebP images are allowed', {
-        duration: 4000,
-        position: 'top-right'
-      });
-      console.debug('Invalid file type:', file.type);
-      return;
-    }
-
-    // Validate file size (5MB)
+    
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('File size must be less than 5MB', {
-        duration: 4000,
-        position: 'top-right'
-      });
-      console.debug('File size too large:', file.size);
+      setErrors(prev => ({ ...prev, profilePhoto: 'File size exceeds 5MB limit' }));
       return;
     }
-
-    setSelectedFile(file);
     
     // Create preview
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreviewUrl(e.target.result);
-      console.debug('Generated preview URL for file:', file.name);
+    reader.onloadend = () => {
+      setPreviewImage(reader.result);
     };
     reader.readAsDataURL(file);
-    console.debug('Selected file:', { name: file.name, size: file.size });
+    
+    setFormData(prev => ({ ...prev, profilePhoto: file }));
+    setErrors(prev => ({ ...prev, profilePhoto: '' }));
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      toast.error('Please select a file first', {
+  const handleEmergencyContactChange = (e) => {
+    const value = e.target.value;
+    setFormData(prev => ({ ...prev, emergencyContact: value }));
+    
+    // Clear error when user types
+    if (errors.emergencyContact) {
+      setErrors(prev => ({ ...prev, emergencyContact: '' }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    // Emergency contact validation (optional field)
+    if (formData.emergencyContact && formData.emergencyContact !== '') {
+      const phoneRegex = /^(017|013|019|014|018|016|015)\d{8}$/;
+      if (!phoneRegex.test(formData.emergencyContact)) {
+        newErrors.emergencyContact = 'Must be 11 digits starting with 017,013,019,014,018,016 or 015';
+      }
+      
+      // Check if emergency contact is same as primary phone
+      if (formData.emergencyContact === userData.phone) {
+        newErrors.emergencyContact = 'Emergency contact cannot be the same as your primary phone number';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('Please fix validation errors before submitting', {
         duration: 4000,
         position: 'top-right'
       });
-      console.debug('Upload attempted without a selected file');
       return;
     }
 
-    setUploading(true);
-    const toastId = toast.loading('Uploading profile photo...', {
-      position: 'top-right'
-    });
-    console.debug('Initiating profile photo upload:', { file: selectedFile.name });
+    if (!hasChanges) {
+      toast.error('No changes detected', {
+        duration: 4000,
+        position: 'top-right'
+      });
+      return;
+    }
 
+    setSubmitting(true);
+    
     try {
-      const formData = new FormData();
-      formData.append('profilePhoto', selectedFile);
+      const formDataToSend = new FormData();
+      
+      if (formData.profilePhoto) {
+        formDataToSend.append('profilePhoto', formData.profilePhoto);
+      }
+      
+      if (formData.emergencyContact !== userData.emergencyContact) {
+        formDataToSend.append('emergencyContact', formData.emergencyContact);
+      }
 
       const response = await fetch('/api/user_dashboard/settings', {
         method: 'PUT',
-        body: formData,
+        body: formDataToSend,
+        credentials: 'include'
       });
 
       const result = await response.json();
 
-      if (response.ok && result.success) {
-        // Update user data with new photo URL
-        setUserData(prev => ({
-          ...prev,
-          profilePhoto: result.photoUrl
-        }));
-        
-        // Clear selection
-        setSelectedFile(null);
-        setPreviewUrl(null);
-        
-        toast.success('Profile photo updated successfully!', {
-          id: toastId,
-          duration: 4000,
-          position: 'top-right',
-          icon: '✅'
-        });
-        console.debug('Profile photo uploaded successfully:', { photoUrl: result.photoUrl });
-      } else {
-        throw new Error(result.message || 'Failed to update profile photo');
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update settings');
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      toast.error(error.message || 'Upload failed. Please try again.', {
-        id: toastId,
-        duration: 4000,
+
+      // Show success message
+      toast.success('Settings updated successfully!', {
+        duration: 5000,
         position: 'top-right',
-        icon: '❌'
+        icon: <FaCheckCircle className="text-green-500" />
       });
+
+      // Refresh user data
+      const refreshResponse = await fetch('/api/user_dashboard/settings', {
+        credentials: 'include'
+      });
+      const refreshData = await refreshResponse.json();
+      
+      if (refreshResponse.ok && refreshData.success) {
+        setUserData(refreshData.settings);
+        setFormData(prev => ({
+          profilePhoto: null,
+          emergencyContact: refreshData.settings.emergencyContact || ''
+        }));
+        setHasChanges(false);
+      }
+      
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      
+      // Check for specific error messages from API
+      if (error.message.includes('already registered')) {
+        toast.error(error.message, {
+          duration: 6000,
+          position: 'top-right',
+          icon: <FaExclamationTriangle className="text-red-500" />
+        });
+      } else {
+        toast.error(error.message || 'Failed to update settings. Please try again.', {
+          duration: 6000,
+          position: 'top-right',
+          icon: <FaExclamationTriangle className="text-red-500" />
+        });
+      }
     } finally {
-      setUploading(false);
-      console.debug('Upload completed, uploading set to false');
+      setSubmitting(false);
     }
   };
 
-  const getInitials = (firstName, lastName) => {
-    const initials = `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase();
-    console.debug('Generated initials:', { firstName, lastName, initials });
-    return initials;
+  const clearEmergencyContact = () => {
+    setFormData(prev => ({ ...prev, emergencyContact: '' }));
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading settings...</p>
-        </div>
-      </div>
-    );
+    if (loading) {
+    return <LoadingSpinner />;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <button
-            onClick={() => {
-              console.debug('Navigating back to dashboard');
-              router.back();
-            }}
-            className="flex items-center text-gray-600 hover:text-gray-800 mb-4 transition-colors"
-          >
-            <FaArrowLeft className="mr-2" />
-            Back to Dashboard
-          </button>
-          
-          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="text-gray-600 mt-2">Manage your account profile and preferences</p>
-        </div>
-
-        <div className="bg-white rounded shadow-lg overflow-hidden border border-gray-200">
-          <div className="p-6 sm:p-8">
-            <div className="flex flex-col md:flex-row gap-8">
-              {/* Profile Photo Section */}
-              <div className="md:w-1/3">
-                <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
-                  <FaUser className="mr-2 text-blue-600" />
-                  Profile Photo
-                </h2>
-                
-                <div className="flex flex-col items-center">
-                  {/* Current Profile Photo */}
-                  <div className="relative mb-6">
-                    <div className="w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg">
-                      {userData?.profilePhoto ? (
-                        <Image 
-                          src={userData.profilePhoto} 
-                          alt="Profile" 
-                          width={128}
-                          height={128}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.parentElement.innerHTML = `
-                              <span class="text-2xl font-bold text-gray-700">
-                                ${getInitials(userData.firstName, userData.lastName)}
-                              </span>
-                            `;
-                            console.debug('Profile photo failed to load, showing initials');
-                          }}
-                        />
-                      ) : (
-                        <span className="text-2xl font-bold text-gray-700">
-                          {getInitials(userData.firstName, userData.lastName)}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Camera icon overlay */}
-                    <label 
-                      htmlFor="profilePhoto"
-                      className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 transition-colors shadow-md"
-                    >
-                      <FaCamera className="text-sm" />
-                      <input
-                        id="profilePhoto"
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileSelect}
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
-                  {/* File selection info */}
-                  {selectedFile && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="w-full mb-4"
-                    >
-                      <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-blue-800 truncate">
-                            {selectedFile.name}
-                          </span>
-                          <span className="text-xs text-blue-600">
-                            {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Upload button */}
-                  <button
-                    onClick={handleUpload}
-                    disabled={!selectedFile || uploading}
-                    className={`w-full px-4 py-2 rounded font-medium transition-all ${
-                      !selectedFile || uploading
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-                    }`}
-                  >
-                    {uploading ? (
-                      <span className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Uploading...
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center">
-                        <FaCheck className="mr-2" />
-                        Update Photo
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Help text */}
-                  <p className="text-xs text-gray-500 mt-4 text-center">
-                    Supported formats: JPG, PNG, WebP
-                    <br />
-                    Max file size: 5MB
-                  </p>
-                </div>
-              </div>
-
-              {/* Preview Section */}
-              <div className="md:w-2/3 border-l border-gray-200 md:pl-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Preview</h3>
-                
-                {previewUrl ? (
-                  <div className="flex flex-col items-center">
-                    <div className="w-48 h-48 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg mb-4">
-                      <Image 
-                        src={previewUrl} 
-                        alt="Preview" 
-                        width={192}
-                        height={192}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <p className="text-sm text-gray-600 text-center">
-                      This is how your new profile photo will appear
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded border-2 border-dashed border-gray-300">
-                    <FaCamera className="text-gray-400 text-3xl mb-2" />
-                    <p className="text-gray-500 text-center">
-                      Select a new photo to see preview
-                    </p>
-                  </div>
-                )}
-
-                {/* User Info */}
-                <div className="mt-8 p-6 bg-gray-50 rounded border border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-4 text-lg">Account Information</h4>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 font-medium">Name:</span>
-                      <span className="font-bold text-gray-900">
-                        {userData?.firstName} {userData?.lastName}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 font-medium">Email:</span>
-                      <span className="font-bold text-gray-900">{userData?.email}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 font-medium">NGD ID:</span>
-                      <span className="font-bold text-gray-900">{userData?.ngdId || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 font-medium">User ID:</span>
-                      <span className="font-bold text-gray-900">{userData?.id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-700 font-medium">Role:</span>
-                      <span className="font-bold text-gray-900 capitalize">{userData?.role?.toLowerCase()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Security Notice */}
-                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded">
-                  <div className="flex items-start">
-                    <FaExclamationTriangle className="text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-medium text-yellow-800">Profile Visibility</h4>
-                      <p className="text-sm text-yellow-700 mt-1">
-                        Your profile photo may be visible to other team members in the organization.
-                        Please ensure your photo is professional and appropriate for workplace use.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center mb-4 sm:mb-0">
+              <button
+                onClick={() => router.push('/user_dashboard')}
+                className="mr-4 p-2 bg-white rounded shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+              >
+                <FaArrowLeft className="text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
+                  Account Settings
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  Manage your profile photo and emergency contact information
+                </p>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Navigation & Info */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded shadow-sm border border-gray-200 p-6 mb-6"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <FaUserCircle className="mr-2 text-blue-500" />
+                Quick Actions
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => router.push('/user_dashboard')}
+                  className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="font-medium text-gray-800">Back to Dashboard</div>
+                  <div className="text-sm text-gray-600">Return to main dashboard</div>
+                </button>
+                
+                <button
+                  onClick={() => router.push('/user_dashboard/profile')}
+                  className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="font-medium text-gray-800">View Profile</div>
+                  <div className="text-sm text-gray-600">See your complete profile</div>
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Security Info */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-blue-50 rounded border border-blue-200 p-6"
+            >
+              <h3 className="text-lg font-semibold text-blue-800 mb-3 flex items-center">
+                <FaShieldAlt className="mr-2" />
+                Security Notes
+              </h3>
+              <ul className="space-y-2 text-sm text-blue-700">
+                <li className="flex items-start">
+                  <span className="text-blue-500 mr-2">•</span>
+                  Profile photos are visible to authorized personnel only
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-500 mr-2">•</span>
+                  Emergency contact should be different from your primary phone
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-500 mr-2">•</span>
+                  All changes are logged for security purposes
+                </li>
+                <li className="flex items-start">
+                  <span className="text-blue-500 mr-2">•</span>
+                  You will receive notifications for important changes
+                </li>
+              </ul>
+            </motion.div>
+          </div>
+
+          {/* Right Column - Settings Form */}
+          <div className="lg:col-span-2">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded shadow-sm border border-gray-200 overflow-hidden"
+            >
+              <form onSubmit={handleSubmit} className="p-6">
+                {/* Profile Photo Section */}
+                <div className="mb-8 pb-6 border-b border-gray-200">
+                  <h3 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                    <FaImage className="mr-3 text-blue-500" />
+                    Profile Photo
+                  </h3>
+                  
+                  <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+                    {/* Current Photo */}
+                    <div className="flex flex-col items-center">
+                      <div className="relative mb-4">
+                        {previewImage ? (
+                          <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg">
+                            <Image 
+                              src={previewImage}
+                              alt="Profile preview"
+                              fill
+                              style={{ objectFit: 'cover' }}
+                              unoptimized
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = '/api/storage/user_dp/default_DP.png';
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-white flex items-center justify-center shadow-lg">
+                            <FaUser className="text-gray-400 text-4xl" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium flex items-center shadow-md transition-colors">
+                        <FaImage className="mr-2" />
+                        Change Photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Photo Guidelines */}
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-700 mb-3">Photo Guidelines</h4>
+                      <ul className="space-y-2 text-sm text-gray-600">
+                        <li className="flex items-center">
+                          <FaCheckCircle className="text-green-500 mr-2 flex-shrink-0" />
+                          Use a clear, recent photo of yourself
+                        </li>
+                        <li className="flex items-center">
+                          <FaCheckCircle className="text-green-500 mr-2 flex-shrink-0" />
+                          Supported formats: JPG, PNG, WebP
+                        </li>
+                        <li className="flex items-center">
+                          <FaCheckCircle className="text-green-500 mr-2 flex-shrink-0" />
+                          Maximum file size: 5MB
+                        </li>
+                        <li className="flex items-center">
+                          <FaCheckCircle className="text-green-500 mr-2 flex-shrink-0" />
+                          Square images work best
+                        </li>
+                      </ul>
+                      
+                      {errors.profilePhoto && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+                          <p className="text-red-700 text-sm flex items-center">
+                            <FaExclamationTriangle className="mr-2 flex-shrink-0" />
+                            {errors.profilePhoto}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Emergency Contact Section */}
+                <div className="mb-8">
+                  <h3 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
+                    <FaMobileAlt className="mr-3 text-blue-500" />
+                    Emergency Contact
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Current Phone (Read-only) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <FaPhone className="mr-2 text-gray-500" />
+                        Primary Phone Number
+                      </label>
+                      <div className="w-full px-4 py-3 rounded border border-gray-300 bg-gray-50 text-gray-600 flex items-center">
+                        <FaIdCard className="mr-3 text-gray-500 flex-shrink-0" />
+                        <span>{userData.phone || 'Not set'}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Primary phone cannot be changed here
+                      </p>
+                    </div>
+
+                    {/* Emergency Contact Input */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <FaMobileAlt className="mr-2 text-blue-500" />
+                        Emergency Contact Number
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          value={formData.emergencyContact}
+                          onChange={handleEmergencyContactChange}
+                          placeholder="017XXXXXXXX (Optional)"
+                          pattern="(017|013|019|014|018|016|015)\d{8}"
+                          className={`w-full px-4 py-3 rounded border ${
+                            errors.emergencyContact ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                          } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 placeholder-gray-400 pr-10`}
+                        />
+                        {formData.emergencyContact && (
+                          <button
+                            type="button"
+                            onClick={clearEmergencyContact}
+                            className="absolute right-3 top-3.5 text-gray-400 hover:text-red-500 transition-colors"
+                            title="Clear emergency contact"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      
+                      {errors.emergencyContact ? (
+                        <p className="mt-2 text-sm text-red-600 flex items-center">
+                          <FaExclamationTriangle className="mr-1 flex-shrink-0" /> 
+                          {errors.emergencyContact}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Optional - Must be different from your primary phone
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact Guidelines */}
+                  <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200">
+                    <h4 className="font-medium text-blue-800 mb-2 flex items-center">
+                      <FaShieldAlt className="mr-2" />
+                      About Emergency Contact
+                    </h4>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>• Should be a trusted family member or friend</li>
+                      <li>• Must be a different number from your primary phone</li>
+                      <li>• Will be used only in case of emergencies</li>
+                      <li>• Cannot be the same as any other user&apos;s primary or emergency contact</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Current Settings Summary */}
+                <div className="mb-8 p-4 bg-gray-50 rounded border border-gray-200">
+                  <h4 className="font-medium text-gray-700 mb-3">Current Settings</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Profile Photo:</span>
+                      <span className="ml-2 text-gray-800">
+                        {formData.profilePhoto ? 'New photo selected' : 'Current photo'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Emergency Contact:</span>
+                      <span className="ml-2 text-gray-800">
+                        {formData.emergencyContact || userData.emergencyContact || 'Not set'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-4 pt-6 border-t border-gray-200">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={() => router.push('/user_dashboard')}
+                    className="px-6 py-3 border border-gray-300 text-base font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </motion.button>
+                  
+                  <motion.button
+                    whileHover={{ scale: hasChanges ? 1.05 : 1 }}
+                    whileTap={{ scale: hasChanges ? 0.98 : 1 }}
+                    type="submit"
+                    className={`flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all ${
+                      hasChanges 
+                        ? 'bg-blue-600 hover:bg-blue-700 shadow-md' 
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={submitting || !hasChanges}
+                  >
+                    {submitting ? (
+                      <>
+                        <FaSpinner className="animate-spin mr-2" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <FaSave className="mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              </form>
+            </motion.div>
+
+            {/* Change History */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-6 bg-white rounded shadow-sm border border-gray-200 p-6"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <FaShieldAlt className="mr-2 text-green-500" />
+                Security Information
+              </h3>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>
+                  All changes to your account settings are securely logged and monitored. 
+                  You will receive notifications for any important updates to your account.
+                </p>
+                <p>
+                  If you notice any unauthorized changes, please contact the SOC team immediately.
+                </p>
+              </div>
+            </motion.div>
           </div>
         </div>
       </div>

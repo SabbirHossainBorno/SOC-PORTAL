@@ -1,4 +1,4 @@
-//app/api/admin_dashboard/role_permission/role_management/menu_structure/route.js
+// app/api/admin_dashboard/role_permission/role_management/menu_structure/route.js
 import { NextResponse } from 'next/server';
 import { query } from '../../../../../../lib/db';
 import logger from '../../../../../../lib/logger';
@@ -43,16 +43,33 @@ export async function GET() {
         ]
       },
       {
-        path: '/user_dashboard/documents',
-        label: 'Document Hub',
-        icon: 'FaFileAlt',
-        children: [
-          { path: '/user_dashboard/document_hub/access_form_tracker', label: 'Access Form Tracker' },
-          { path: '/user_dashboard/document_hub/access_form_log', label: 'Access Form Log' },
-          { path: '/user_dashboard/document_hub/other_document_tracker', label: 'Document Tracker' },
-          { path: '/user_dashboard/document_hub/other_document_log', label: 'Document Log' }
-        ]
-      },
+      path: '/user_dashboard/documents',
+      label: 'Document Hub',
+      icon: 'FaFileAlt',
+      children: [
+        { path: '/user_dashboard/document_hub/access_form_tracker', label: 'Access Form Tracker' },
+        { path: '/user_dashboard/document_hub/access_form_log', label: 'Access Form Log' },
+        // Hidden edit routes - only for permission management (ALL BASE PATHS)
+        { 
+          path: '/user_dashboard/document_hub/access_form_edit', 
+          label: 'Edit Access Form', 
+          isHidden: true 
+        },
+        { path: '/user_dashboard/document_hub/other_document_tracker', label: 'Document Tracker' },
+        { path: '/user_dashboard/document_hub/other_document_log', label: 'Document Log' },
+        // Hidden edit routes - only for permission management (ALL BASE PATHS)
+        { 
+          path: '/user_dashboard/document_hub/other_document_tracker/device_tracker/edit', // CHANGED: removed [dt_id]
+          label: 'Edit Device Tracker', 
+          isHidden: true 
+        },
+        { 
+          path: '/user_dashboard/document_hub/other_document_tracker/sim_tracker/edit', 
+          label: 'Edit SIM Tracker', 
+          isHidden: true 
+        }
+      ]
+    },
       {
         path: '/user_dashboard/reports',
         label: 'Performance Reports',

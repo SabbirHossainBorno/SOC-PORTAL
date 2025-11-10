@@ -241,106 +241,114 @@ export default function RoleManagement() {
   const stats = getPermissionStats();
 
   const renderMenuTree = (menu, level = 0) => {
-    return menu.map(item => {
-      const hasChildren = item.children && item.children.length > 0;
-      const isAllowed = permissions[item.path] === true;
-      const isExpanded = expandedMenus[item.path];
-      
-      return (
-        <div key={item.path} className="mb-1">
-          {/* Parent Menu Item with hierarchical indentation */}
-          <div 
-            className={`
-              flex items-center justify-between p-4 transition-all duration-200 border-l-4
-              ${isAllowed 
-                ? 'border-green-500 bg-green-50 hover:bg-green-100' 
-                : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-              }
-              ${level === 0 ? 'ml-0' : level === 1 ? 'ml-6' : level === 2 ? 'ml-12' : 'ml-16'}
-            `}
-            style={{ 
-              borderLeftWidth: '4px',
-              marginLeft: `${level * 24}px`
-            }}
-          >
-            <div className="flex items-center space-x-3 flex-1">
-              {hasChildren && (
-                <button
-                  onClick={() => toggleMenu(item.path)}
-                  className={`p-1 rounded transition-colors ${
-                    isAllowed ? 'text-green-600 hover:bg-green-200' : 'text-gray-500 hover:bg-gray-200'
-                  }`}
-                >
-                  {isExpanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
-                </button>
-              )}
-              {!hasChildren && (
-                <div className="w-5 flex justify-center">
-                  <FaCaretRight size={12} className="text-gray-400" />
-                </div>
-              )}
-              
-              <div className={`p-2 rounded ${
-                isAllowed 
-                  ? 'bg-green-100 text-green-600' 
-                  : 'bg-gray-100 text-gray-400'
-              }`}>
-                {hasChildren ? (
-                  isExpanded ? <FaFolderOpen size={14} /> : <FaFolder size={14} />
-                ) : (
-                  <FaCaretRight size={14} />
-                )}
+  return menu.map(item => {
+    const hasChildren = item.children && item.children.length > 0;
+    const isAllowed = permissions[item.path] === true;
+    const isExpanded = expandedMenus[item.path];
+    const isHidden = item.isHidden; // Check if route is hidden
+    
+    return (
+      <div key={item.path} className="mb-1">
+        {/* Parent Menu Item */}
+        <div 
+          className={`
+            flex items-center justify-between p-4 transition-all duration-200 border-l-4
+            ${isAllowed 
+              ? 'border-green-500 bg-green-50 hover:bg-green-100' 
+              : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+            }
+            ${isHidden ? 'opacity-70 bg-blue-50 border-blue-300' : ''}
+            ${level === 0 ? 'ml-0' : level === 1 ? 'ml-6' : level === 2 ? 'ml-12' : 'ml-16'}
+          `}
+          style={{ 
+            borderLeftWidth: '4px',
+            marginLeft: `${level * 24}px`
+          }}
+        >
+          <div className="flex items-center space-x-3 flex-1">
+            {hasChildren && (
+              <button
+                onClick={() => toggleMenu(item.path)}
+                className={`p-1 rounded transition-colors ${
+                  isAllowed ? 'text-green-600 hover:bg-green-200' : 'text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {isExpanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
+              </button>
+            )}
+            {!hasChildren && (
+              <div className="w-5 flex justify-center">
+                <FaCaretRight size={12} className="text-gray-400" />
               </div>
-              
-              <div className="flex-1">
-                <h3 className={`font-medium ${
-                  isAllowed ? 'text-gray-900' : 'text-gray-700'
-                }`}>
-                  {item.label}
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5 font-mono">
-                  {item.path}
-                </p>
-              </div>
+            )}
+            
+            <div className={`p-2 rounded ${
+              isAllowed 
+                ? 'bg-green-100 text-green-600' 
+                : 'bg-gray-100 text-gray-400'
+            } ${isHidden ? 'bg-blue-100 text-blue-600' : ''}`}>
+              {hasChildren ? (
+                isExpanded ? <FaFolderOpen size={14} /> : <FaFolder size={14} />
+              ) : (
+                isHidden ? <FaEyeSlash size={14} /> : <FaCaretRight size={14} />
+              )}
             </div>
             
-            <div className="flex items-center space-x-3">
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                isAllowed 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {isAllowed ? 'Allowed' : 'Denied'}
-              </span>
-              
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isAllowed}
-                  onChange={(e) => handlePermissionChange(item.path, e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className={`w-12 h-6 rounded-full peer ${
-                  isAllowed ? 'bg-green-500' : 'bg-gray-300'
-                } peer-focus:ring-2 peer-focus:ring-green-300 transition-colors duration-200`}>
-                  <div className={`absolute top-1 left-1 bg-white rounded-full h-4 w-4 transition-transform duration-200 ${
-                    isAllowed ? 'transform translate-x-6' : ''
-                  }`}></div>
-                </div>
-              </label>
+            <div className="flex-1">
+              <h3 className={`font-medium ${
+                isAllowed ? 'text-gray-900' : 'text-gray-700'
+              } ${isHidden ? 'text-blue-800' : ''}`}>
+                {item.label}
+                {isHidden && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                    <FaEyeSlash className="mr-1" size={8} />
+                    Hidden
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5 font-mono">
+                {item.path}
+              </p>
             </div>
           </div>
-
-          {/* Children Menus */}
-          {hasChildren && isExpanded && (
-            <div className="mt-1">
-              {renderMenuTree(item.children, level + 1)}
-            </div>
-          )}
+          
+          <div className="flex items-center space-x-3">
+            <span className={`px-2 py-1 rounded text-xs font-medium ${
+              isAllowed 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800'
+            } ${isHidden ? 'bg-blue-100 text-blue-800' : ''}`}>
+              {isAllowed ? 'Allowed' : 'Denied'}
+            </span>
+            
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isAllowed}
+                onChange={(e) => handlePermissionChange(item.path, e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className={`w-12 h-6 rounded-full peer ${
+                isAllowed ? 'bg-green-500' : 'bg-gray-300'
+              } peer-focus:ring-2 peer-focus:ring-green-300 transition-colors duration-200`}>
+                <div className={`absolute top-1 left-1 bg-white rounded-full h-4 w-4 transition-transform duration-200 ${
+                  isAllowed ? 'transform translate-x-6' : ''
+                }`}></div>
+              </div>
+            </label>
+          </div>
         </div>
-      );
-    });
-  };
+
+        {/* Children Menus */}
+        {hasChildren && isExpanded && (
+          <div className="mt-1">
+            {renderMenuTree(item.children, level + 1)}
+          </div>
+        )}
+      </div>
+    );
+  });
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50/30 pb-8">

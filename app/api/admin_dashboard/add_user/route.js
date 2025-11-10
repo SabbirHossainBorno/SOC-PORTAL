@@ -9,7 +9,7 @@ import fs from 'fs/promises';
 import nodemailer from 'nodemailer';
 import { getClientIP } from '../../../../lib/utils/ipUtils';
 
-// Format Telegram alert message
+// Enhanced Telegram alert message formatting
 const formatAlertMessage = (action, email, ipAddress, userAgent, additionalInfo = {}) => {
   const time = new Date().toLocaleString('en-BD', { 
     timeZone: 'Asia/Dhaka',
@@ -27,21 +27,34 @@ const formatAlertMessage = (action, email, ipAddress, userAgent, additionalInfo 
   const role = additionalInfo.role || 'N/A';
   const status = additionalInfo.status || 'Completed';
   const eid = additionalInfo.eid || 'N/A';
+  const rosterUpdate = additionalInfo.rosterUpdate || 'N/A';
 
-  const title = `👤 [ SOC PORTAL | USER ${action.toUpperCase()} ]`;
-  const statusEmoji = status.includes('Failed') ? '❌' : '✅';
+  // Define emojis based on status and actions
+  const statusEmoji = status.includes('Failed') ? '🔴' : '🟢';
+  const rosterEmoji = rosterUpdate === 'created' ? '📊' : 
+                     rosterUpdate === 'exists' ? 'ℹ️' : 
+                     rosterUpdate === 'skipped' ? '⏭️' : '❓';
 
-  const message = `${title}
+  const rosterStatusText = rosterUpdate === 'created' ? 'Roster Column Created' :
+                          rosterUpdate === 'exists' ? 'Roster Column Exists' :
+                          rosterUpdate === 'skipped' ? 'Roster Update Skipped' : 'Unknown';
+
+  // Professional formatted message with perfect alignment
+  const message = `🎯 **SOC PORTAL | USER ${action.toUpperCase()} ALERT**
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 User Email     : ${email}
-👤 User ID        : ${userId}
-👥 Role           : ${role}
-👑 Admin ID       : ${adminId}
-🌐 IP Address     : ${ipAddress}
-🖥️ Device Info    : ${userAgent}
-🔖 EID            : ${eid}
-🕒 Time           : ${time}
-${statusEmoji} Status         : ${status}`;
+👤 **USER INFORMATION**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 **Email**                  : ${email}
+🆔 **User ID**               : ${userId}
+🎯 **Role**                     : ${role}
+📋 **Roster Column**  : ${rosterEmoji} ${rosterStatusText}
+🆔 **Admin ID**            : ${adminId}
+🔐 **EID**                       : ${eid}
+🌍 **IP Address**           : ${ipAddress}
+💻 **User Agent**          : ${userAgent}
+🕐 **Timestamp**         : ${time}
+${statusEmoji} **Status**                  : **${status}**`;
 
   return message;
 };
@@ -75,7 +88,9 @@ const generateNotificationId = async (prefix, table, client) => {
   }
 };
 
-// Save profile photo
+// UPDATED: Save profile photo with proper permissions
+// Replace the saveProfilePhoto function in your route.js with this:
+
 const saveProfilePhoto = async (file, userId) => {
   try {
     // Validate file
@@ -94,34 +109,136 @@ const saveProfilePhoto = async (file, userId) => {
       throw new Error('File size exceeds 5MB limit');
     }
     
-    // Create filename and path
+    // Create filename and path - UPDATED PATH
     const ext = path.extname(file.name);
     const filename = `${userId}_DP${ext}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'storage', 'user_dp');
+    const uploadDir = path.join(process.cwd(), 'storage', 'user_dp'); // CHANGED
     const filePath = path.join(uploadDir, filename);
     
-    // Ensure directory exists
-    await fs.mkdir(uploadDir, { recursive: true });
+    console.log('=== FILE UPLOAD DEBUG ===');
+    console.log('New storage location:', {
+      uploadDir: uploadDir,
+      filename: filename,
+      filePath: filePath
+    });
+
+    logger.info('Initiating profile photo upload to new storage location', {
+      meta: {
+        taskName: 'FileUpload',
+        details: `Uploading profile photo for user ${userId} to new storage path`,
+        userId: userId,
+        uploadDir: uploadDir,
+        filename: filename,
+        action: 'upload_initiated'
+      }
+    });
+    
+    // Ensure directory exists with proper permissions
+    try {
+      await fs.access(uploadDir);
+      console.log('Directory already exists');
+    } catch (error) {
+      console.log('Creating directory:', uploadDir);
+      await fs.mkdir(uploadDir, { recursive: true, mode: 0o755 });
+    }
     
     // Convert to buffer and save
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(filePath, buffer);
+    await fs.chmod(filePath, 0o644);
+
+    // Force sync
+    const fd = await fs.open(filePath, 'r+');
+    await new Promise((resolve, reject) => {
+      require('fs').fsync(fd.fd, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    await fd.close();
     
-    return `/storage/user_dp/${filename}`;
+    // CRITICAL FIX: Change ownership to nginx user
+    try {
+      const { execSync } = require('child_process');
+      // Get nginx user's UID and GID
+      const nginxUid = execSync('id -u nginx').toString().trim();
+      const nginxGid = execSync('id -g nginx').toString().trim();
+      
+      await fs.chown(filePath, parseInt(nginxUid), parseInt(nginxGid));
+      console.log(`File ownership changed to nginx (${nginxUid}:${nginxGid})`);
+    } catch (chownError) {
+      console.warn('Could not change file ownership:', chownError.message);
+    }
+    
+    // Force file system sync
+    try {
+      const { execSync } = require('child_process');
+      execSync('sync', { stdio: 'inherit' });
+      console.log('File system synced');
+    } catch (syncError) {
+      console.warn('File system sync failed:', syncError.message);
+    }
+    
+    console.log('File saved successfully:', filePath);
+    
+    // Return URL with cache-busting timestamp
+    // Return NEW URL format
+    const photoUrl = `/api/storage/user_dp/${filename}?t=${Date.now()}`; // CHANGED
+    
+    logger.info('Profile photo uploaded successfully to new location', {
+      meta: {
+        taskName: 'FileUpload',
+        details: `Profile photo saved and accessible via: ${photoUrl}`,
+        userId: userId,
+        photoUrl: photoUrl,
+        action: 'upload_completed'
+      }
+    });
+    
+    return photoUrl;
+    
   } catch (error) {
+    logger.error('Profile photo upload failed in new storage location', {
+      meta: {
+        taskName: 'FileUpload',
+        details: `Upload failed: ${error.message}`,
+        userId: userId,
+        error: error.message,
+        action: 'upload_failed'
+      }
+    });
     throw new Error(`Profile photo save failed: ${error.message}`);
   }
 };
 
-// Add new column to roster_schedule table for new user
-const addUserColumnToRosterSchedule = async (client, shortName) => {
+// Add new column to roster_schedule table ONLY for SOC role users
+const addUserColumnToRosterSchedule = async (client, shortName, roleType, userId) => {
   try {
+    // Only proceed if user role is SOC
+    if (roleType !== 'SOC') {
+      logger.info('Roster schedule table update bypassed - user role is not SOC', {
+        meta: {
+          taskName: 'RosterTableUpdate',
+          details: `User ${userId} has ${roleType} role - roster column creation only required for SOC role users`,
+          userId: userId,
+          userRole: roleType,
+          action: 'skipped',
+          reason: 'non_soc_role'
+        }
+      });
+      return { success: true, action: 'skipped', reason: 'Non-SOC role' };
+    }
+
     const columnName = shortName.toLowerCase();
     
-    logger.info('Checking roster_schedule table for new user column', {
+    logger.info('Initiating roster schedule column verification for SOC role user', {
       meta: {
         taskName: 'RosterTableUpdate',
-        details: `Checking if column '${columnName}' exists in roster_schedule table`
+        details: `Verifying column existence '${columnName}' in roster_schedule table for SOC user ${userId}`,
+        userId: userId,
+        columnName: columnName,
+        userRole: roleType,
+        action: 'verification_started'
       }
     });
 
@@ -135,20 +252,28 @@ const addUserColumnToRosterSchedule = async (client, shortName) => {
     const columnCheck = await client.query(checkColumnQuery, [columnName]);
     
     if (columnCheck.rows.length > 0) {
-      logger.info('Column already exists in roster_schedule table', {
+      logger.info('Roster schedule column pre-exists - no modification required', {
         meta: {
           taskName: 'RosterTableUpdate',
-          details: `Column '${columnName}' already exists in roster_schedule table, no action needed`
+          details: `Column '${columnName}' already present in roster_schedule table for SOC user ${userId}`,
+          userId: userId,
+          columnName: columnName,
+          action: 'exists',
+          reason: 'column_already_exists'
         }
       });
       return { success: true, action: 'exists', columnName };
     }
 
-    // Column doesn't exist, so add it
-    logger.info('Adding new column to roster_schedule table', {
+    // Column doesn't exist, proceed with creation for SOC user
+    logger.info('Creating new roster schedule column for SOC role user', {
       meta: {
         taskName: 'RosterTableUpdate',
-        details: `Adding column '${columnName}' to roster_schedule table`
+        details: `Executing DDL: ALTER TABLE roster_schedule ADD COLUMN ${columnName} VARCHAR(20)`,
+        userId: userId,
+        columnName: columnName,
+        userRole: roleType,
+        action: 'creation_initiated'
       }
     });
 
@@ -159,20 +284,29 @@ const addUserColumnToRosterSchedule = async (client, shortName) => {
     
     await client.query(alterTableQuery);
 
-    logger.info('Successfully added new column to roster_schedule table', {
+    logger.info('Roster schedule table successfully updated with new SOC user column', {
       meta: {
         taskName: 'RosterTableUpdate',
-        details: `Column '${columnName}' successfully added to roster_schedule table`
+        details: `Column '${columnName}' successfully created in roster_schedule table for SOC user ${userId}`,
+        userId: userId,
+        columnName: columnName,
+        action: 'created',
+        userRole: roleType,
+        result: 'success'
       }
     });
 
     return { success: true, action: 'created', columnName };
     
   } catch (error) {
-    logger.error('Failed to add column to roster_schedule table', {
+    logger.error('Roster schedule column creation failed for SOC user', {
       meta: {
         taskName: 'RosterTableUpdate',
-        details: `Error adding column '${shortName.toLowerCase()}': ${error.message}`,
+        details: `DDL execution failed for column '${shortName.toLowerCase()}': ${error.message}`,
+        userId: userId,
+        columnName: shortName.toLowerCase(),
+        userRole: roleType,
+        action: 'creation_failed',
         error: error.message,
         stack: error.stack
       }
@@ -227,14 +361,16 @@ export async function POST(request) {
   const adminId = request.cookies.get('socPortalId')?.value || 'Unknown';
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
   
-  logger.info('User creation initiated', {
+  logger.info('User account creation workflow initiated', {
     meta: {
       eid,
       sid: sessionId,
-      taskName: 'CreateUser',
-      details: `Admin ${adminId} creating new user`,
-      adminId,
-      ipAddress
+      taskName: 'UserCreationWorkflow',
+      details: `Admin ${adminId} initiating new user creation process`,
+      adminId: adminId,
+      ipAddress: ipAddress,
+      userAgent: userAgent.substring(0, 100),
+      action: 'workflow_started'
     }
   });
 
@@ -273,15 +409,17 @@ export async function POST(request) {
       .map(([key]) => key);
     
     if (missingFields.length > 0) {
-      const message = `Missing required fields: ${missingFields.join(', ')}`;
-      logger.warn('Validation failed', {
+      const message = `Required field validation failed: ${missingFields.join(', ')}`;
+      logger.warn('User creation validation failed - missing required fields', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
           details: message,
-          missingFields,
-          ipAddress
+          missingFields: missingFields,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'validation_failed'
         }
       });
       
@@ -294,14 +432,17 @@ export async function POST(request) {
     // Validate email format and domain
     const emailRegex = /^[^\s@]+@nagad\.com\.bd$/;
     if (!emailRegex.test(email)) {
-      const details = `Invalid email: ${email} - Must be @nagad.com.bd domain`;
-      logger.warn('Invalid email format', {
+      const details = `Email domain validation failed: ${email} - Must be @nagad.com.bd domain`;
+      logger.warn('Email domain validation failed', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details,
-          ipAddress
+          details: details,
+          email: email,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'email_validation_failed'
         }
       });
       
@@ -314,13 +455,16 @@ export async function POST(request) {
     // Add NGD ID validation
     const ngdIdRegex = /^NGD\d{6}$/;
     if (!ngdIdRegex.test(ngdId)) {
-      logger.warn('Invalid NGD ID format', {
+      logger.warn('NGD ID format validation failed', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid NGD ID: ${ngdId} - Must be NGD followed by 6 digits`,
-          ipAddress
+          details: `NGD ID format invalid: ${ngdId} - Required format: NGD followed by 6 digits`,
+          ngdId: ngdId,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'ngdid_validation_failed'
         }
       });
       
@@ -333,13 +477,16 @@ export async function POST(request) {
     // Add phone number validation
     const phoneRegex = /^(017|013|019|014|018|016|015)\d{8}$/;
     if (!phoneRegex.test(phone)) {
-      logger.warn('Invalid phone number', {
+      logger.warn('Phone number format validation failed', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid phone: ${phone} - Must be 11 digits starting with valid prefix`,
-          ipAddress
+          details: `Phone number format invalid: ${phone} - Must be 11 digits with valid Bangladeshi prefix`,
+          phone: phone,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'phone_validation_failed'
         }
       });
       
@@ -353,13 +500,16 @@ export async function POST(request) {
     }
 
     if (emergencyContact && !phoneRegex.test(emergencyContact)) {
-        logger.warn('Invalid emergency contact', {
+        logger.warn('Emergency contact format validation failed', {
           meta: {
             eid,
             sid: sessionId,
             taskName: 'Validation',
-            details: `Invalid emergency contact: ${emergencyContact} - Must be 11 digits starting with valid prefix`,
-            ipAddress
+            details: `Emergency contact format invalid: ${emergencyContact} - Must be 11 digits with valid prefix`,
+            emergencyContact: emergencyContact,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'emergency_contact_validation_failed'
           }
         });
         
@@ -375,13 +525,15 @@ export async function POST(request) {
     // Validate password strength (without special character requirement)
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!passwordRegex.test(password)) {
-      logger.warn('Weak password', {
+      logger.warn('Password complexity validation failed', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: 'Password does not meet complexity requirements',
-          ipAddress
+          details: 'Password does not meet complexity requirements: 8+ chars, uppercase, lowercase, number',
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'password_validation_failed'
         }
       });
       
@@ -397,13 +549,17 @@ export async function POST(request) {
     // Validate role type
     const validRoles = ['SOC', 'OPS', 'INTERN', 'CTO'];
     if (!validRoles.includes(roleType)) {
-      logger.warn('Invalid role type', {
+      logger.warn('User role type validation failed', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Invalid role: ${roleType}`,
-          ipAddress
+          details: `Invalid role type specified: ${roleType}`,
+          roleType: roleType,
+          validRoles: validRoles,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'role_validation_failed'
         }
       });
       
@@ -419,6 +575,20 @@ export async function POST(request) {
     // Age must be at least 18
     const age = today.getFullYear() - dateOfBirth.getFullYear();
     if (age < 18) {
+      logger.warn('Date of birth validation failed - user under 18 years', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'Validation',
+          details: `User age calculation: ${age} years - Minimum 18 years required`,
+          dateOfBirth: dateOfBirth,
+          calculatedAge: age,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'age_validation_failed'
+        }
+      });
+      
       return NextResponse.json(
         { success: false, message: 'User must be at least 18 years old' },
         { status: 400 }
@@ -427,6 +597,20 @@ export async function POST(request) {
     
     // Joining date can't be in future
     if (joiningDate > today) {
+      logger.warn('Joining date validation failed - future date not allowed', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'Validation',
+          details: `Joining date ${joiningDate} is in the future`,
+          joiningDate: joiningDate,
+          currentDate: today,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'joining_date_validation_failed'
+        }
+      });
+      
       return NextResponse.json(
         { success: false, message: 'Joining date cannot be in the future' },
         { status: 400 }
@@ -436,6 +620,20 @@ export async function POST(request) {
     // Resign date validation
     if (resignDate) {
       if (resignDate < joiningDate) {
+        logger.warn('Resign date validation failed - before joining date', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'Validation',
+            details: `Resign date ${resignDate} is before joining date ${joiningDate}`,
+            resignDate: resignDate,
+            joiningDate: joiningDate,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'resign_date_validation_failed'
+          }
+        });
+        
         return NextResponse.json(
           { success: false, message: 'Resign date cannot be before joining date' },
           { status: 400 }
@@ -447,6 +645,18 @@ export async function POST(request) {
     client = await getDbConnection().connect();
     await client.query('BEGIN');
 
+    logger.info('Database transaction initiated for user creation', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'DatabaseTransaction',
+        details: 'Beginning database transaction for user creation process',
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'transaction_started'
+      }
+    });
+
     // Check for existing email using transaction client
     const emailCheck = await client.query(
       `SELECT * FROM user_info WHERE email = $1`,
@@ -455,13 +665,16 @@ export async function POST(request) {
     
     if (emailCheck.rows.length > 0) {
       await client.query('ROLLBACK');
-      logger.warn('Email conflict', {
+      logger.warn('Email uniqueness validation failed - email already registered', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `Email already exists: ${email}`,
-          ipAddress
+          details: `Email ${email} already exists in system`,
+          email: email,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'email_uniqueness_failed'
         }
       });
       
@@ -479,13 +692,16 @@ export async function POST(request) {
     
     if (ngdCheck.rows.length > 0) {
       await client.query('ROLLBACK');
-      logger.warn('NGD ID conflict', {
+      logger.warn('NGD ID uniqueness validation failed - NGD ID already registered', {
         meta: {
           eid,
           sid: sessionId,
           taskName: 'Validation',
-          details: `NGD ID already exists: ${ngdId}`,
-          ipAddress
+          details: `NGD ID ${ngdId} already exists in system`,
+          ngdId: ngdId,
+          adminId: adminId,
+          ipAddress: ipAddress,
+          action: 'ngdid_uniqueness_failed'
         }
       });
       
@@ -500,6 +716,21 @@ export async function POST(request) {
     const adminNotificationId = await generateNotificationId('AN', 'admin_notification_details', client);
     const userNotificationId = await generateNotificationId('UN', 'user_notification_details', client);
     
+    logger.info('System IDs generated successfully for new user', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'IDGeneration',
+        details: `Generated: SOC Portal ID: ${socPortalId}, Admin Notification: ${adminNotificationId}, User Notification: ${userNotificationId}`,
+        userId: socPortalId,
+        adminNotificationId: adminNotificationId,
+        userNotificationId: userNotificationId,
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'id_generation_completed'
+      }
+    });
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -509,14 +740,31 @@ export async function POST(request) {
     if (photoFile && photoFile.size > 0) {
       try {
         profilePhotoUrl = await saveProfilePhoto(photoFile, socPortalId);
-      } catch (error) {
-        logger.warn('Profile photo upload failed', {
+        logger.info('Profile photo uploaded successfully', {
           meta: {
             eid,
             sid: sessionId,
             taskName: 'FileUpload',
-            details: error.message,
-            ipAddress
+            details: `Profile photo saved for user ${socPortalId}`,
+            userId: socPortalId,
+            profilePhotoUrl: profilePhotoUrl,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'profile_photo_uploaded'
+          }
+        });
+      } catch (error) {
+        logger.warn('Profile photo upload failed, using default image', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'FileUpload',
+            details: `Profile photo upload failed: ${error.message}`,
+            userId: socPortalId,
+            error: error.message,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'profile_upload_failed'
           }
         });
         // Continue without failing the whole process
@@ -544,24 +792,69 @@ export async function POST(request) {
     
     if (newUser.rows.length === 0) {
       await client.query('ROLLBACK');
-      throw new Error('Failed to create user in database');
+      throw new Error('Database insertion failed - no rows returned');
     }
 
-    // ✅ ADD NEW COLUMN TO ROSTER_SCHEDULE TABLE FOR THE NEW USER
-    // This is now part of the transaction - if it fails, everything rolls back
-    const rosterUpdateResult = await addUserColumnToRosterSchedule(client, shortName);
-    
-    logger.info('Roster schedule table updated successfully for new user', {
+    logger.info('User record successfully inserted into database', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'RosterTableUpdate',
-        details: `Column action: ${rosterUpdateResult.action}, Column: ${rosterUpdateResult.columnName}`,
+        taskName: 'DatabaseInsert',
+        details: `User ${socPortalId} successfully inserted into user_info table`,
         userId: socPortalId,
-        columnName: rosterUpdateResult.columnName,
-        ipAddress
+        table: 'user_info',
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'user_record_created'
       }
     });
+
+    // ✅ CONDITIONALLY ADD NEW COLUMN TO ROSTER_SCHEDULE TABLE ONLY FOR SOC ROLE USERS
+    const rosterUpdateResult = await addUserColumnToRosterSchedule(client, shortName, roleType, socPortalId);
+
+    // Enhanced logging for roster update result
+    if (rosterUpdateResult.action === 'created') {
+      logger.info('Roster schedule infrastructure successfully established for SOC user', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'RosterInfrastructure',
+          details: `Column '${rosterUpdateResult.columnName}' created in roster_schedule table for SOC user ${socPortalId}`,
+          userId: socPortalId,
+          columnName: rosterUpdateResult.columnName,
+          userRole: roleType,
+          action: 'roster_column_created',
+          ipAddress: ipAddress
+        }
+      });
+    } else if (rosterUpdateResult.action === 'exists') {
+      logger.info('Roster schedule column already available for SOC user', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'RosterInfrastructure',
+          details: `Column '${rosterUpdateResult.columnName}' pre-existing in roster_schedule table for SOC user ${socPortalId}`,
+          userId: socPortalId,
+          columnName: rosterUpdateResult.columnName,
+          userRole: roleType,
+          action: 'roster_column_exists',
+          ipAddress: ipAddress
+        }
+      });
+    } else if (rosterUpdateResult.action === 'skipped') {
+      logger.info('Roster schedule update bypassed for non-SOC role user', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'RosterInfrastructure',
+          details: `User ${socPortalId} has ${roleType} role - roster column creation not required`,
+          userId: socPortalId,
+          userRole: roleType,
+          action: 'roster_update_skipped',
+          ipAddress: ipAddress
+        }
+      });
+    }
 
     // Get admin email for notification
     const adminEmailResult = await client.query(
@@ -581,7 +874,7 @@ export async function POST(request) {
     const activityParams = [
       adminId,
       'ADD_USER',
-      `Created new user: ${firstName} ${lastName} (${socPortalId})`,
+      `Created new user: ${firstName} ${lastName} (${socPortalId}) with ${roleType} role`,
       ipAddress,
       userAgent,
       eid,
@@ -590,6 +883,19 @@ export async function POST(request) {
     
     await client.query(activityLogQuery, activityParams);
     
+    logger.info('Admin activity logged successfully', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'ActivityLogging',
+        details: `Admin activity recorded for user creation: ${socPortalId}`,
+        userId: socPortalId,
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'admin_activity_logged'
+      }
+    });
+
     // Create admin notification
     const adminNotificationQuery = `
       INSERT INTO admin_notification_details (
@@ -600,7 +906,7 @@ export async function POST(request) {
     
     const adminNotifParams = [
       adminNotificationId,
-      `New User Added: ${firstName} ${lastName}`,
+      `New User Added: ${firstName} ${lastName} (${roleType})`,
       'Unread'
     ];
     
@@ -623,23 +929,40 @@ export async function POST(request) {
     
     await client.query(userNotificationQuery, userNotifParams);
     
-    logger.info('User notification created', {
+    logger.info('System notifications created successfully', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'UserNotification',
+        taskName: 'NotificationSystem',
+        details: `Notifications created: Admin - ${adminNotificationId}, User - ${userNotificationId}`,
         userId: socPortalId,
-        userNotificationId,
-        ipAddress
+        adminNotificationId: adminNotificationId,
+        userNotificationId: userNotificationId,
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'notifications_created'
       }
     });
     
     // Commit transaction - ALL operations including roster table update
     await client.query('COMMIT');
 
+    logger.info('Database transaction committed successfully', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'DatabaseTransaction',
+        details: 'All database operations committed successfully',
+        userId: socPortalId,
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'transaction_committed'
+      }
+    });
+
     // Email notification to new user (this is outside transaction since it's not critical)
     try {
-      console.log('[User Email Notification] Preparing to send welcome email');
+      console.log('[Email Notification] Preparing to send welcome email to new user');
       
       if (email) {
         // Generate HTML email content
@@ -719,72 +1042,95 @@ export async function POST(request) {
           html: userEmailHTML
         });
         
-        console.log('[User Email Notification] Welcome email sent successfully');
+        console.log('[Email Notification] Welcome email sent successfully');
         
         // Log email success
-        logger.info('Welcome email sent to new user', {
+        logger.info('Welcome email successfully delivered to new user', {
           meta: {
             socPortalId,
-            email,
-            taskName: 'User Welcome Email',
-            ipAddress
+            email: email,
+            taskName: 'EmailNotification',
+            details: `Welcome email sent to ${email} for user ${socPortalId}`,
+            userId: socPortalId,
+            action: 'welcome_email_sent',
+            ipAddress: ipAddress
           }
         });
       } else {
-        console.log('[User Email Notification] No user email provided');
-        logger.warn('No email provided for new user', {
+        console.log('[Email Notification] No user email provided');
+        logger.warn('Email notification skipped - no email address provided', {
           meta: {
             socPortalId,
-            taskName: 'User Welcome Email',
-            ipAddress
+            taskName: 'EmailNotification',
+            details: 'No email address available for new user',
+            userId: socPortalId,
+            action: 'email_skipped',
+            ipAddress: ipAddress
           }
         });
       }
     } catch (emailError) {
-      console.error('[User Email Notification Failed]', emailError.message);
-      logger.error('User welcome email sending failed', {
+      console.error('[Email Notification Failed]', emailError.message);
+      logger.error('User welcome email delivery failed', {
         meta: {
           socPortalId,
           error: emailError.message,
-          taskName: 'User Welcome Email',
-          ipAddress
+          taskName: 'EmailNotification',
+          details: `Failed to send welcome email to ${email}`,
+          userId: socPortalId,
+          action: 'email_delivery_failed',
+          ipAddress: ipAddress
         }
       });
       // Don't fail the entire process if email fails
     }
     
-    // Log success
-    logger.info('User created successfully', {
+    // Log comprehensive success
+    logger.info('User account creation workflow completed successfully', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'CreateUser',
-        details: `User ${socPortalId} created by admin ${adminId}`,
+        taskName: 'UserCreationWorkflow',
+        details: `User account ${socPortalId} creation process completed with ${roleType} role privileges`,
         userDetails: {
-          firstName,
-          lastName,
-          email,
-          roleType,
-          designation,
-          status
+          userId: socPortalId,
+          fullName: `${firstName} ${lastName}`,
+          email: email,
+          roleType: roleType,
+          designation: designation,
+          status: status,
+          ngdId: ngdId,
+          rosterUpdate: rosterUpdateResult.action
         },
-        adminId,
-        ipAddress
+        adminDetails: {
+          adminId: adminId,
+          adminEmail: adminEmail
+        },
+        systemActions: {
+          databaseInsert: 'completed',
+          rosterTableUpdate: rosterUpdateResult.action,
+          notifications: 'created',
+          emailNotification: email ? 'sent' : 'skipped'
+        },
+        ipAddress: ipAddress,
+        timestamp: new Date().toISOString(),
+        action: 'workflow_completed'
       }
     });
     
-    // Send success alert
+    // Send comprehensive success alert
     const successMessage = formatAlertMessage(
-      'creation',
+      'CREATION',
       email,
       ipAddress,
       userAgent,
       { 
         eid, 
-        status: 'Successful',
+        status: 'SUCCESSFUL',
         adminId,
         userId: socPortalId,
-        role: roleType
+        role: roleType,
+        rosterUpdate: rosterUpdateResult.action
       }
     );
     
@@ -793,46 +1139,56 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: 'User created successfully',
-      userId: socPortalId
+      userId: socPortalId,
+      userDetails: {
+        name: `${firstName} ${lastName}`,
+        email: email,
+        role: roleType
+      }
     });
     
   } catch (error) {
     // Rollback on error - this will rollback ALL operations including user creation and roster table update
     if (client) {
       await client.query('ROLLBACK').catch(err => 
-        logger.error('Rollback failed', {
+        logger.error('Database transaction rollback failed', {
           meta: {
-            taskName: 'Rollback',
-            details: `Error: ${err.message}`,
-            ipAddress
+            taskName: 'DatabaseTransaction',
+            details: `Rollback error: ${err.message}`,
+            originalError: error.message,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'rollback_failed'
           }
         })
       );
     }
     
-    logger.error('User creation failed', {
+    logger.error('User account creation workflow failed', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'SystemError',
-        details: `Error: ${error.message}`,
+        details: `Workflow failure: ${error.message}`,
         stack: error.stack,
-        adminId,
-        ipAddress
+        adminId: adminId,
+        ipAddress: ipAddress,
+        action: 'workflow_failed'
       }
     });
     
-    // Send error alert
+    // Send comprehensive error alert
     const errorMessage = formatAlertMessage(
-      'creation',
+      'CREATION',
       'N/A',
       ipAddress,
       userAgent,
       { 
         eid, 
-        status: `Failed: ${error.message}`,
+        status: `FAILED: ${error.message.substring(0, 100)}`,
         adminId,
-        role: 'N/A'
+        role: 'N/A',
+        rosterUpdate: 'N/A'
       }
     );
     
@@ -841,7 +1197,7 @@ export async function POST(request) {
     return NextResponse.json(
       { 
         success: false, 
-        message: 'Internal server error',
+        message: 'Internal server error during user creation',
         error: error.message
       },
       { status: 500 }
@@ -850,15 +1206,27 @@ export async function POST(request) {
     if (client) {
       try {
         client.release();
-      } catch (releaseError) {
-        logger.error('Error releasing database client', {
-          error: releaseError.message,
+        logger.info('Database connection released successfully', {
           meta: {
             eid,
             sid: sessionId,
-            taskName: 'ClientRelease',
-            details: 'Failed to release database connection',
-            ipAddress
+            taskName: 'ResourceCleanup',
+            details: 'Database client released back to pool',
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'connection_released'
+          }
+        });
+      } catch (releaseError) {
+        logger.error('Database connection release failed', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'ResourceCleanup',
+            details: `Failed to release database connection: ${releaseError.message}`,
+            adminId: adminId,
+            ipAddress: ipAddress,
+            action: 'connection_release_failed'
           }
         });
       }

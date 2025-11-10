@@ -1,6 +1,6 @@
 //app/api/admin_dashboard/edit_user/[soc_portal_id]/route.js
 import { NextResponse } from 'next/server';
-import { query, getDbConnection } from '../../../../../lib/db';
+import { getDbConnection } from '../../../../../lib/db';
 import logger from '../../../../../lib/logger';
 import sendTelegramAlert from '../../../../../lib/telegramAlert';
 import { DateTime } from 'luxon';
@@ -59,7 +59,7 @@ const generateNotificationId = async (prefix, table, client) => {
   }
 };
 
-// Save profile photo
+// Save profile photo - UPDATED FOR NEW STORAGE LOCATION
 const saveProfilePhoto = async (file, userId) => {
   try {
     if (!file || typeof file !== 'object') {
@@ -77,21 +77,74 @@ const saveProfilePhoto = async (file, userId) => {
       throw new Error('File size exceeds 5MB limit');
     }
     
-    // Create filename and path
+    // Create filename and path - UPDATED PATH
     const ext = path.extname(file.name);
     const filename = `${userId}_DP${ext}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'storage', 'user_dp');
+    const uploadDir = path.join(process.cwd(), 'storage', 'user_dp'); // CHANGED
     const filePath = path.join(uploadDir, filename);
     
-    // Ensure directory exists
-    await fs.mkdir(uploadDir, { recursive: true });
+    console.log('=== EDIT USER FILE UPLOAD DEBUG ===');
+    console.log('Upload paths:', {
+      uploadDir: uploadDir,
+      filename: filename,
+      filePath: filePath
+    });
+
+    // Ensure directory exists with proper permissions
+    try {
+      await fs.access(uploadDir);
+      console.log('Directory already exists');
+    } catch (error) {
+      console.log('Creating directory:', uploadDir);
+      await fs.mkdir(uploadDir, { recursive: true, mode: 0o755 });
+    }
     
     // Convert to buffer and save
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(filePath, buffer);
+    await fs.chmod(filePath, 0o644);
+
+    // Force sync
+    const fd = await fs.open(filePath, 'r+');
+    await new Promise((resolve, reject) => {
+      require('fs').fsync(fd.fd, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    await fd.close();
     
-    return `/storage/user_dp/${filename}`;
+    // Change ownership to nginx user
+    try {
+      const { execSync } = require('child_process');
+      const nginxUid = execSync('id -u nginx').toString().trim();
+      const nginxGid = execSync('id -g nginx').toString().trim();
+      
+      await fs.chown(filePath, parseInt(nginxUid), parseInt(nginxGid));
+      console.log(`File ownership changed to nginx (${nginxUid}:${nginxGid})`);
+    } catch (chownError) {
+      console.warn('Could not change file ownership:', chownError.message);
+    }
+    
+    // Force file system sync
+    try {
+      const { execSync } = require('child_process');
+      execSync('sync', { stdio: 'inherit' });
+      console.log('File system synced');
+    } catch (syncError) {
+      console.warn('File system sync failed:', syncError.message);
+    }
+    
+    console.log('File saved successfully:', filePath);
+    
+    // Return NEW URL format
+    const photoUrl = `/api/storage/user_dp/${filename}?t=${Date.now()}`; // CHANGED
+    console.log('Returning photo URL:', photoUrl);
+    
+    return photoUrl;
+    
   } catch (error) {
+    console.error('File upload error:', error);
     throw new Error(`Profile photo save failed: ${error.message}`);
   }
 };
@@ -171,13 +224,32 @@ const getChangedFields = (oldData, newData) => {
   return changedFields;
 };
 
+// Helper function to get client IP
+function getClientIP(request) {
+  try {
+    const forwarded = request.headers.get('x-forwarded-for');
+    const realIP = request.headers.get('x-real-ip');
+    
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+    if (realIP) {
+      return realIP;
+    }
+    
+    return '127.0.0.1';
+  } catch (error) {
+    return 'Unknown';
+  }
+}
+
 export async function PUT(request, { params }) {
   // Fix: Await params to resolve dynamic route parameter
   const { soc_portal_id } = await params;
   const sessionId = request.cookies.get('sessionId')?.value || 'Unknown';
   const eid = request.cookies.get('eid')?.value || 'Unknown';
   const adminId = request.cookies.get('socPortalId')?.value || 'Unknown';
-  const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
+  const ipAddress = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
 
   const requestStartTime = Date.now();
@@ -346,7 +418,7 @@ export async function PUT(request, { params }) {
     }
 
     // Validate role type
-    const validRoles = ['SOC', 'OPS', 'CTO', 'BI'];
+    const validRoles = ['SOC', 'OPS', 'CTO', 'INTERN'];
     if (!validRoles.includes(roleType)) {
       logger.warn('Invalid role type', {
         meta: {
@@ -401,32 +473,32 @@ export async function PUT(request, { params }) {
       }
     }
     
-    client = await getDbConnection();
+    client = await getDbConnection().connect(); // FIX: Get client from pool
     await client.query('BEGIN');
 
     // Get current user data for comparison - use TO_CHAR to get dates as strings
-const currentUserResult = await client.query(`
-  SELECT 
-    soc_portal_id,
-    ngd_id,
-    first_name,
-    last_name,
-    short_name,
-    TO_CHAR(date_of_birth, 'YYYY-MM-DD') as date_of_birth,
-    TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
-    TO_CHAR(resign_date, 'YYYY-MM-DD') as resign_date,
-    email,
-    phone,
-    emergency_contact,
-    designation,
-    bloodgroup,
-    gender,
-    status,
-    role_type,
-    profile_photo_url
-  FROM user_info 
-  WHERE soc_portal_id = $1
-`, [soc_portal_id]);
+    const currentUserResult = await client.query(`
+      SELECT 
+        soc_portal_id,
+        ngd_id,
+        first_name,
+        last_name,
+        short_name,
+        TO_CHAR(date_of_birth, 'YYYY-MM-DD') as date_of_birth,
+        TO_CHAR(joining_date, 'YYYY-MM-DD') as joining_date,
+        TO_CHAR(resign_date, 'YYYY-MM-DD') as resign_date,
+        email,
+        phone,
+        emergency_contact,
+        designation,
+        bloodgroup,
+        gender,
+        status,
+        role_type,
+        profile_photo_url
+      FROM user_info 
+      WHERE soc_portal_id = $1
+    `, [soc_portal_id]);
     
     if (currentUserResult.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -737,9 +809,7 @@ const currentUserResult = await client.query(`
   } finally {
     if (client) {
       try {
-        if (client.release) {
-          await client.release();
-        }
+        client.release(); // Release the client back to the pool
       } catch (error) {
         logger.error('Error releasing database client', {
           error: error.message,

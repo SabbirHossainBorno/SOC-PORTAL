@@ -270,7 +270,9 @@ const serviceToCategoriesMap = {
   'DEVICE CHANGE': ['DEVICE CHANGE'],
   // SMS Channel specific mappings
   'E-COM PAYMENT': ['E-COM PAYMENT'],
-  'KYC': ['RE-SUBMIT KYC']
+  'KYC': ['RE-SUBMIT KYC'],
+  // WEB + E-COM WEB specific mapping
+  'RPG-WEB': ['E-COM PAYMENT']  // Add this mapping
 };
   
   const impactTypes = ['FULL', 'PARTIAL'];
@@ -282,7 +284,7 @@ const serviceToCategoriesMap = {
   const allChannels = ['ALL', 'APP', 'USSD', 'WEB', 'SMS', 'MIDDLEWARE', 'INWARD SERVICE'];
   const allPersonas = ['ALL', 'CU', 'AG', 'DSO', 'DH'];
   const allMNOs = ['ALL', 'GRAMEENPHONE', 'BANGLALINK', 'ROBI/AIRTEL', 'TELETALK'];
-  const allPortals = ['ALL', 'CC', 'SYS', 'DMS'];
+  const allPortals = ['ALL', 'CC', 'SYS', 'DMS' , 'E-COM WEB'];
   const allTypes = ['ALL', 'REMITTANCE', 'BANK TO NAGAD'];
 
   // Update system options when concern changes
@@ -345,12 +347,32 @@ const serviceToCategoriesMap = {
 
   const selectedServices = formData.affectedService;
   const selectedChannels = formData.affectedChannel;
+  const selectedPortals = formData.affectedPortal;
   
   console.log('Auto-select triggered:', {
     selectedServices,
     selectedChannels,
+    selectedPortals,
     isCategoriesManuallyModified
   });
+
+  // Check for special case: Only WEB + E-COM WEB + RPG-WEB
+  const isOnlyWebWithEcomWebAndRpgWeb = 
+    selectedChannels.length === 1 && 
+    selectedChannels[0] === 'WEB' &&
+    selectedPortals.length === 1 && 
+    selectedPortals[0] === 'E-COM WEB' &&
+    selectedServices.length === 1 && 
+    selectedServices[0] === 'RPG-WEB';
+
+  if (isOnlyWebWithEcomWebAndRpgWeb) {
+    console.log('Special case detected: Only WEB + E-COM WEB + RPG-WEB, auto-selecting E-COM PAYMENT');
+    setFormData(prev => ({
+      ...prev,
+      categories: ['E-COM PAYMENT']
+    }));
+    return;
+  }
 
   // If ALL is selected, select all categories
   if (selectedServices.includes('ALL')) {
@@ -400,7 +422,7 @@ const serviceToCategoriesMap = {
       categories: []
     }));
   }
-}, [formData.affectedService, formData.affectedChannel, isCategoriesManuallyModified]);
+}, [formData.affectedService, formData.affectedChannel, formData.affectedPortal, isCategoriesManuallyModified]);
 
   // Update category times
   useEffect(() => {
@@ -456,6 +478,20 @@ const getOptionsForField = (fieldName) => {
   setFormData(prev => {
     const currentValues = prev[name] || [];
     const allOptions = getOptionsForField(name);
+    
+    // Special handling for affectedService when only one option is available (RPG-WEB case)
+    if (name === 'affectedService' && allOptions.length === 1 && allOptions[0] === 'RPG-WEB') {
+      if (isSelected) {
+        return {
+          ...prev,
+          [name]: ['RPG-WEB']
+        };
+      } else {
+        // Cannot deselect the only option
+        return prev;
+      }
+    }
+    
     const optionsWithoutAll = allOptions.filter(option => option !== 'ALL');
     
     if (isSelected) {
@@ -499,8 +535,8 @@ const getOptionsForField = (fieldName) => {
       const newValues = currentValues.filter(item => item !== value);
       console.log('Removing:', value, 'Current:', currentValues, 'New:', newValues);
       
-      // If no values left, select "ALL"
-      const finalValues = newValues.length === 0 ? ['ALL'] : newValues;
+      // If no values left, select "ALL" (unless it's the special single-option case)
+      const finalValues = newValues.length === 0 && allOptions.includes('ALL') ? ['ALL'] : newValues;
       return {
         ...prev,
         [name]: finalValues
@@ -671,7 +707,6 @@ const handleClearAll = (name) => {
   }
 };
 
-
   const handleCategoryTimeChange = (category, name, date) => {
   // Validate the selected date/time for categories too
   const validation = validateDateTime(date, name);
@@ -697,85 +732,244 @@ const handleClearAll = (name) => {
       [name]: date
     }
   }));
+
+  // Clear category-specific errors when fixed
+  if (errors.categoryTimes && errors.categoryTimes[category]) {
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      if (newErrors.categoryTimes) {
+        delete newErrors.categoryTimes[category];
+        if (Object.keys(newErrors.categoryTimes).length === 0) {
+          delete newErrors.categoryTimes;
+        }
+      }
+      return newErrors;
+    });
+  }
 };
 
-  const validateForm = () => {
+  // Comprehensive validation function
+  const validateAllFields = () => {
     const newErrors = {};
-    
-    const alwaysRequired = [
-      'issueTitle', 'impactType', 'modality', 
-      'startTime', 'endTime', 'concern', 
-      'reason', 'resolution', 'systemUnavailability'
-    ];
-    
-    alwaysRequired.forEach(field => {
+    let hasErrors = false;
+
+    // Required fields validation
+    const requiredFields = {
+      issueTitle: 'Issue title is required',
+      impactType: 'Impact type is required',
+      modality: 'Modality is required',
+      startTime: 'Start time is required',
+      endTime: 'End time is required',
+      concern: 'Concern is required',
+      reason: 'Reason is required',
+      resolution: 'Resolution is required',
+      systemUnavailability: 'System unavailability is required'
+    };
+
+    Object.entries(requiredFields).forEach(([field, message]) => {
       if (!formData[field]) {
-        newErrors[field] = 'This field is required';
+        newErrors[field] = message;
+        hasErrors = true;
       }
     });
 
+    // Categories validation
     if (formData.categories.length === 0) {
       newErrors.categories = 'At least one category is required';
+      hasErrors = true;
     }
 
-    // Validate affected fields
+    // Affected channel validation
     if (formData.affectedChannel.length === 0) {
       newErrors.affectedChannel = 'At least one channel is required';
+      hasErrors = true;
     }
 
+    // Main downtime period validation
     if (formData.startTime && formData.endTime) {
       const start = new Date(formData.startTime);
       const end = new Date(formData.endTime);
       
       if (start > end) {
         newErrors.endTime = 'End time cannot be before start time';
+        hasErrors = true;
+      }
+
+      // Check if duration is reasonable (not more than 30 days)
+      const diffMs = end - start;
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+      if (diffMs > thirtyDaysMs) {
+        newErrors.endTime = 'Downtime duration cannot exceed 30 days';
+        hasErrors = true;
+      }
+
+      if (diffMs <= 0) {
+        newErrors.endTime = 'End time must be after start time';
+        hasErrors = true;
       }
     }
 
+    // Category times validation
+    const categoryTimeErrors = {};
+    Object.entries(categoryTimes).forEach(([category, times]) => {
+      if (times.startTime && times.endTime) {
+        const catStart = new Date(times.startTime);
+        const catEnd = new Date(times.endTime);
+        
+        if (catStart > catEnd) {
+          categoryTimeErrors[category] = `End time cannot be before start time for ${category}`;
+          hasErrors = true;
+        }
+
+        // Check if category time is within main downtime period
+        if (formData.startTime && formData.endTime) {
+          const mainStart = new Date(formData.startTime);
+          const mainEnd = new Date(formData.endTime);
+          
+          if (catStart < mainStart) {
+            categoryTimeErrors[category] = `${category} start time cannot be before main start time`;
+            hasErrors = true;
+          }
+          
+          if (catEnd > mainEnd) {
+            categoryTimeErrors[category] = `${category} end time cannot be after main end time`;
+            hasErrors = true;
+          }
+        }
+      } else if (!times.startTime || !times.endTime) {
+        categoryTimeErrors[category] = `Both start and end times are required for ${category}`;
+        hasErrors = true;
+      }
+    });
+
+    if (Object.keys(categoryTimeErrors).length > 0) {
+      newErrors.categoryTimes = categoryTimeErrors;
+    }
+
+    // Ticket link validation if ticket ID is provided
+    if (formData.ticketId && !formData.ticketLink) {
+      newErrors.ticketLink = 'Ticket link is required when ticket ID is provided';
+      hasErrors = true;
+    }
+
+    // Future date validation for all date fields
+    const now = new Date();
+    if (formData.startTime && new Date(formData.startTime) > now) {
+      newErrors.startTime = 'Cannot select future date or time';
+      hasErrors = true;
+    }
+
+    if (formData.endTime && new Date(formData.endTime) > now) {
+      newErrors.endTime = 'Cannot select future date or time';
+      hasErrors = true;
+    }
+
+    // Validate all category times for future dates
+    Object.entries(categoryTimes).forEach(([category, times]) => {
+      if (times.startTime && new Date(times.startTime) > now) {
+        categoryTimeErrors[category] = `Cannot select future date or time for ${category}`;
+        hasErrors = true;
+      }
+      if (times.endTime && new Date(times.endTime) > now) {
+        categoryTimeErrors[category] = `Cannot select future date or time for ${category}`;
+        hasErrors = true;
+      }
+    });
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return { isValid: !hasErrors, errors: newErrors };
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) {
-      toast.error('Please fix validation errors before submitting', {
-        duration: 4000,
-        position: 'top-right',
-        icon: <FaExclamationTriangle className="text-red-500" />
+    // Clear previous errors
+    setErrors({});
+    
+    // Comprehensive validation
+    const validation = validateAllFields();
+    
+    if (!validation.isValid) {
+      // Show all validation errors in toast
+      const errorMessages = [];
+      
+      Object.entries(validation.errors).forEach(([field, message]) => {
+        if (field === 'categoryTimes') {
+          Object.values(message).forEach(catMessage => {
+            errorMessages.push(catMessage);
+          });
+        } else {
+          errorMessages.push(message);
+        }
       });
+
+      // Show all errors in a comprehensive toast
+      if (errorMessages.length > 0) {
+        toast.error(
+          <div className="max-w-md">
+            <div className="font-semibold text-red-800 mb-2 flex items-center">
+              <FaExclamationTriangle className="mr-2" />
+              Please fix the following errors:
+            </div>
+            <ul className="text-sm text-red-700 space-y-1 max-h-40 overflow-y-auto">
+              {errorMessages.map((msg, index) => (
+                <li key={index} className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span>{msg}</span>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          {
+            duration: 8000,
+            position: 'top-right',
+            style: {
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              maxWidth: '500px'
+            }
+          }
+        );
+      }
+      
       return;
     }
     
     setIsSubmitting(true);
     
     try {
-      const submissionData = {
-        ...formData,
-        categoryTimes
-      };
+    const submissionData = {
+      ...formData,
+      categoryTimes,
+      userInfo: {
+        shortName: userInfo?.shortName,
+        firstName: userInfo?.firstName,
+        lastName: userInfo?.lastName,
+        email: userInfo?.email
+      }
+    };
+    
+    console.debug('Submitting downtime data:', submissionData);
+    
+    const response = await fetch('/api/user_dashboard/report_downtime', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(submissionData),
+    });
+    
+    const result = await response.json();
+    
+    // ✅ FIX: Check both response.ok AND result.success
+    if (response.ok && result.success) {
+      const message = `Downtime reported successfully! ID: ${result.downtimeId}`;
       
-      console.debug('Submitting downtime data:', submissionData);
-      
-      const response = await fetch('/api/user_dashboard/report_downtime', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(submissionData),
+      toast.success(message, {
+        duration: 5000,
+        position: 'top-right',
+        icon: <FaCheckCircle className="text-green-500" />,
       });
-      
-      const result = await response.json();
-      
-      if (response.ok) {
-        const message = `Downtime reported successfully! ID: ${result.downtimeId}`;
-        
-        toast.success(message, {
-          duration: 5000,
-          position: 'top-right',
-          icon: <FaCheckCircle className="text-green-500" />,
-        });
         
         // Reset form
         setFormData({
@@ -804,23 +998,25 @@ const handleClearAll = (name) => {
         });
         setCategoryTimes({});
         setIsCategoriesManuallyModified(false);
+        setErrors({});
         
         setTimeout(() => {
           router.push('/user_dashboard/downtime_log');
         }, 3000);
       } else {
-        throw new Error(result.message || 'Failed to report downtime');
-      }
-    } catch (error) {
-      console.error('Submission error:', error);
-      toast.error(error.message || 'Failed to report downtime. Please try again.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    } finally {
-      setIsSubmitting(false);
+      // ✅ FIX: Use the error message from the backend
+      throw new Error(result.message || result.error || 'Failed to report downtime');
     }
-  };
+  } catch (error) {
+    console.error('Submission error:', error);
+    toast.error(error.message || 'Failed to report downtime. Please try again.', {
+      duration: 4000,
+      position: 'top-right',
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const formatDateTime = (date) => {
     if (!date) return 'Not set';
@@ -838,13 +1034,25 @@ const handleClearAll = (name) => {
 
   // Get affected services based on selected channels, personas, and portals
 const getAffectedServices = () => {
-  const services = new Set(['ALL', 'ALL TRANSACTIONS']);
+  const services = new Set(['ALL']);
   
   console.log('Calculating services for:', {
     channels: formData.affectedChannel,
     personas: formData.affectedPersona,
     portals: formData.affectedPortal
   });
+
+  // Check for specific WEB + E-COM WEB only scenario
+  const isOnlyWebWithEcomWeb = 
+    formData.affectedChannel.length === 1 && 
+    formData.affectedChannel[0] === 'WEB' &&
+    formData.affectedPortal.length === 1 && 
+    formData.affectedPortal[0] === 'E-COM WEB';
+
+  if (isOnlyWebWithEcomWeb) {
+    console.log('Special case: Only WEB + E-COM WEB selected, returning only RPG-WEB');
+    return ['RPG-WEB']; // Return only RPG-WEB without ALL
+  }
 
   // Process each selected channel
   formData.affectedChannel.forEach(channel => {
@@ -907,13 +1115,14 @@ const getAffectedServices = () => {
         services.add('REFUND');
         services.add('DISBURSEMENT');
       }
-      
-      services.add('ALL TRANSACTIONS');
+
+      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('E-COM WEB')) {
+        services.add('RPG-WEB');
+      }
       
     } else if (channel === 'MIDDLEWARE') {
       // MIDDLEWARE channel services
       services.add('BILL-PAYMENT');
-      services.add('ALL TRANSACTIONS');
       
     } else if (channel === 'INWARD SERVICE') {
       // INWARD SERVICE channel services
@@ -1567,105 +1776,162 @@ setIsCategoriesManuallyModified(false);
       <span className="text-red-500 ml-2">Cannot select future dates or times.</span>
     </p>
     
+    {/* Show category time errors summary */}
+    {errors.categoryTimes && Object.keys(errors.categoryTimes).length > 0 && (
+      <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="flex items-center mb-2">
+          <FaExclamationTriangle className="text-red-500 mr-2" />
+          <span className="font-semibold text-red-800">Category Time Errors:</span>
+        </div>
+        <ul className="text-sm text-red-700 space-y-1">
+          {Object.entries(errors.categoryTimes).map(([category, error]) => (
+            <li key={category}>• {error}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+    
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Category
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Start Time
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              End Time
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Duration (HH:MM)
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {formData.categories.map(category => {
-            const catTime = categoryTimes[category] || {};
-            const startTime = catTime.startTime ? new Date(catTime.startTime) : null;
-            const endTime = catTime.endTime ? new Date(catTime.endTime) : null;
-            let duration = '';
-            if (startTime && endTime) {
-              const diffMs = endTime - startTime;
-              if (diffMs > 0) {
-                const diffHrs = Math.floor(diffMs / 3600000);
-                const diffMins = Math.floor((diffMs % 3600000) / 60000);
-                duration = `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`;
+  <thead className="bg-gray-50">
+    <tr>
+      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+        Category
+      </th>
+      <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+        Start Time
+      </th>
+      <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+        End Time
+      </th>
+      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+        Duration
+      </th>
+      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+        Status
+      </th>
+    </tr>
+  </thead>
+  <tbody className="bg-white divide-y divide-gray-200">
+    {formData.categories.map(category => {
+      const catTime = categoryTimes[category] || {};
+      const startTime = catTime.startTime ? new Date(catTime.startTime) : null;
+      const endTime = catTime.endTime ? new Date(catTime.endTime) : null;
+      let duration = '';
+      let hasError = errors.categoryTimes && errors.categoryTimes[category];
+      
+      if (startTime && endTime) {
+        const diffMs = endTime - startTime;
+        if (diffMs > 0) {
+          const diffHrs = Math.floor(diffMs / 3600000);
+          const diffMins = Math.floor((diffMs % 3600000) / 60000);
+          duration = `${diffHrs.toString().padStart(2, '0')}:${diffMins.toString().padStart(2, '0')}`;
+        }
+      }
+      
+      return (
+        <tr key={category} className={hasError ? 'bg-red-50' : 'hover:bg-gray-50'}>
+          <td className="px-4 py-3 whitespace-nowrap">
+            <span className="text-sm font-medium text-gray-900 truncate block max-w-[140px]" title={category}>
+              {category}
+            </span>
+          </td>
+          <td className="px-3 py-3 whitespace-nowrap">
+            <DatePicker
+              selected={startTime}
+              onChange={(date) => handleCategoryTimeChange(category, 'startTime', date)}
+              showTimeSelect
+              timeFormat="HH:mm"
+              timeIntervals={1}
+              timeCaption="Time"
+              dateFormat="dd/MM/yyyy HH:mm"
+              maxDate={new Date()}
+              filterTime={(time) => {
+                const now = new Date();
+                const selectedTime = new Date(time);
+                return selectedTime <= now;
+              }}
+              customInput={
+                <div className={`w-full px-3 py-2 rounded border flex items-center cursor-pointer transition-colors ${
+                  hasError 
+                    ? 'border-red-300 bg-red-50 hover:bg-red-100' 
+                    : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
+                }`}>
+                  <FaCalendarAlt className={`mr-2 flex-shrink-0 ${
+                    hasError ? 'text-red-500' : 'text-gray-500'
+                  }`} />
+                  <span className="text-sm text-gray-900 flex-grow truncate">
+                    {startTime ? formatDateTime(startTime) : 'Select start'}
+                  </span>
+                </div>
               }
-            }
-            return (
-              <tr key={category}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {category}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <DatePicker
-                    selected={startTime}
-                    onChange={(date) => handleCategoryTimeChange(category, 'startTime', date)}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={1}
-                    timeCaption="Time"
-                    dateFormat="dd/MM/yyyy HH:mm"
-                    maxDate={new Date()}
-                    filterTime={(time) => {
-                      const now = new Date();
-                      const selectedTime = new Date(time);
-                      return selectedTime <= now;
-                    }}
-                    customInput={
-                      <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
-                        <FaCalendarAlt className="text-blue-500 mr-2" />
-                        <span className="flex-grow">
-                          {startTime ? formatDateTime(startTime) : 'Select start'}
-                        </span>
-                      </div>
-                    }
-                    className="w-full"
-                  />
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <DatePicker
-                    selected={endTime}
-                    onChange={(date) => handleCategoryTimeChange(category, 'endTime', date)}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={1}
-                    timeCaption="Time"
-                    dateFormat="dd/MM/yyyy HH:mm"
-                    maxDate={new Date()}
-                    filterTime={(time) => {
-                      const now = new Date();
-                      const selectedTime = new Date(time);
-                      return selectedTime <= now;
-                    }}
-                    customInput={
-                      <div className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800 flex items-center cursor-pointer">
-                        <FaCalendarAlt className="text-blue-500 mr-2" />
-                        <span className="flex-grow">
-                          {endTime ? formatDateTime(endTime) : 'Select end'}
-                        </span>
-                      </div>
-                    }
-                    className="w-full"
-                  />
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="bg-gray-100 px-3 py-2 rounded">
-                    {duration || 'N/A'}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              className="w-full"
+            />
+          </td>
+          <td className="px-3 py-3 whitespace-nowrap">
+            <DatePicker
+              selected={endTime}
+              onChange={(date) => handleCategoryTimeChange(category, 'endTime', date)}
+              showTimeSelect
+              timeFormat="HH:mm"
+              timeIntervals={1}
+              timeCaption="Time"
+              dateFormat="dd/MM/yyyy HH:mm"
+              maxDate={new Date()}
+              filterTime={(time) => {
+                const now = new Date();
+                const selectedTime = new Date(time);
+                return selectedTime <= now;
+              }}
+              customInput={
+                <div className={`w-full px-3 py-2 rounded border flex items-center cursor-pointer transition-colors ${
+                  hasError 
+                    ? 'border-red-300 bg-red-50 hover:bg-red-100' 
+                    : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
+                }`}>
+                  <FaCalendarAlt className={`mr-2 flex-shrink-0 ${
+                    hasError ? 'text-red-500' : 'text-gray-500'
+                  }`} />
+                  <span className="text-sm text-gray-900 flex-grow truncate">
+                    {endTime ? formatDateTime(endTime) : 'Select end'}
+                  </span>
+                </div>
+              }
+              className="w-full"
+            />
+          </td>
+          <td className="px-4 py-3 whitespace-nowrap">
+            <div className={`px-3 py-2 rounded text-sm font-mono font-medium ${
+              hasError 
+                ? 'bg-red-100 text-red-900 border border-red-200' 
+                : 'bg-gray-100 text-gray-900 border border-gray-200'
+            }`}>
+              {duration || '--:--'}
+            </div>
+          </td>
+          <td className="px-4 py-3 whitespace-nowrap">
+            {hasError ? (
+              <span className="inline-flex items-center px-3 py-1 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                <FaExclamationTriangle className="mr-1.5" />
+                Error
+              </span>
+            ) : startTime && endTime ? (
+              <span className="inline-flex items-center px-3 py-1 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                <FaCheckCircle className="mr-1.5" />
+                Valid
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-3 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                <FaExclamationTriangle className="mr-1.5" />
+                Incomplete
+              </span>
+            )}
+          </td>
+        </tr>
+      );
+    })}
+  </tbody>
+</table>
     </div>
   </div>
 )}

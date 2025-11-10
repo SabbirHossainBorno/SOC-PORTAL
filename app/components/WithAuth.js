@@ -145,6 +145,12 @@ const withAuth = (WrappedComponent, requiredRoles = []) => {
     const result = await response.json();
     
     if (result.authenticated) {
+
+      // 🔍 ADD THIS DEBUG BLOCK
+      console.log('🔐 WithAuth - Full API Response:', result);
+      console.log('🔐 WithAuth - Role from API:', result.role);
+      console.log('🔐 WithAuth - UserType from API:', result.userType);
+      
       // Use EID and SID from the server response
       setAuthInfo({
         isAuthenticated: true,
@@ -155,6 +161,13 @@ const withAuth = (WrappedComponent, requiredRoles = []) => {
         eid: result.eid || 'N/A',  // From server response
         sid: result.sid || 'N/A'   // From server response
       });
+
+      // 🔍 ADD DEBUG LOG HERE
+      console.log('🔐 Auth successful - Full result:', result);
+      console.log('🎯 Role from API:', result.role);
+      console.log('🎯 UserType from API:', result.userType);
+      console.log('✅ Can Create Access Form:', ['SOC', 'INTERN'].includes(result.role));
+      console.log('✅ Can Edit Access Form:', ['SOC', 'INTERN'].includes(result.role));
 
       console.log('🔐 Auth successful with:', { 
         eid: result.eid, 

@@ -1,4 +1,4 @@
-//app/api/user_dashboard/user_info/route.js
+// app/api/user_dashboard/user_info/route.js
 import { NextResponse } from 'next/server';
 import { query } from '../../../../lib/db';
 import logger from '../../../../lib/logger';
@@ -66,7 +66,7 @@ export async function GET(request) {
       }
     });
 
-    // Execute database query - FIXED: Removed JavaScript-style comments
+    // Execute database query
     const result = await query(
       `SELECT 
          soc_portal_id AS "id",
@@ -105,20 +105,43 @@ export async function GET(request) {
     }
 
     const user = result.rows[0];
+    
+    // TRANSFORM PROFILE PHOTO URL TO NEW FORMAT
+    let profilePhotoUrl = user.profilePhoto;
+    
+    // Convert old public directory URLs to new API route
+    if (profilePhotoUrl && profilePhotoUrl.startsWith('/storage/user_dp/')) {
+      profilePhotoUrl = profilePhotoUrl.replace('/storage/user_dp/', '/api/storage/user_dp/');
+    }
+    
+    // Ensure default image uses new API route
+    if (!profilePhotoUrl || profilePhotoUrl === '/storage/user_dp/default_DP.png') {
+      profilePhotoUrl = '/api/storage/user_dp/default_DP.png';
+    }
+    
+    // Add SINGLE cache busting parameter to prevent caching issues
+    if (!profilePhotoUrl.includes('?')) {
+      profilePhotoUrl = `${profilePhotoUrl}?t=${Date.now()}`;
+    }
+    // If it already has parameters, don't add another one
+
     const userDetails = `User ID: ${user.id} | ` +
                          `Email: ${user.email} | ` +
-                         `Status: ${user.status}`;
+                         `Status: ${user.status} | ` +
+                         `Profile Photo: ${profilePhotoUrl}`;
     
-    logger.info('User data retrieved successfully', {
+    logger.info('User data retrieved and transformed successfully', {
       meta: {
         eid,
         sid,
         taskName: 'DatabaseResult',
-        details: userDetails
+        details: userDetails,
+        originalPhotoUrl: user.profilePhoto,
+        transformedPhotoUrl: profilePhotoUrl
       }
     });
 
-    // Prepare response data
+    // Prepare response data with transformed URL
     const responseData = {
       id: user.id,
       ngdId: user.ngdId,
@@ -130,13 +153,13 @@ export async function GET(request) {
       status: user.status,
       createdAt: user.createdAt,
       lastLogin: user.lastLogin,
-      profilePhoto: user.profilePhoto?.replace(/^\/public/, '') || ''
+      profilePhoto: profilePhotoUrl  // Use transformed URL
     };
 
     const duration = Date.now() - startTime;
-    const completionDetails = `Duration: ${duration}ms`;
+    const completionDetails = `Duration: ${duration}ms | Photo URL transformed: ${user.profilePhoto !== profilePhotoUrl}`;
     
-    logger.info('Request completed successfully', {
+    logger.info('Request completed successfully with URL transformation', {
       meta: {
         eid,
         sid,

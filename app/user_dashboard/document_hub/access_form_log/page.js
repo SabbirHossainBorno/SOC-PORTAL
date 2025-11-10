@@ -185,11 +185,33 @@ export default function AccessFormLog({ authInfo }) {
   const router = useRouter();
 
   const [uploadingVersion, setUploadingVersion] = useState(null);
-const [uploadFile, setUploadFile] = useState(null);
-const [uploadRemark, setUploadRemark] = useState('');
-const [isUploading, setIsUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadRemark, setUploadRemark] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
-const canCreateAccessForm = ['SOC', 'INTERN'].includes(authInfo?.role);
+  // ✅ FIXED: Enhanced auth handling to ensure role is always available
+  const [effectiveAuthInfo, setEffectiveAuthInfo] = useState(authInfo);
+  
+  useEffect(() => {
+    // If authInfo from props is empty, fetch it directly
+    if (!authInfo?.role) {
+      fetch('/api/check_auth')
+        .then(res => res.json())
+        .then(data => {
+          if (data.authenticated) {
+            setEffectiveAuthInfo(data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch auth:', err));
+    } else {
+      setEffectiveAuthInfo(authInfo);
+    }
+  }, [authInfo]);
+
+  // ✅ FIXED: Role-based access control with fallback
+  const userRole = effectiveAuthInfo?.role || '';
+  const canCreateAccessForm = ['SOC', 'INTERN'].includes(userRole);
+  const canEditAccessForm = ['SOC', 'INTERN'].includes(userRole);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -466,77 +488,82 @@ const canCreateAccessForm = ['SOC', 'INTERN'].includes(authInfo?.role);
     }
   };
 
-const handleDocumentUpload = async (version) => {
-  if (!uploadFile) {
-    toast.error('Please select a PDF file to upload');
-    return;
-  }
-
-  setIsUploading(true);
-  try {
-    const formData = new FormData();
-    formData.append('version', version);
-    formData.append('document', uploadFile);
-    formData.append('audit_remark', uploadRemark);
-
-    const response = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/upload_document`, {
-      method: 'POST',
-      body: formData
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      toast.success('Document uploaded successfully');
-      // Reset upload state
-      setUploadFile(null);
-      setUploadRemark('');
-      setUploadingVersion(null);
-      
-      // Refresh audit trail
-      const auditResponse = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/audit`);
-      const auditResult = await auditResponse.json();
-      
-      if (auditResult.success) {
-        setAuditTrail(auditResult.audit_trail);
-      }
-
-      // Optional: Reset modal state
-      setShowDetailsModal(false);
-      setSelectedForm(null);
-
-      // Redirect to access_form_log page after a short delay
-      setTimeout(() => {
-        router.push('/user_dashboard/document_hub/access_form_log');
-      }, 1500);
-    } else {
-      toast.error(result.message || 'Failed to upload document');
+  const handleDocumentUpload = async (version) => {
+    if (!uploadFile) {
+      toast.error('Please select a PDF file to upload');
+      return;
     }
-  } catch (error) {
-    console.error('Error uploading document:', error);
-    toast.error('Failed to upload document');
-  } finally {
-    setIsUploading(false);
-  }
-};
 
-const handleFileChange = (e, version, currentRemark) => {
-  const file = e.target.files[0];
-  if (file && file.type !== 'application/pdf') {
-    toast.error('Only PDF files are allowed');
-    return;
-  }
-  setUploadFile(file);
-  setUploadingVersion(version);
-  // Pre-fill the remark with the current value if it exists
-  if (currentRemark && !uploadRemark) {
-    setUploadRemark(currentRemark);
-  }
-};
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('version', version);
+      formData.append('document', uploadFile);
+      formData.append('audit_remark', uploadRemark);
+
+      const response = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/upload_document`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success('Document uploaded successfully');
+        // Reset upload state
+        setUploadFile(null);
+        setUploadRemark('');
+        setUploadingVersion(null);
+        
+        // Refresh audit trail
+        const auditResponse = await fetch(`/api/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}/audit`);
+        const auditResult = await auditResponse.json();
+        
+        if (auditResult.success) {
+          setAuditTrail(auditResult.audit_trail);
+        }
+
+        // Optional: Reset modal state
+        setShowDetailsModal(false);
+        setSelectedForm(null);
+
+        // Redirect to access_form_log page after a short delay
+        setTimeout(() => {
+          router.push('/user_dashboard/document_hub/access_form_log');
+        }, 1500);
+      } else {
+        toast.error(result.message || 'Failed to upload document');
+      }
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      toast.error('Failed to upload document');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e, version, currentRemark) => {
+    const file = e.target.files[0];
+    if (file && file.type !== 'application/pdf') {
+      toast.error('Only PDF files are allowed');
+      return;
+    }
+    setUploadFile(file);
+    setUploadingVersion(version);
+    // Pre-fill the remark with the current value if it exists
+    if (currentRemark && !uploadRemark) {
+      setUploadRemark(currentRemark);
+    }
+  };
 
   const openDocument = (documentLocation) => {
     if (documentLocation) {
-      window.open(documentLocation, '_blank');
+      // Ensure the URL uses the API route
+      let url = documentLocation;
+      if (url.startsWith('/storage/access_form/')) {
+        url = url.replace('/storage/access_form/', '/api/storage/access_form/');
+      }
+      window.open(url, '_blank');
     } else {
       toast.error('No document available');
     }
@@ -555,14 +582,14 @@ const handleFileChange = (e, version, currentRemark) => {
   };
 
   const formatDateOnly = (dateString) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'Asia/Dhaka'
-  });
-};
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'Asia/Dhaka'
+    });
+  };
 
   const viewFormDetails = (form) => {
     setSelectedForm(form);
@@ -968,13 +995,16 @@ const handleFileChange = (e, version, currentRemark) => {
                               <FaEye className="text-lg" />
                             </button>
                             
-                            <button
-                              onClick={() => router.push(`/user_dashboard/document_hub/access_form_edit/${form.af_tracking_id}`)}
-                              className="text-indigo-600 hover:text-indigo-900 p-2 rounded hover:bg-indigo-50 transition-colors"
-                              title="Edit Form"
-                            >
-                              <FaEdit className="text-lg" />
-                            </button>
+                            {/* Conditionally show Edit button */}
+                            {canEditAccessForm && (
+                              <button
+                                onClick={() => router.push(`/user_dashboard/document_hub/access_form_edit/${form.af_tracking_id}`)}
+                                className="text-indigo-600 hover:text-indigo-900 p-2 rounded hover:bg-indigo-50 transition-colors"
+                                title="Edit Form"
+                              >
+                                <FaEdit className="text-lg" />
+                              </button>
+                            )}
                             
                             <button
                               onClick={() => openDocument(form.document_location)}
@@ -1074,13 +1104,12 @@ const handleFileChange = (e, version, currentRemark) => {
                     <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Basic Information</h4>
                     
                     <div className="space-y-3">
-
                       <div>
-      <span className="text-xs text-gray-500 block">Initial Effective Date</span>
-      <span className="text-sm font-medium text-gray-900">
-        {selectedForm.effective_date ? formatDateOnly(selectedForm.effective_date) : 'N/A'}
-      </span>
-    </div>
+                        <span className="text-xs text-gray-500 block">Initial Effective Date</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {selectedForm.effective_date ? formatDateOnly(selectedForm.effective_date) : 'N/A'}
+                        </span>
+                      </div>
                       <div>
                         <span className="text-xs text-gray-500 block">Access Form Type</span>
                         <span className="text-sm font-medium text-gray-900">
@@ -1233,185 +1262,216 @@ const handleFileChange = (e, version, currentRemark) => {
                     {/* Timeline Line */}
                     <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-300"></div>
                     
-{auditTrail.map((audit) => {
-  const { icon, color, bgColor } = getActionIconAndColor(audit.action_type);
-  
-  return (
-    <div key={audit.serial} className="relative mb-6 last:mb-0">
-      {/* Timeline Dot */}
-      <div className={`absolute left-2.5 w-4 h-4 rounded-full ${bgColor} border-2 border-white`}></div>
-      
-      {/* Content */}
-      <div className="ml-10 bg-white p-4 rounded shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className={`p-2 rounded-full ${bgColor} ${color} mr-3`}>
-              {icon}
-            </div>
-            <div>
-  <h5 className="text-sm font-semibold text-gray-800">
-    {audit.action_type === 'CREATE' ? 'Form Created' : 'Form Updated'}
-    {` (Version ${audit.version})`}
-  </h5>
-  <p className="text-xs text-gray-500">
-    By {audit.updated_by} on {formatDate(audit.created_at)} from IP {audit.ip_address} | Last Updated : {formatDate(audit.updated_at)}
-  </p>
-  {/* Show effective date for this version */}
-  {audit.effective_date && (
-    <p className="text-xs text-green-600 font-medium mt-1">
-      Effective Date for this version: {formatDateOnly(audit.effective_date)}
-    </p>
-  )}
-</div>
-          </div>
-        </div>
-        
-        {/* Audit Info */}
-        <div className="mt-2">
-          <p className="text-sm text-gray-700">
-            {audit.audit_info}
-          </p>
-        </div>
-        
-        {/* Audit Remark (if exists) */}
-        {audit.audit_remark && (
-          <div className="mt-2 p-2 bg-gray-100 rounded">
-            <p className="text-xs text-gray-500">Audit Remark:</p>
-            <p className="text-sm text-gray-700">{audit.audit_remark}</p>
-          </div>
-        )}
-        
-        {/* Document Action */}
-        <div className="mt-3">
-          {audit.document_location ? (
-            <button
-              onClick={() => openDocument(audit.document_location)}
-              className="flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
-            >
-              <FaFilePdf className="mr-1" />
-              View Document
-            </button>
-          ) : (
-            <div className="mt-3">
-              {uploadingVersion === audit.version ? (
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
-                  <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
-                    <FaUpload className="mr-2" />
-                    Upload Document for Version {audit.version}
-                  </h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-800 mb-1">
-                        Select PDF File
-                      </label>
-                      <div className="flex items-center">
-                        <label className="flex-1 cursor-pointer">
-                          <div className="px-4 py-3 bg-white border-2 border-dashed border-blue-400 rounded flex items-center justify-between hover:border-blue-600 transition-colors">
-                            <span className={`text-sm font-medium ${uploadFile ? 'text-gray-900' : 'text-gray-600'}`}>
-                              {uploadFile ? uploadFile.name : 'Choose PDF file...'}
-                            </span>
-                            <FaUpload className="text-blue-600" />
+                    {auditTrail.map((audit) => {
+                      const { icon, color, bgColor } = getActionIconAndColor(audit.action_type);
+                      
+                      return (
+                        <div key={audit.serial} className="relative mb-6 last:mb-0">
+                          {/* Timeline Dot */}
+                          <div className={`absolute left-2.5 w-4 h-4 rounded-full ${bgColor} border-2 border-white`}></div>
+                          
+                          {/* Content */}
+                          <div className="ml-10 bg-white p-4 rounded shadow-sm border border-gray-200">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <div className={`p-2 rounded-full ${bgColor} ${color} mr-3`}>
+                                  {icon}
+                                </div>
+                                <div>
+                                  <h5 className="text-sm font-semibold text-gray-800">
+                                    {audit.action_type === 'CREATE' ? 'Form Created' : 'Form Updated'}
+                                    {` (Version ${audit.version})`}
+                                  </h5>
+                                  <p className="text-xs text-gray-500">
+                                    By {audit.updated_by} on {formatDate(audit.created_at)} from IP {audit.ip_address} | Last Updated : {formatDate(audit.updated_at)}
+                                  </p>
+                                  {/* Show effective date for this version */}
+                                  {audit.effective_date && (
+                                    <p className="text-xs text-green-600 font-medium mt-1">
+                                      Effective Date for this version: {formatDateOnly(audit.effective_date)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Audit Info */}
+                            <div className="mt-2">
+                              <p className="text-sm text-gray-700">
+                                {audit.audit_info}
+                              </p>
+                            </div>
+                            
+                            {/* Audit Remark (if exists) */}
+                            {audit.audit_remark && (
+                              <div className="mt-2 p-2 bg-gray-100 rounded">
+                                <p className="text-xs text-gray-500">Audit Remark:</p>
+                                <p className="text-sm text-gray-700">{audit.audit_remark}</p>
+                              </div>
+                            )}
+                            
+                            {/* Document Action */}
+                            <div className="mt-3">
+                              {audit.document_location ? (
+                                <button
+                                  onClick={() => openDocument(audit.document_location)}
+                                  className="flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                >
+                                  <FaFilePdf className="mr-1" />
+                                  View Document
+                                </button>
+                              ) : (
+                                <div className="mt-3">
+                                  {uploadingVersion === audit.version ? (
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 shadow-sm">
+                                      <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
+                                        <FaUpload className="mr-2" />
+                                        Upload Document for Version {audit.version}
+                                      </h4>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-800 mb-1">
+                                            Select PDF File
+                                          </label>
+                                          <div className="flex items-center">
+                                            <label className="flex-1 cursor-pointer">
+                                              <div className={`px-4 py-3 bg-white border-2 border-dashed rounded flex items-center justify-between transition-colors ${
+                                                canEditAccessForm 
+                                                  ? 'border-blue-400 hover:border-blue-600' 
+                                                  : 'border-gray-300 cursor-not-allowed'
+                                              }`}>
+                                                <span className={`text-sm font-medium ${uploadFile ? 'text-gray-900' : 'text-gray-600'}`}>
+                                                  {uploadFile ? uploadFile.name : 'Choose PDF file...'}
+                                                </span>
+                                                <FaUpload className={`${canEditAccessForm ? 'text-blue-600' : 'text-gray-400'}`} />
+                                              </div>
+                                              {canEditAccessForm && (
+                                                <input
+                                                  type="file"
+                                                  accept=".pdf"
+                                                  onChange={(e) => handleFileChange(e, audit.version, audit.audit_remark)}
+                                                  className="hidden"
+                                                />
+                                              )}
+                                            </label>
+                                            {uploadFile && canEditAccessForm && (
+                                              <button
+                                                onClick={() => setUploadFile(null)}
+                                                className="ml-3 p-2 text-red-600 hover:text-red-800 transition-colors"
+                                                title="Remove file"
+                                              >
+                                                <FaTimes />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-gray-600 mt-1">Only PDF files are accepted</p>
+                                          {!canEditAccessForm && (
+                                            <p className="text-xs text-amber-600 mt-1">You don&apos;t have permission to upload documents</p>
+                                          )}
+                                        </div>
+                                        
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-800 mb-1">
+                                            Audit Remark
+                                          </label>
+                                          <textarea
+                                            value={uploadRemark}
+                                            onChange={(e) => setUploadRemark(e.target.value)}
+                                            rows={3}
+                                            disabled={!canEditAccessForm}
+                                            className={`w-full px-4 py-3 text-gray-900 border rounded focus:ring-2 resize-none ${
+                                              canEditAccessForm
+                                                ? 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                                                : 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                                            }`}
+                                            placeholder={canEditAccessForm ? "Add a remark for this document upload" : "No permission to add remarks"}
+                                          />
+                                          {audit.audit_remark && (
+                                            <p className="text-xs text-gray-600 mt-1">
+                                              Current remark: <span className="font-medium">{audit.audit_remark}</span>
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex justify-end space-x-3 mt-4 pt-3 border-t border-blue-200">
+                                        <button
+                                          onClick={() => {
+                                            setUploadingVersion(null);
+                                            setUploadFile(null);
+                                            setUploadRemark('');
+                                          }}
+                                          className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors font-medium"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          onClick={() => handleDocumentUpload(audit.version)}
+                                          disabled={isUploading || !uploadFile || !canEditAccessForm}
+                                          className={`px-4 py-2 text-white rounded transition-colors font-medium flex items-center ${
+                                            canEditAccessForm && !isUploading && uploadFile
+                                              ? 'bg-blue-600 hover:bg-blue-700'
+                                              : 'bg-blue-400 cursor-not-allowed'
+                                          }`}
+                                        >
+                                          {isUploading ? (
+                                            <>
+                                              <FaSpinner className="animate-spin mr-2" />
+                                              Uploading...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <FaUpload className="mr-2" />
+                                              Upload Document
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between p-3 bg-amber-50 rounded border border-amber-200">
+                                      <div className="flex items-center">
+                                        <div className="p-2 bg-amber-100 rounded-full mr-3">
+                                          <FaFilePdf className="text-amber-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium text-amber-800">No document attached</p>
+                                          <p className="text-xs text-amber-600">
+                                            {canEditAccessForm 
+                                              ? "Upload a PDF to complete this record" 
+                                              : "Document upload required (contact SOC/INTERN team)"
+                                            }
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          if (canEditAccessForm) {
+                                            setUploadingVersion(audit.version);
+                                            setUploadRemark(audit.audit_remark || '');
+                                          }
+                                        }}
+                                        disabled={!canEditAccessForm}
+                                        className={`flex items-center px-4 py-2 rounded transition-colors font-medium ${
+                                          canEditAccessForm
+                                            ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                        title={!canEditAccessForm ? "You don't have permission to upload documents" : "Upload document"}
+                                      >
+                                        <FaUpload className="mr-2" />
+                                        Upload Document
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <input
-                            type="file"
-                            accept=".pdf"
-                            onChange={(e) => handleFileChange(e, audit.version, audit.audit_remark)}
-                            className="hidden"
-                          />
-                        </label>
-                        {uploadFile && (
-                          <button
-                            onClick={() => setUploadFile(null)}
-                            className="ml-3 p-2 text-red-600 hover:text-red-800 transition-colors"
-                            title="Remove file"
-                          >
-                            <FaTimes />
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">Only PDF files are accepted</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-800 mb-1">
-                        Audit Remark
-                      </label>
-                      <textarea
-                        value={uploadRemark}
-                        onChange={(e) => setUploadRemark(e.target.value)}
-                        rows={3}
-                        className="w-full px-4 py-3 text-gray-900 border border-gray-300 rounded focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
-                        placeholder="Add a remark for this document upload"
-                      />
-                      {audit.audit_remark && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Current remark: <span className="font-medium">{audit.audit_remark}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-end space-x-3 mt-4 pt-3 border-t border-blue-200">
-                    <button
-                      onClick={() => {
-                        setUploadingVersion(null);
-                        setUploadFile(null);
-                        setUploadRemark('');
-                      }}
-                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => handleDocumentUpload(audit.version)}
-                      disabled={isUploading || !uploadFile}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium flex items-center"
-                    >
-                      {isUploading ? (
-                        <>
-                          <FaSpinner className="animate-spin mr-2" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <FaUpload className="mr-2" />
-                          Upload Document
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between p-3 bg-amber-50 rounded border border-amber-200">
-                  <div className="flex items-center">
-                    <div className="p-2 bg-amber-100 rounded-full mr-3">
-                      <FaFilePdf className="text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">No document attached</p>
-                      <p className="text-xs text-amber-600">Upload a PDF to complete this record</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setUploadingVersion(audit.version);
-                      setUploadRemark(audit.audit_remark || '');
-                    }}
-                    className="flex items-center px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors font-medium"
-                  >
-                    <FaUpload className="mr-2" />
-                    Upload Document
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        </div>
-      </div>
-    );
-  })}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1430,13 +1490,16 @@ const handleFileChange = (e, version, currentRemark) => {
               </div>
               
               <div className="flex space-x-3">
-                <button
-                  onClick={() => router.push(`/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}`)}
-                  className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
-                >
-                  <FaEdit className="mr-2" />
-                  Edit Form
-                </button>
+                {/* Conditionally show Edit Form button */}
+                {canEditAccessForm && (
+                  <button
+                    onClick={() => router.push(`/user_dashboard/document_hub/access_form_edit/${selectedForm.af_tracking_id}`)}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+                  >
+                    <FaEdit className="mr-2" />
+                    Edit Form
+                  </button>
+                )}
                 
                 <button
                   onClick={() => setShowDetailsModal(false)}

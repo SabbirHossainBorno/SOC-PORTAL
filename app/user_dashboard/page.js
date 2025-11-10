@@ -96,41 +96,48 @@ export default function UserDashboard() {
     {
       type: 'myPerformance',
       title: 'My Performance',
-      dataKey: 'myPerformance'
+      dataKey: 'myPerformance',
+      hideForCTO: true
     },
     {
       type: 'todaysRoster',
       title: 'Today\'s Roster',
       dataKey: 'todaysRoster',
       hideForOps: true,
-      hideForIntern: true
+      hideForIntern: true,
+      hideForCTO: true
     },
     {
       type: 'assignedTask',
       title: 'Assigned Tasks',
       dataKey: 'assignedTask',
-      hideForOps: true
+      hideForOps: true,
+      hideForCTO: true
     },
     {
       type: 'deviceCount',
       title: 'Device Status',
-      dataKey: 'deviceCount'
+      dataKey: 'deviceCount',
+      hideForCTO: true
     },
     {
       type: 'simCount',
       title: 'SIM Cards',
-      dataKey: 'simCount'
+      dataKey: 'simCount',
+      hideForCTO: true
     },
     {
       type: 'mailQueue',
       title: 'Mail Queue',
       dataKey: 'mailQueue',
-      hideForIntern: true
+      hideForIntern: true,
+      hideForCTO: true
     },
     {
       type: 'document',
       title: 'Access Documents',
-      dataKey: 'document'
+      dataKey: 'document',
+      hideForCTO: true
     },
     {
       type: 'totalActivity',
@@ -143,6 +150,7 @@ export default function UserDashboard() {
   const filteredCards = cardConfigs.filter(card => {
     if (roleType === 'OPS' && card.hideForOps) return false;
     if (roleType === 'INTERN' && card.hideForIntern) return false;
+    if (roleType === 'CTO' && card.hideForCTO) return false;
     return true;
   });
 
@@ -312,6 +320,7 @@ export default function UserDashboard() {
                     lastUpdated={lastUpdated}
                     hideForOps={card.hideForOps}
                     hideForIntern={card.hideForIntern}
+                    hideForCTO={card.hideForCTO}
                     isLoading={!cardsData}
                   />
                 ))}

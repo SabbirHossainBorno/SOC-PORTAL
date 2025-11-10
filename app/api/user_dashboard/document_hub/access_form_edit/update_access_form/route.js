@@ -6,6 +6,7 @@ import { generateAuditMessage, validateDates, determineStatus } from '../../../.
 import { writeFile, mkdir, readdir } from 'fs/promises';
 import path from 'path';
 import { createNotifications } from '../../../../../../lib/notificationUtils';
+import fs from 'fs'; // ADD THIS LINE
 
 // Helper function to escape special characters for RegExp
 const escapeRegExp = (string) => {
@@ -325,6 +326,7 @@ if (Object.keys(dateErrors).length > 0) {
     }
     
     const currentForm = currentFormResponse.rows[0];
+    
     console.debug('Fetched current form data:', currentForm);
     
     // Determine final status based on revoke date
@@ -332,73 +334,124 @@ if (Object.keys(dateErrors).length > 0) {
     
     // Handle document upload
     let documentLocation = currentForm.document_location;
-    let nextVersion = 1;
+let nextVersion = 1;
+
+if (document && document.size > 0) {
+  console.log('Processing new document upload');
+  if (document.type !== 'application/pdf') {
+    console.warn('Invalid document type:', document.type);
+    await client.query('ROLLBACK');
+    return new Response(JSON.stringify({
+      success: false,
+      message: 'Only PDF files are allowed'
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  // Get next version number
+  const versionResult = await client.query(
+    'SELECT COALESCE(MAX(version), 0) + 1 as next_version FROM access_form_audit_trail WHERE af_tracking_id = $1',
+    [af_tracking_id]
+  );
+  nextVersion = versionResult.rows[0].next_version;
+  
+  // UPDATED: Change to new storage location
+  const uploadDir = path.join(process.cwd(), 'storage', 'access_form');
+  const fileName = `${af_tracking_id}_V${nextVersion}.pdf`;
+  const filePath = path.join(uploadDir, fileName);
+  
+  logger.info('Document upload initiated with new storage location', {
+    meta: {
+      eid,
+      sid: sessionId,
+      taskName: 'DocumentUpload',
+      details: `Uploading document to new storage location: ${uploadDir}`,
+      userId: socPortalId,
+      fileName: fileName,
+      filePath: filePath
+    }
+  });
+  
+  try {
+    // Ensure directory exists with proper permissions
+    await mkdir(uploadDir, { recursive: true, mode: 0o755 });
     
-    if (document && document.size > 0) {
-      console.log('Processing new document upload');
-      if (document.type !== 'application/pdf') {
-        console.warn('Invalid document type:', document.type);
-        await client.query('ROLLBACK');
-        return new Response(JSON.stringify({
-          success: false,
-          message: 'Only PDF files are allowed'
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
+    const arrayBuffer = await document.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    await writeFile(filePath, buffer);
+    
+    // Set proper permissions - FIXED: Use imported fs module
+    fs.chmodSync(filePath, 0o644);
+    
+    // Change ownership to nginx user - FIXED: Use imported fs module
+    try {
+      const { execSync } = require('child_process');
+      const nginxUid = execSync('id -u nginx').toString().trim();
+      const nginxGid = execSync('id -g nginx').toString().trim();
       
-      // Get next version number
-      const versionResult = await client.query(
-        'SELECT COALESCE(MAX(version), 0) + 1 as next_version FROM access_form_audit_trail WHERE af_tracking_id = $1',
-        [af_tracking_id]
-      );
-      nextVersion = versionResult.rows[0].next_version;
-      
-      const uploadDir = '/home/soc_portal/public/storage/access_form';
-      const fileName = `${af_tracking_id}_V${nextVersion}.pdf`;
-      const filePath = path.join(uploadDir, fileName);
-      
-      try {
-        await mkdir(uploadDir, { recursive: true });
-        const arrayBuffer = await document.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        await writeFile(filePath, buffer);
-        documentLocation = `/storage/access_form/${fileName}`;
-        console.log('Document uploaded successfully to:', documentLocation);
-      } catch (error) {
-        console.error('Document upload failed:', error);
-        logger.error('Document upload failed during update', {
-          meta: {
-            eid,
-            sid: sessionId,
-            taskName: 'AccessFormUpdate',
-            details: `Document upload failed: ${error.message}`,
-            userId: socPortalId,
-            error: error.message,
-            stack: error.stack
-          }
-        });
-        await client.query('ROLLBACK');
-        return new Response(JSON.stringify({
-          success: false,
-          message: 'Failed to save document'
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
+      fs.chownSync(filePath, parseInt(nginxUid), parseInt(nginxGid));
+      logger.debug('Document ownership changed to nginx', {
+        nginxUid,
+        nginxGid
+      });
+    } catch (chownError) {
+      logger.warn('Could not change document ownership', {
+        error: chownError.message
+      });
+    }
+    
+    // UPDATED: Return API route URL instead of direct storage URL
+    documentLocation = `/api/storage/access_form/${fileName}`;
+    
+    console.log('Document uploaded successfully to:', documentLocation);
+    
+    logger.info('Document uploaded successfully to new location', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'DocumentUpload',
+        details: 'Document uploaded successfully to new storage location',
+        userId: socPortalId,
+        documentLocation: documentLocation,
+        afTrackingId: af_tracking_id,
+        version: nextVersion
       }
-    } else {
-      // If no new document, get the next version for audit trail
-      const versionResult = await client.query(
-          'SELECT COALESCE(MAX(version), 0) + 1 as next_version FROM access_form_audit_trail WHERE af_tracking_id = $1',
-          [af_tracking_id]
-        );
-        nextVersion = versionResult.rows[0].next_version;
-        
-        // For audit trail, set document_location to null when no document is uploaded
-        documentLocation = null;
+    });
+  } catch (error) {
+    console.error('Document upload failed:', error);
+    logger.error('Document upload failed during update', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'AccessFormUpdate',
+        details: `Document upload failed: ${error.message}`,
+        userId: socPortalId,
+        error: error.message,
+        stack: error.stack
       }
+    });
+    await client.query('ROLLBACK');
+    return new Response(JSON.stringify({
+      success: false,
+      message: 'Failed to save document'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+} else {
+  // If no new document, get the next version for audit trail
+  const versionResult = await client.query(
+      'SELECT COALESCE(MAX(version), 0) + 1 as next_version FROM access_form_audit_trail WHERE af_tracking_id = $1',
+      [af_tracking_id]
+    );
+    nextVersion = versionResult.rows[0].next_version;
+    
+    // For audit trail, set document_location to null when no document is uploaded
+    documentLocation = null;
+}
     
     // Determine final portal names and roles
     let finalPortalNames = portal_name;

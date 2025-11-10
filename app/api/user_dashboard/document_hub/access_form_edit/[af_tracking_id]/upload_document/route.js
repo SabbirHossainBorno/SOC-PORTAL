@@ -4,6 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import logger from '../../../../../../../lib/logger';
 import { createNotifications } from '../../../../../../../lib/notificationUtils';
+import fs from 'fs'; // ADD THIS LINE
 
 // Safe client release function
 const releaseClient = async (client) => {
@@ -22,6 +23,7 @@ const releaseClient = async (client) => {
     logger.error('Error releasing database client', { error: error.message, stack: error.stack });
   }
 };
+
 
 export async function POST(request, { params }) {
   const { af_tracking_id } = await params;
@@ -77,17 +79,97 @@ export async function POST(request, { params }) {
       // Only process document if provided
       if (document && document.size > 0) {
         console.log('Processing document upload');
-        // Upload document
-        const uploadDir = '/home/soc_portal/public/storage/access_form';
+        
+        if (document.type !== 'application/pdf') {
+          console.warn('Invalid document type:', document.type);
+          await client.query('ROLLBACK');
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'Only PDF files are allowed'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // UPDATED: Change to new storage location
+        const uploadDir = path.join(process.cwd(), 'storage', 'access_form');
         const fileName = `${af_tracking_id}_V${version}.pdf`;
         const filePath = path.join(uploadDir, fileName);
-        documentLocation = `/storage/access_form/${fileName}`;
         
-        await mkdir(uploadDir, { recursive: true });
-        const arrayBuffer = await document.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        await writeFile(filePath, buffer);
-        console.log('Document saved to:', documentLocation);
+        logger.info('Document upload initiated with new storage location', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'DocumentUpload',
+            details: `Uploading document to new storage location: ${uploadDir}`,
+            userId: socPortalId,
+            fileName: fileName,
+            filePath: filePath
+          }
+        });
+        
+        try {
+    // Ensure directory exists with proper permissions
+    await mkdir(uploadDir, { recursive: true, mode: 0o755 });
+    
+    const arrayBuffer = await document.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    await writeFile(filePath, buffer);
+    
+    // Set proper permissions - FIXED: Use imported fs module
+    fs.chmodSync(filePath, 0o644);
+    
+    // Change ownership to nginx user - FIXED: Use imported fs module
+    try {
+      const { execSync } = require('child_process');
+      const nginxUid = execSync('id -u nginx').toString().trim();
+      const nginxGid = execSync('id -g nginx').toString().trim();
+      
+      fs.chownSync(filePath, parseInt(nginxUid), parseInt(nginxGid));
+      logger.debug('Document ownership changed to nginx', {
+        nginxUid,
+        nginxGid
+      });
+    } catch (chownError) {
+      logger.warn('Could not change document ownership', {
+        error: chownError.message
+      });
+    }
+    
+    // UPDATED: Return API route URL instead of direct storage URL
+    documentLocation = `/api/storage/access_form/${fileName}`;
+    
+    console.log('Document saved to:', documentLocation);
+    
+    logger.info('Document uploaded successfully to new location', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'DocumentUpload',
+        details: 'Document uploaded successfully to new storage location',
+        userId: socPortalId,
+        documentLocation: documentLocation,
+        afTrackingId: af_tracking_id,
+        version: version
+      }
+    });
+  } catch (error) {
+          console.error('Document upload failed:', error);
+          logger.error('Document upload failed', {
+            meta: {
+              eid,
+              sid: sessionId,
+              taskName: 'DocumentUpload',
+              details: `Document upload failed: ${error.message}`,
+              userId: socPortalId,
+              error: error.message,
+              stack: error.stack
+            }
+          });
+          
+          throw new Error('Failed to save document');
+        }
       }
       
       // Check if audit trail entry exists for this version

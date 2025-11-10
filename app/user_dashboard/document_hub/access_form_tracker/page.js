@@ -555,25 +555,25 @@ export default function AccessFormTracker() {
   const downloadTemplate = async () => {
     try {
       const link = document.createElement('a');
-      link.href = '/storage/access_form/access_form_base_formate_excel/Default_Formate_Access_Form_Tracker.xlsx';
-      link.download = 'Access_Form_Template.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Template downloaded successfully!', {
-        icon: '📋',
-        duration: 3000,
-        position: 'top-right'
-      });
-    } catch (error) {
-      console.error('Error downloading template:', error);
-      toast.error('Failed to download template. Please contact support.', {
-        duration: 5000,
-        position: 'top-right'
-      });
-    }
-  };
+    link.href = '/api/storage/access_form/access_form_base_formate_excel/Default_Formate_Access_Form_Tracker.xlsx';
+    link.download = 'Access_Form_Template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success('Template downloaded successfully!', {
+      icon: '📋',
+      duration: 3000,
+      position: 'top-right'
+    });
+  } catch (error) {
+    console.error('Error downloading template:', error);
+    toast.error('Failed to download template. Please contact support.', {
+      duration: 5000,
+      position: 'top-right'
+    });
+  }
+};
 
   if (isLoading) {
     return (

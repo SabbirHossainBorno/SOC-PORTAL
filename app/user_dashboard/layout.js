@@ -1,7 +1,6 @@
-// app/user_dashboard/layout.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // ✅ ADD REACT IMPORT
 import UserDashboardSidebar from '../components/UserDashboardSidebar';
 import UserDashboardNavbar from '../components/UserDashboardNavbar';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -80,9 +79,11 @@ function UserDashboardLayout({ children, authInfo }) {
           isMobile={isMobile}
         />
         
-        {/* Main content area */}
+        {/* Main content area - FIXED: Pass authInfo to children */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gradient-to-b from-white to-gray-50 min-h-[calc(100vh-64px)]">
-          {children}
+          {React.Children.map(children, child => 
+            React.cloneElement(child, { authInfo })
+          )}
         </main>
       </div>
       

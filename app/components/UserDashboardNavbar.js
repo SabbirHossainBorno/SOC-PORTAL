@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { FaBell, FaSignOutAlt, FaUser, FaBars, FaRegCommentDots, FaUserCircle, FaLock, FaIdCard, FaClock, FaCheck } from 'react-icons/fa';
 import { DateTime } from 'luxon';
 import toast from 'react-hot-toast';
-import Image from 'next/image';
 
 export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -16,9 +15,23 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationExpanded, setNotificationExpanded] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+  const [profilePhotoError, setProfilePhotoError] = useState(false);
   const dropdownRef = useRef(null);
   const notificationsRef = useRef(null);
   const router = useRouter();
+
+  // Digital Clock
+  useEffect(() => {
+    const updateClock = () => {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      setCurrentTime(now.toFormat('hh:mm:ss a'));
+    };
+
+    updateClock();
+    const clockInterval = setInterval(updateClock, 1000);
+    return () => clearInterval(clockInterval);
+  }, []);
 
   // Get cookies with proper decoding
   const getCookie = (name) => {
@@ -40,43 +53,40 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
 
   // Fetch notifications
   const fetchNotifications = async () => {
-  try {
-    const socPortalId = getCookie('socPortalId');
-    if (!socPortalId) {
-      console.warn('No socPortalId found in cookies, skipping notification fetch');
-      toast.error('User session invalid. Please log in again.');
+    try {
+      const socPortalId = getCookie('socPortalId');
+      if (!socPortalId) {
+        setNotifications([]);
+        setUnreadCount(0);
+        return;
+      }
+
+      const response = await fetch('/api/user_dashboard/notification');
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      
+      const transformedData = Array.isArray(data) ? data.map(item => ({
+        ...item,
+        read: item.read === true || item.status === 'Read'
+      })) : [];
+
+      setNotifications(transformedData);
+      setUnreadCount(transformedData.filter(n => !n.read).length);
+    } catch (error) {
       setNotifications([]);
       setUnreadCount(0);
-      return;
     }
+  };
 
-    console.log('Fetching notifications from API...');
-    const response = await fetch('/api/user_dashboard/notification');
+  // Auto-refresh notifications every 30 seconds
+  useEffect(() => {
+    fetchNotifications(); // Initial fetch
     
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log('API response data:', data);
-    
-    // Ensure notifications are in the correct format
-    const transformedData = Array.isArray(data) ? data.map(item => ({
-      ...item,
-      read: item.read === true || item.status === 'Read'
-    })) : [];
-
-    console.log('Transformed notifications:', transformedData);
-    
-    setNotifications(transformedData);
-    setUnreadCount(transformedData.filter(n => !n.read).length);
-  } catch (error) {
-    console.error('Notification fetch error:', error);
-    setNotifications([]);
-    setUnreadCount(0);
-    toast.error('Failed to fetch notifications');
-  }
-};
+    const backgroundRefresh = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(backgroundRefresh);
+  }, []);
 
   // Mark notification as read
   const markAsRead = async (id, e) => {
@@ -86,17 +96,13 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         method: 'PUT'
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to mark notification as read');
-      }
+      if (!response.ok) return;
       
-      // Update local state
       setNotifications(prev => 
         prev.map(n => n.id === id ? { ...n, read: true } : n)
       );
       setUnreadCount(prev => prev - 1);
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
       toast.error('Failed to mark notification as read');
     }
   };
@@ -109,9 +115,7 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         .filter(n => !n.read)
         .map(n => n.id);
       
-      if (unreadIds.length === 0) {
-        return;
-      }
+      if (unreadIds.length === 0) return;
       
       await Promise.all(
         unreadIds.map(id => 
@@ -119,21 +123,15 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         )
       );
       
-      setNotifications(prev => 
-        prev.map(n => ({ ...n, read: true }))
-      );
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
-      toast.success('All notifications marked as read');
+      toast.success('All Notifications Marked As Read');
     } catch (error) {
-      console.error('Failed to mark all as read:', error);
-      toast.error('Failed to mark all as read');
+      toast.error('Failed To Mark All As Read');
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
+  // Fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -141,7 +139,6 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         const userId = getCookie('socPortalId');
         
         if (!userId) {
-          console.warn('[NAVBAR] No user ID found in cookies');
           setLoading(false);
           return;
         }
@@ -194,6 +191,7 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     fetchUserData();
   }, []);
 
+  // Click outside handlers
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -209,90 +207,61 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-const handleLogout = async () => {
-  const toastId = toast.loading('Logging Out...', {
-    position: 'top-right',
-    style: {
-      background: '#f0fdf4',
-      color: '#15803d',
-      padding: '16px',
-      border: '1px solid #bbf7d0',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-      fontSize: '14px',
-    }
-  });
-  
-  try {
-    const response = await fetch('/api/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
-
-    const result = await response.json();
-
-    if (response.ok) {
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('loginTime');
+  const handleLogout = async () => {
+    const toastId = toast.loading('Logging Out...');
+    
+    try {
+      // Clear user data immediately
+      setUserData(null);
       
-      toast.success('Logout Successful!', {
-        id: toastId,
-        duration: 2000,
-        style: {
-          background: '#f0fdf4',
-          color: '#15803d',
-          padding: '16px',
-          border: '1px solid #bbf7d0',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          fontSize: '14px',
-        }
+      const response = await fetch('/api/logout', {
+        method: 'POST',
+        credentials: 'include'
       });
-      
-      setTimeout(() => {
-        router.push('/');
-        router.refresh();
-      }, 1500);
-    } else {
-      toast.error(`Logout Failed: ${result.message || 'Unknown Error'}`, {
-        id: toastId,
-        duration: 4000,
-        style: {
-          background: '#fef2f2',
-          color: '#b91c1c',
-          border: '1px solid #fecaca',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          padding: '16px',
-          fontSize: '14px',
-        }
-      });
-    }
-  } catch (error) {
-    toast.error(`Network Error: ${error.message}`, {
-      id: toastId,
-      duration: 4000,
-      style: {
-        background: '#fef2f2',
-        color: '#b91c1c',
-        border: '1px solid #fecaca',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        padding: '16px',
-        fontSize: '14px',
+
+      const result = await response.json();
+
+      if (response.ok) {
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('loginTime');
+        
+        toast.success('Logout Successful!', { id: toastId });
+        
+        setTimeout(() => {
+          router.push('/');
+          router.refresh();
+        }, 1500);
+      } else {
+        toast.error(`Logout Failed: ${result.message || 'Unknown Error'}`, { id: toastId });
       }
-    });
-  }
-};
+    } catch (error) {
+      toast.error(`Network Error: ${error.message}`, { id: toastId });
+    }
+  };
+
+  // Get user initials
+  const userInitials = userData ? 
+    `${userData.firstName?.charAt(0) || ''}${userData.lastName?.charAt(0) || ''}` || 'UU' 
+    : 'UU';
+
+  // Handle profile photo error
+  const handleProfilePhotoError = () => {
+    setProfilePhotoError(true);
+  };
+
   // Display loading state
   if (loading) {
     return (
-      <header className="sticky top-0 z-50 bg-white shadow-sm h-16 flex items-center px-4 sm:px-6 border-b border-gray-200">
+      <header className="sticky top-0 z-50 bg-white shadow-md h-16 flex items-center px-4 sm:px-6 border-b border-blue-700/40">
         <div className="flex-1">
-          <h1 className="text-lg sm:text-xl font-bold text-gray-800">
-            SOC User Dashboard
+          <h1 className="text-lg sm:text-xl font-bold text-[#000B58]">
+            SOC PORTAL
           </h1>
         </div>
         <div className="flex items-center space-x-3">
-          <div className="bg-gray-200 border-2 border-dashed rounded w-10 h-10 animate-pulse" />
+          <div className="bg-blue-700/20 border-2 border-dashed border-blue-500/30 rounded w-10 h-10 animate-pulse" />
         </div>
       </header>
     );
@@ -311,14 +280,24 @@ const handleLogout = async () => {
 
       {/* Title */}
       <div className="flex-1">
-        <h1 className="text-lg sm:text-xl font-bold text-gray-800">
+        <h1 className="text-lg sm:text-xl font-bold text-[#000B58]">
           SOC PORTAL
         </h1>
+        <p className="text-xs text-blue-600/80 hidden sm:block">
+          Service Operations Center • Real-time Threat Management
+        </p>
       </div>
 
       {/* Right side controls */}
       <div className="flex items-center space-x-4 sm:space-x-5">
-        {/* Notification Icon - Enhanced */}
+        {/* Digital Clock */}
+        <div className="hidden sm:flex items-center">
+          <div className="text-sm font-mono bg-gray-100 px-3 py-1.5 rounded border border-gray-300 text-gray-700">
+            {currentTime}
+          </div>
+        </div>
+
+        {/* Notification Icon */}
         <div className="relative" ref={notificationsRef}>
           <button
             onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -335,7 +314,7 @@ const handleLogout = async () => {
             </div>
           </button>
 
-          {/* Notification Tray - Responsive Design */}
+          {/* Notification Tray */}
           {notificationsOpen && (
             <div 
               className={`absolute ${
@@ -465,7 +444,7 @@ const handleLogout = async () => {
           )}
         </div>
 
-        {/* Profile Section - Premium Design */}
+        {/* Profile Section - UPDATED: Shows profile photo if available */}
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -477,28 +456,19 @@ const handleLogout = async () => {
             <div className="relative rounded-full w-10 h-10 group-hover:shadow-md transition-all">
               <div className="absolute inset-0 rounded-full border-2 border-transparent group-hover:border-blue-300 transition-colors"></div>
               <div className="w-full h-full rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
-                {userData?.profilePhoto ? (
-                  <Image 
+                {/* Show profile photo if available and no error, otherwise show initials */}
+                {userData?.profilePhoto && !profilePhotoError ? (
+                  <img 
                     src={userData.profilePhoto} 
                     alt="Profile" 
-                    width={48}
-                    height={48}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.parentElement.innerHTML = `
-                        <span class="text-xl font-bold text-gray-700">
-                          ${userData?.firstName?.charAt(0) || ''}${userData?.lastName?.charAt(0) || ''}
-                        </span>
-                      `;
-                    }}
+                    onError={handleProfilePhotoError}
+                    loading="lazy"
                   />
-                ) : userData ? (
-                  <span className="text-xl font-bold text-gray-700">
-                    {userData.firstName?.charAt(0) || ''}{userData.lastName?.charAt(0) || ''}
-                  </span>
                 ) : (
-                  <FaUser className="text-gray-600 text-xl" />
+                  <span className="text-xl font-bold text-gray-700">
+                    {userInitials}
+                  </span>
                 )}
               </div>
             </div>
@@ -520,7 +490,7 @@ const handleLogout = async () => {
             )}
           </button>
 
-          {/* Profile Dropdown - Updated with all fields */}
+          {/* Profile Dropdown */}
           {dropdownOpen && (
             <div className="absolute right-0 mt-3 w-[320px] bg-white/90 backdrop-blur-lg border border-gray-200/80 rounded shadow-2xl z-40 overflow-hidden transform transition-all duration-300 origin-top-right">
               <div className="relative pt-2 px-6 pb-6 bg-gradient-to-br from-slate-900 to-indigo-900 text-white">
@@ -547,7 +517,7 @@ const handleLogout = async () => {
                           <FaIdCard className="text-indigo-600 mr-2" />
                           Identity
                         </h4>
-                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">Verified</span>
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Verified</span>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
@@ -616,7 +586,7 @@ const handleLogout = async () => {
                   </button>
                   <button
                     className="w-full text-left px-4 py-3 hover:bg-emerald-50/50 group transition-all duration-200 flex items-center border-t border-gray-100"
-                    onClick={() => router.push(`/user_dashboard/password_change/${userData.id}`)}
+                    onClick={() => router.push(`/user_dashboard/password_change/${userData?.id}`)}
                   >
                     <div className="relative">
                       <div className="w-10 h-10 rounded bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">

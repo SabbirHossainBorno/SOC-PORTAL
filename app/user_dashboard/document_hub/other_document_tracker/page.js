@@ -133,13 +133,15 @@ export default function OtherDocumentTracker() {
     const documentType = documentTypes.find(doc => doc.value === type);
     if (!documentType) return;
 
+    // Show loading spinner immediately
     setSelectedType(type);
     setNavigatingTo(documentType.label);
     setIsNavigating(true);
 
+    // Navigate immediately without delay
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
       router.push(documentType.path);
+      // The spinner will remain visible until the page navigation completes
     } catch (error) {
       console.error('Navigation error:', error);
       setIsNavigating(false);
@@ -150,10 +152,17 @@ export default function OtherDocumentTracker() {
   const selectedDocument = documentTypes.find(doc => doc.value === selectedType);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
-      {/* Fixed Overlay Loading Spinner */}
-      {isNavigating && <LoadingSpinner />}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8 relative">
+      {/* Fixed Overlay Loading Spinner - Fixed positioning */}
+      {isNavigating && (
+        <div className="fixed inset-0 z-50 bg-white bg-opacity-80 backdrop-blur-sm flex items-center justify-center">
+          <LoadingSpinner 
+            message={navigatingTo ? `Loading ${navigatingTo}...` : 'Loading...'}
+          />
+        </div>
+      )}
 
+      {/* Rest of your page content remains exactly the same */}
       <div className="max-w-7xl mx-auto">
         {/* Header Section */}
         <div className="mb-8">
@@ -266,7 +275,7 @@ export default function OtherDocumentTracker() {
                   selectedType === docType.value
                     ? `${docType.borderColor} ${docType.bgColor} ring-2 ring-opacity-50 ${docType.color.replace('text', 'ring')}`
                     : 'border-gray-200 bg-white hover:border-gray-300'
-                } ${isNavigating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                } ${isNavigating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -284,7 +293,7 @@ export default function OtherDocumentTracker() {
                       </p>
                     </div>
                   </div>
-                  <FaArrowRight className={`text-gray-400 ${
+                  <FaArrowRight className={`text-gray-400 transition-transform ${
                     selectedType === docType.value ? docType.color : ''
                   }`} />
                 </div>

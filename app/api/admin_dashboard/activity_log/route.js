@@ -1,4 +1,3 @@
-
 // app/api/admin_dashboard/activity_log/route.js
 import { NextResponse } from 'next/server';
 import { query } from '../../../../lib/db';
@@ -12,6 +11,8 @@ export async function GET(request) {
   const eid = request.cookies.get('eid')?.value || 'N/A';
   const sid = request.cookies.get('sessionId')?.value || 'N/A';
   
+  let client; // Declare client outside try block for proper cleanup
+
   try {
     // Extract query parameters
     const { searchParams } = new URL(request.url);
@@ -51,7 +52,7 @@ export async function GET(request) {
     `;
     
     // Build stats queries
-    const statsQueries = `
+    let statsQuery = `
       SELECT 
         COUNT(*) FILTER (WHERE action = 'LOGIN_SUCCESS') AS "loginSuccess",
         COUNT(*) FILTER (WHERE action LIKE '%USER%') AS "userManagement",
@@ -68,7 +69,7 @@ export async function GET(request) {
       if (value) {
         baseQuery += ` AND ${condition} $${paramIndex}`;
         countQuery += ` AND ${condition} $${paramIndex}`;
-        statsQueries += ` AND ${condition} $${paramIndex}`;
+        statsQuery += ` AND ${condition} $${paramIndex}`;
         params.push(value);
         paramIndex++;
       }
@@ -94,14 +95,13 @@ export async function GET(request) {
 
     // Add pagination
     baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(pageSize, offset);
+    const paginationParams = [...params, pageSize, offset];
+    const filterParams = params; // Without pagination params
 
-    // Execute all queries
-    const [logsResult, countResult, statsResult] = await Promise.all([
-      query(baseQuery, params),
-      query(countQuery, params.slice(0, -2)),
-      query(statsQueries, params.slice(0, -2))
-    ]);
+    // Execute queries sequentially instead of Promise.all to avoid pool issues
+    const logsResult = await query(baseQuery, paginationParams);
+    const countResult = await query(countQuery, filterParams);
+    const statsResult = await query(statsQuery, filterParams);
 
     const logs = logsResult.rows;
     const totalCount = parseInt(countResult.rows[0].total);
@@ -132,6 +132,8 @@ export async function GET(request) {
 
   } catch (error) {
     const duration = Date.now() - startTime;
+    console.error('Activity log fetch error:', error);
+    
     logger.error('Failed to fetch activity logs', {
       meta: {
         eid,

@@ -3,6 +3,7 @@ import { query, getDbConnection } from '../../../../lib/db';
 import logger from '../../../../lib/logger';
 import sendTelegramAlert from '../../../../lib/telegramAlert';
 import { DateTime } from 'luxon';
+import { getClientIP } from '../../../../lib/utils/ipUtils';
 
 // Helper function to get current time in Dhaka timezone
 const getCurrentDateTime = () => {
@@ -173,7 +174,7 @@ export async function GET(request) {
   const sessionId = request.cookies.get('sessionId')?.value || 'Unknown';
   const eid = request.cookies.get('eid')?.value || 'Unknown';
   const socPortalId = request.cookies.get('socPortalId')?.value || 'Unknown';
-  const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
+  const ipAddress = getClientIP(request);
   const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
 
   console.debug('Fetching top issues:', { sessionId, eid, socPortalId, ipAddress, userAgent });
@@ -268,6 +269,7 @@ export async function POST(request) {
     }
   });
 
+  let connection;
   try {
     const formData = await request.json();
     console.debug('Received form data:', { formData });
@@ -290,14 +292,14 @@ export async function POST(request) {
 
     // Process multiple selection fields
     const processedData = {
-  ...formData,
-  affectedChannel: processMultiSelectField(formData.affectedChannel),
-  affectedPersona: processMultiSelectField(formData.affectedPersona),
-  affectedMNO: processMultiSelectField(formData.affectedMNO),
-  affectedPortal: processMultiSelectField(formData.affectedPortal),
-  affectedType: processMultiSelectField(formData.affectedType),
-  affectedService: processMultiSelectField(formData.affectedService)
-};
+      ...formData,
+      affectedChannel: processMultiSelectField(formData.affectedChannel),
+      affectedPersona: processMultiSelectField(formData.affectedPersona),
+      affectedMNO: processMultiSelectField(formData.affectedMNO),
+      affectedPortal: processMultiSelectField(formData.affectedPortal),
+      affectedType: processMultiSelectField(formData.affectedType),
+      affectedService: processMultiSelectField(formData.affectedService)
+    };
 
     console.debug('Processed form data:', { processedData });
 
@@ -389,6 +391,58 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
       });
     }
 
+    // Validate category times before starting transaction
+    const categoryTimeErrors = [];
+    Object.entries(processedData.categoryTimes || {}).forEach(([category, times]) => {
+      if (times.startTime && times.endTime) {
+        const catStart = new Date(times.startTime);
+        const catEnd = new Date(times.endTime);
+        
+        if (catStart > catEnd) {
+          categoryTimeErrors.push(`Category ${category} has end time before start time`);
+        }
+        
+        // Validate against main downtime period
+        const mainStart = new Date(processedData.startTime);
+        const mainEnd = new Date(processedData.endTime);
+        
+        if (catStart < mainStart) {
+          categoryTimeErrors.push(`Category ${category} start time is before main start time`);
+        }
+        
+        if (catEnd > mainEnd) {
+          categoryTimeErrors.push(`Category ${category} end time is after main end time`);
+        }
+      } else if (!times.startTime || !times.endTime) {
+        categoryTimeErrors.push(`Both start and end times are required for ${category}`);
+      }
+    });
+
+    if (categoryTimeErrors.length > 0) {
+      const message = categoryTimeErrors.join('; ');
+      console.debug('Category time validation failed:', { message });
+      
+      logger.warn('Category time validation failed', {
+        meta: {
+          eid,
+          sid: sessionId,
+          taskName: 'Validation',
+          details: message,
+          categoryTimeErrors
+        }
+      });
+      
+      return new Response(JSON.stringify({
+        success: false,
+        message
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
     // Generate downtime ID
     console.debug('Generating downtime ID');
     const downtimeIdResult = await query("SELECT nextval('downtime_id_seq')");
@@ -396,14 +450,6 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
     const downtimeId = `DT${nextVal.toString().padStart(6, '0')}SOCP`;
     
     console.debug('Generated downtime ID:', { downtimeId, nextVal });
-    logger.debug('Downtime ID generated', {
-      meta: {
-        eid,
-        sid: sessionId,
-        taskName: 'IDGeneration',
-        downtimeId
-      }
-    });
 
     // Generate notification IDs
     console.debug('Generating notification IDs');
@@ -415,11 +461,12 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
     const currentDhakaTime = getCurrentDateTime();
     const currentDhakaTimeTz = `${currentDhakaTime}+06:00`;
 
-    // Start transaction
+    // Start transaction - FIX: Use a single connection variable
     console.debug('Starting database transaction');
-    const client = await getDbConnection().connect();
+    connection = await getDbConnection().connect();
+    
     try {
-      await client.query('BEGIN');
+      await connection.query('BEGIN');
       console.debug('Transaction begun');
 
       // Calculate duration for the main time range
@@ -443,7 +490,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
         const issueDate = catStartDateTime ? catStartDateTime.substring(0, 10) : formatDate(processedData.startTime);
         console.debug('Extracted issue date:', { issueDate });
         
-        // Validate category times
+        // Validate category times (again for safety)
         const catStart = catStartDateTime ? DateTime.fromFormat(catStartDateTime, 'yyyy-MM-dd HH:mm:ss').toJSDate() : start.toJSDate();
         const catEnd = catEndDateTime ? DateTime.fromFormat(catEndDateTime, 'yyyy-MM-dd HH:mm:ss').toJSDate() : end.toJSDate();
         console.debug('Validating category times:', { category, catStart: catStart.toISOString(), catEnd: catEnd.toISOString() });
@@ -518,7 +565,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
         ];
         
         console.debug('Preparing to insert category record:', { category, params, paramCount: params.length });
-        await client.query(insertQuery, params);
+        await connection.query(insertQuery, params);
         
         console.debug('Inserted category record:', { category, downtimeId });
         logger.debug('Category record inserted', {
@@ -568,7 +615,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
       ];
 
       console.debug('Creating admin notification:', { adminNotificationId, title: adminNotifParams[1] });
-      await client.query(adminNotificationQuery, adminNotifParams);
+      await connection.query(adminNotificationQuery, adminNotifParams);
 
       // Create user notification
       const userNotificationQuery = `
@@ -586,7 +633,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
       ];
 
       console.debug('Creating user notification:', { userNotificationId, title: userNotifParams[1], socPortalId });
-      await client.query(userNotificationQuery, userNotifParams);
+      await connection.query(userNotificationQuery, userNotifParams);
 
       console.debug('Notifications created:', { adminNotificationId, userNotificationId });
       logger.info('Notifications created', {
@@ -620,7 +667,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
       ];
       
       console.debug('Logging user activity:', { activityParams });
-      await client.query(activityLogQuery, activityParams);
+      await connection.query(activityLogQuery, activityParams);
       
       console.debug('Activity logged successfully');
       logger.info('Activity logged', {
@@ -636,7 +683,7 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
       
       // Commit transaction
       console.debug('Committing transaction');
-      await client.query('COMMIT');
+      await connection.query('COMMIT');
       
       console.debug('Transaction committed successfully');
       logger.info('Transaction committed', {
@@ -648,43 +695,58 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
         }
       });
       
-      // Send Telegram alert
-      const successMessage = formatDowntimeAlert(
-        downtimeId,
-        processedData.issueTitle,
-        formatDate(processedData.startTime),
-        formatDateTime(processedData.startTime),
-        formatDateTime(processedData.endTime),
-        duration,
-        processedData.categories,
-        ipAddress,
-        userAgent,
-        { 
-          eid,
-          status: 'Successful',
-          userId: socPortalId,
-          affectedChannel: processedData.affectedChannel,
-          affectedService: processedData.affectedService,
-          affectedPersona: processedData.affectedPersona || 'N/A',
-          affectedMno: affectedMno || 'N/A',
-          affectedPortal: processedData.affectedPortal || 'N/A',
-          affectedType: processedData.affectedType || 'N/A',
-          impactType: processedData.impactType,
-          modality: processedData.modality,
-          reliabilityImpacted: processedData.reliabilityImpacted || 'N/A',
-          concern: processedData.concern,
-          reason: processedData.reason,
-          resolution: processedData.resolution,
-          systemUnavailability: processedData.systemUnavailability,
-          trackedBy: processedData.trackedBy,
-          serviceDeskTicketId: processedData.ticketId || 'N/A',
-          serviceDeskTicketLink: processedData.ticketLink || 'N/A',
-          remark: processedData.remark || 'N/A'
-        }
-      );
-      
-      console.debug('Sending Telegram alert:', { successMessage });
-      await sendTelegramAlert(successMessage);
+      // Only send Telegram alert after successful database insertion
+      try {
+        const successMessage = formatDowntimeAlert(
+          downtimeId,
+          processedData.issueTitle,
+          formatDate(processedData.startTime),
+          formatDateTime(processedData.startTime),
+          formatDateTime(processedData.endTime),
+          duration,
+          processedData.categories,
+          ipAddress,
+          userAgent,
+          { 
+            eid,
+            status: 'Successful',
+            userId: socPortalId,
+            affectedChannel: processedData.affectedChannel,
+            affectedService: processedData.affectedService,
+            affectedPersona: processedData.affectedPersona || 'N/A',
+            affectedMno: affectedMno || 'N/A',
+            affectedPortal: processedData.affectedPortal || 'N/A',
+            affectedType: processedData.affectedType || 'N/A',
+            impactType: processedData.impactType,
+            modality: processedData.modality,
+            reliabilityImpacted: processedData.reliabilityImpacted || 'N/A',
+            concern: processedData.concern,
+            reason: processedData.reason,
+            resolution: processedData.resolution,
+            systemUnavailability: processedData.systemUnavailability,
+            trackedBy: processedData.trackedBy,
+            serviceDeskTicketId: processedData.ticketId || 'N/A',
+            serviceDeskTicketLink: processedData.ticketLink || 'N/A',
+            remark: processedData.remark || 'N/A'
+          }
+        );
+        
+        console.debug('Sending Telegram alert:', { successMessage });
+        await sendTelegramAlert(successMessage);
+        console.debug('Telegram alert sent successfully');
+      } catch (telegramError) {
+        console.error('Failed to send Telegram alert:', telegramError);
+        // Don't fail the request if Telegram fails, just log it
+        logger.error('Telegram alert failed', {
+          meta: {
+            eid,
+            sid: sessionId,
+            taskName: 'TelegramAlert',
+            details: `Telegram alert failed: ${telegramError.message}`,
+            downtimeId
+          }
+        });
+      }
       
       console.debug('Downtime report processed successfully:', { 
         downtimeId, 
@@ -692,18 +754,8 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
         affectedChannel: processedData.affectedChannel,
         affectedService: processedData.affectedService
       });
-      logger.info('Downtime reported successfully', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'ReportSuccess',
-          details: `Report ID: ${downtimeId} | Categories: ${processedData.categories.length} | Channels: ${processedData.affectedChannel} | Services: ${processedData.affectedService}`,
-          userId: socPortalId,
-          downtimeId,
-          telegramMessage: successMessage
-        }
-      });
-      
+
+      // ✅ SUCCESS RESPONSE - Return proper JSON
       return new Response(JSON.stringify({
         success: true,
         message: 'Downtime reported successfully',
@@ -719,86 +771,20 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
     } catch (error) {
       console.error('Error in downtime report processing:', { error: error.message, stack: error.stack });
       
-      // Rollback transaction
-      try {
-        console.debug('Attempting to rollback transaction');
-        await client.query('ROLLBACK');
-        console.debug('Transaction rolled back successfully');
-        logger.warn('Transaction rolled back', {
-          meta: {
-            eid,
-            sid: sessionId,
-            taskName: 'Database',
-            details: 'Transaction rolled back due to error'
-          }
-        });
-      } catch (rollbackError) {
-        console.error('Rollback failed:', { error: rollbackError.message, stack: rollbackError.stack });
-        logger.error('Rollback failed', {
-          meta: {
-            eid,
-            sid: sessionId,
-            taskName: 'DatabaseError',
-            details: `Rollback error: ${rollbackError.message}`,
-            stack: rollbackError.stack
-          }
-        });
-      } finally {
-        client.release();
-        console.debug('Database client released');
+      // Rollback transaction if connection exists
+      if (connection) {
+        try {
+          console.debug('Attempting to rollback transaction');
+          await connection.query('ROLLBACK');
+          console.debug('Transaction rolled back successfully');
+        } catch (rollbackError) {
+          console.error('Rollback failed:', { error: rollbackError.message });
+        }
       }
       
-      // Send error Telegram alert
-      const errorMessage = formatDowntimeAlert(
-        'N/A',
-        processedData?.issueTitle || 'No title',
-        processedData?.startTime ? formatDate(processedData.startTime) : 'N/A',
-        processedData?.startTime ? formatDateTime(processedData.startTime) : 'N/A',
-        processedData?.endTime ? formatDateTime(processedData.endTime) : 'N/A',
-        processedData?.duration || 'N/A',
-        processedData?.categories || [],
-        ipAddress,
-        userAgent,
-        { 
-          eid,
-          status: `Failed: ${error.message}`,
-          userId: socPortalId,
-          affectedChannel: processedData?.affectedChannel || 'N/A',
-          affectedService: processedData?.affectedService || 'N/A',
-          affectedPersona: processedData?.affectedPersona || 'N/A',
-          affectedMno: affectedMno || 'N/A',
-          affectedPortal: processedData?.affectedPortal || 'N/A',
-          affectedType: processedData?.affectedType || 'N/A',
-          impactType: processedData?.impactType || 'N/A',
-          modality: processedData?.modality || 'N/A',
-          reliabilityImpacted: processedData?.reliabilityImpacted || 'N/A',
-          concern: processedData?.concern || 'N/A',
-          reason: processedData?.reason || 'N/A',
-          resolution: processedData?.resolution || 'N/A',
-          systemUnavailability: processedData?.systemUnavailability || 'N/A',
-          trackedBy: processedData?.trackedBy || 'N/A',
-          serviceDeskTicketId: processedData?.ticketId || 'N/A',
-          serviceDeskTicketLink: processedData?.ticketLink || 'N/A',
-          remark: processedData?.remark || 'N/A'
-        }
-      );
-      
-      console.debug('Sending error Telegram alert:', { errorMessage });
-      await sendTelegramAlert(errorMessage);
-      
       console.error('Downtime report failed:', { error: error.message });
-      logger.error('Downtime report failed', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'SystemError',
-          details: `Error: ${error.message}`,
-          stack: error.stack,
-          userId: socPortalId,
-          telegramMessage: errorMessage
-        }
-      });
       
+      // ✅ ERROR RESPONSE - Return proper JSON
       return new Response(JSON.stringify({
         success: false,
         message: 'Internal server error',
@@ -812,17 +798,8 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
     }
   } catch (error) {
     console.error('Error parsing form data:', { error: error.message, stack: error.stack });
-    logger.error('Form data parsing failed', {
-      meta: {
-        eid,
-        sid: sessionId,
-        taskName: 'SystemError',
-        details: `Error parsing form data: ${error.message}`,
-        stack: error.stack,
-        userId: socPortalId
-      }
-    });
     
+    // ✅ ERROR RESPONSE - Return proper JSON
     return new Response(JSON.stringify({
       success: false,
       message: 'Invalid form data',
@@ -833,5 +810,16 @@ console.debug('Processed affected_mno:', { affectedChannels, affectedMno });
         'Content-Type': 'application/json'
       }
     });
+  } finally {
+    // ✅ FIX: Release connection only once, and only if it exists
+    if (connection) {
+      try {
+        connection.release();
+        console.debug('Database client released successfully');
+      } catch (releaseError) {
+        console.error('Error releasing database connection:', releaseError.message);
+        // Don't throw error in finally block
+      }
+    }
   }
 }

@@ -13,7 +13,7 @@ import {
 import { toast } from 'react-hot-toast';
 
 // Enhanced Device Details Modal Component
-const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
+const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit, canCreateDevice }) => {
   if (!isOpen || !device) return null;
 
   const formatDate = (dateString) => {
@@ -65,13 +65,15 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <button
-                onClick={onEdit}
-                className="flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                <FaEdit className="mr-2" />
-                Edit Device
-              </button>
+              {canCreateDevice && (
+                <button
+                  onClick={onEdit}
+                  className="flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <FaEdit className="mr-2" />
+                  Edit Device
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
@@ -82,7 +84,7 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
           </div>
         </div>
 
-        {/* Modal Body */}
+        {/* Modal Body - rest of the modal content remains the same */}
         <div className="p-8">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             {/* Left Column */}
@@ -286,7 +288,7 @@ const DeviceDetailsModal = ({ device, isOpen, onClose, onEdit }) => {
   );
 };
 
-export default function DeviceTrackerLog() {
+export default function DeviceTrackerLog({ authInfo }) {
   const router = useRouter();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -295,49 +297,72 @@ export default function DeviceTrackerLog() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [handedOverCount, setHandedOverCount] = useState(0); // Add this line
+  const [handedOverCount, setHandedOverCount] = useState(0);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const fetchDevices = async (page = 1, search = '', limit = itemsPerPage) => {
-  try {
-    setLoading(true);
-    const queryParams = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-      sort: sortField,
-      order: sortDirection,
-      ...(search && { search }),
-      ...(statusFilter !== 'all' && { status: statusFilter })
-    });
-
-    const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/device_tracker_log?${queryParams}`);
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch devices');
-    }
-
-    const result = await response.json();
-    
-    if (result.success) {
-      setDevices(result.data);
-      setTotalPages(result.pagination.pages);
-      setTotalCount(result.pagination.total);
-      setHandedOverCount(result.stats?.handedOver || 0); // Add this line
-      setCurrentPage(page);
+  // ✅ FIXED: Enhanced auth handling to ensure role is always available
+  const [effectiveAuthInfo, setEffectiveAuthInfo] = useState(authInfo);
+  
+  useEffect(() => {
+    // If authInfo from props is empty, fetch it directly
+    if (!authInfo?.role) {
+      fetch('/api/check_auth')
+        .then(res => res.json())
+        .then(data => {
+          if (data.authenticated) {
+            setEffectiveAuthInfo(data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch auth:', err));
     } else {
-      throw new Error(result.message);
+      setEffectiveAuthInfo(authInfo);
     }
-  } catch (error) {
-    console.error('Error fetching devices:', error);
-    toast.error('Failed to load device tracker logs');
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [authInfo]);
+
+  // ✅ FIXED: Role-based access control with fallback
+  const userRole = effectiveAuthInfo?.role || '';
+  const canCreateDevice = ['SOC', 'INTERN'].includes(userRole);
+
+  const fetchDevices = async (page = 1, search = '', limit = itemsPerPage) => {
+    try {
+      setLoading(true);
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        sort: sortField,
+        order: sortDirection,
+        ...(search && { search }),
+        ...(statusFilter !== 'all' && { status: statusFilter })
+      });
+
+      const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/device_tracker_log?${queryParams}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch devices');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setDevices(result.data);
+        setTotalPages(result.pagination.pages);
+        setTotalCount(result.pagination.total);
+        setHandedOverCount(result.stats?.handedOver || 0);
+        setCurrentPage(page);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('Error fetching devices:', error);
+      toast.error('Failed to load device tracker logs');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchDevices();
@@ -434,13 +459,16 @@ export default function DeviceTrackerLog() {
                 </div>
               </div>
               <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
-                  className="flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold"
-                >
-                  <FaPlus className="mr-2" />
-                  Track New Device
-                </button>
+                {/* ✅ FIXED: Conditionally render Track New Device button */}
+                {canCreateDevice && (
+                  <button
+                    onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
+                    className="flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+                  >
+                    <FaPlus className="mr-2" />
+                    Track New Device
+                  </button>
+                )}
                 <div className="p-4 bg-white/20 rounded backdrop-blur-sm">
                   <FaMobile className="text-2xl" />
                 </div>
@@ -450,57 +478,57 @@ export default function DeviceTrackerLog() {
         </div>
 
         {/* Quick Stats */}
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Devices</p>
-        <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
-      </div>
-      <div className="p-4 bg-blue-50 rounded">
-        <FaMobile className="text-2xl text-blue-600" />
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Working Devices</p>
-        <p className="text-3xl font-bold text-emerald-600 mt-2">{workingDevices}</p>
-      </div>
-      <div className="p-4 bg-emerald-50 rounded">
-        <FaCheckCircle className="text-2xl text-emerald-600" />
-      </div>
-    </div>
-  </div>
-  
-  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Not Working</p>
-        <p className="text-3xl font-bold text-rose-600 mt-2">{notWorkingDevices}</p>
-      </div>
-      <div className="p-4 bg-rose-50 rounded">
-        <FaExclamationTriangle className="text-2xl text-rose-600" />
-      </div>
-    </div>
-  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Devices</p>
+                <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
+              </div>
+              <div className="p-4 bg-blue-50 rounded">
+                <FaMobile className="text-2xl text-blue-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Working Devices</p>
+                <p className="text-3xl font-bold text-emerald-600 mt-2">{workingDevices}</p>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded">
+                <FaCheckCircle className="text-2xl text-emerald-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Not Working</p>
+                <p className="text-3xl font-bold text-rose-600 mt-2">{notWorkingDevices}</p>
+              </div>
+              <div className="p-4 bg-rose-50 rounded">
+                <FaExclamationTriangle className="text-2xl text-rose-600" />
+              </div>
+            </div>
+          </div>
 
-  {/* New Handed Over Count Card */}
-  <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Handed Over</p>
-        <p className="text-3xl font-bold text-amber-600 mt-2">{handedOverCount}</p>
-        <p className="text-xs text-slate-500 mt-1">Not returned yet</p>
-      </div>
-      <div className="p-4 bg-amber-50 rounded">
-        <FaUser className="text-2xl text-amber-600" />
-      </div>
-    </div>
-  </div>
-</div>
+          {/* New Handed Over Count Card */}
+          <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Handed Over</p>
+                <p className="text-3xl font-bold text-amber-600 mt-2">{handedOverCount}</p>
+                <p className="text-xs text-slate-500 mt-1">Not returned yet</p>
+              </div>
+              <div className="p-4 bg-amber-50 rounded">
+                <FaUser className="text-2xl text-amber-600" />
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Enhanced Search and Filters */}
         <div className="bg-white rounded shadow-lg p-6 border border-slate-200 mb-6">
@@ -577,13 +605,16 @@ export default function DeviceTrackerLog() {
                   ? 'No devices match your current filters. Try adjusting your search criteria.' 
                   : 'Start tracking your first device to manage your inventory efficiently.'}
               </p>
-              <button
-                onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
-                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl font-semibold"
-              >
-                <FaPlus className="mr-2" />
-                Track New Device
-              </button>
+              {/* ✅ FIXED: Conditionally show the button in empty state */}
+              {canCreateDevice && (
+                <button
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/device_tracker')}
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+                >
+                  <FaPlus className="mr-2" />
+                  Track New Device
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -717,14 +748,17 @@ export default function DeviceTrackerLog() {
                               <FaEye className="mr-2 group-hover/btn:scale-110 transition-transform" />
                               View
                             </button>
-                            <button
-                              onClick={() => handleEdit(device)}
-                              className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors group/btn"
-                              title="Edit Device"
-                            >
-                              <FaEdit className="mr-2 group-hover/btn:scale-110 transition-transform" />
-                              Edit
-                            </button>
+                            {/* ✅ FIXED: Conditionally show Edit button */}
+                            {canCreateDevice && (
+                              <button
+                                onClick={() => handleEdit(device)}
+                                className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors group/btn"
+                                title="Edit Device"
+                              >
+                                <FaEdit className="mr-2 group-hover/btn:scale-110 transition-transform" />
+                                Edit
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -807,6 +841,7 @@ export default function DeviceTrackerLog() {
             handleCloseModal();
             if (selectedDevice) handleEdit(selectedDevice);
           }}
+          canCreateDevice={canCreateDevice}
         />
       </div>
 

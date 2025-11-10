@@ -139,12 +139,33 @@ export async function GET(request) {
     const dataParams = [...params, limit, offset];
     const dataResult = await query(dataQuery, dataParams);
 
-    logger.info('Access form log fetched successfully', {
+    // TRANSFORM DOCUMENT LOCATION URLS TO NEW API ROUTE
+    const transformedRows = dataResult.rows.map(row => {
+      let documentLocation = row.document_location;
+      
+      // Convert old public directory URLs to new API route
+      if (documentLocation && documentLocation.startsWith('/storage/access_form/')) {
+        documentLocation = documentLocation.replace('/storage/access_form/', '/api/storage/access_form/');
+      }
+      
+      // Add cache busting parameter to prevent caching issues
+      if (documentLocation) {
+        const separator = documentLocation.includes('?') ? '&' : '?';
+        documentLocation = `${documentLocation}${separator}t=${Date.now()}`;
+      }
+      
+      return {
+        ...row,
+        document_location: documentLocation
+      };
+    });
+
+    logger.info('Access form log fetched and transformed successfully', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'AccessFormLog',
-        details: `Fetched ${dataResult.rows.length} records`,
+        details: `Fetched ${transformedRows.length} records with document URL transformation`,
         userId: socPortalId,
         totalCount,
         activeCount,
@@ -156,7 +177,7 @@ export async function GET(request) {
 
     return new Response(JSON.stringify({
       success: true,
-      data: dataResult.rows,
+      data: transformedRows, // Use transformed rows
       pagination: {
         page,
         limit,

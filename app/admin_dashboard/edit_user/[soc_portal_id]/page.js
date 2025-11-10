@@ -445,12 +445,17 @@ const handleSubmit = async (e) => {
                   >
                     {previewImage ? (
                       <Image 
-                        className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg"
-                        src={previewImage} 
-                        alt="Profile preview"
-                        width={128}
-                        height={128}
-                      />
+  className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg"
+  src={previewImage} 
+  alt="Profile preview"
+  width={128}
+  height={128}
+  unoptimized
+  onError={(e) => {
+    e.target.onerror = null;
+    e.target.src = '/api/storage/user_dp/default_DP.png';
+  }}
+/>
                     ) : (
                       <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-white flex items-center justify-center shadow-lg">
                         <FaUser className="text-gray-400 text-3xl" />

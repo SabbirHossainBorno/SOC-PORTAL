@@ -13,7 +13,7 @@ import {
 import { toast } from 'react-hot-toast';
 
 // Enhanced SIM Details Modal Component
-const SimDetailsModal = ({ sim, isOpen, onClose, onEdit }) => {
+const SimDetailsModal = ({ sim, isOpen, onClose, onEdit, canEditSim }) => {
   if (!isOpen || !sim) return null;
 
   const formatDate = (dateString) => {
@@ -74,13 +74,15 @@ const SimDetailsModal = ({ sim, isOpen, onClose, onEdit }) => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <button
-                onClick={onEdit}
-                className="flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                <FaEdit className="mr-2" />
-                Edit SIM
-              </button>
+              {canEditSim && (
+                <button
+                  onClick={onEdit}
+                  className="flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <FaEdit className="mr-2" />
+                  Edit SIM
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
@@ -253,7 +255,7 @@ const SimDetailsModal = ({ sim, isOpen, onClose, onEdit }) => {
   );
 };
 
-export default function SimTrackerLog() {
+export default function SimTrackerLog({ authInfo }) {
   const router = useRouter();
   const [sims, setSims] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -267,6 +269,30 @@ export default function SimTrackerLog() {
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // ✅ FIXED: Enhanced auth handling to ensure role is always available
+  const [effectiveAuthInfo, setEffectiveAuthInfo] = useState(authInfo);
+  
+  useEffect(() => {
+    // If authInfo from props is empty, fetch it directly
+    if (!authInfo?.role) {
+      fetch('/api/check_auth')
+        .then(res => res.json())
+        .then(data => {
+          if (data.authenticated) {
+            setEffectiveAuthInfo(data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch auth:', err));
+    } else {
+      setEffectiveAuthInfo(authInfo);
+    }
+  }, [authInfo]);
+
+  // ✅ FIXED: Role-based access control with fallback
+  const userRole = effectiveAuthInfo?.role || '';
+  const canCreateSim = ['SOC', 'INTERN'].includes(userRole);
+  const canEditSim = ['SOC', 'INTERN'].includes(userRole);
 
   const fetchSims = async (page = 1, search = '', limit = itemsPerPage) => {
     try {
@@ -408,13 +434,16 @@ export default function SimTrackerLog() {
                 </div>
               </div>
               <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/sim_tracker')}
-                  className="flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold"
-                >
-                  <FaPlus className="mr-2" />
-                  Track New SIM
-                </button>
+                {/* ✅ FIXED: Conditionally show Track New SIM button */}
+                {canCreateSim && (
+                  <button
+                    onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/sim_tracker')}
+                    className="flex items-center px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+                  >
+                    <FaPlus className="mr-2" />
+                    Track New SIM
+                  </button>
+                )}
                 <div className="p-4 bg-white/20 rounded backdrop-blur-sm">
                   <FaSimCard className="text-2xl" />
                 </div>
@@ -550,13 +579,16 @@ export default function SimTrackerLog() {
                   ? 'No SIMs match your current filters. Try adjusting your search criteria.' 
                   : 'Start tracking your first SIM card to manage your inventory efficiently.'}
               </p>
-              <button
-                onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/sim_tracker')}
-                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl font-semibold"
-              >
-                <FaPlus className="mr-2" />
-                Track New SIM
-              </button>
+              {/* ✅ FIXED: Conditionally show the button in empty state */}
+              {canCreateSim && (
+                <button
+                  onClick={() => router.push('/user_dashboard/document_hub/other_document_tracker/sim_tracker')}
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl font-semibold"
+                >
+                  <FaPlus className="mr-2" />
+                  Track New SIM
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -664,14 +696,17 @@ export default function SimTrackerLog() {
                               <FaEye className="mr-2 group-hover/btn:scale-110 transition-transform" />
                               View
                             </button>
-                            <button
-                              onClick={() => handleEdit(sim)}
-                              className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors group/btn"
-                              title="Edit SIM"
-                            >
-                              <FaEdit className="mr-2 group-hover/btn:scale-110 transition-transform" />
-                              Edit
-                            </button>
+                            {/* ✅ FIXED: Conditionally show Edit button */}
+                            {canEditSim && (
+                              <button
+                                onClick={() => handleEdit(sim)}
+                                className="flex items-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 transition-colors group/btn"
+                                title="Edit SIM"
+                              >
+                                <FaEdit className="mr-2 group-hover/btn:scale-110 transition-transform" />
+                                Edit
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -754,6 +789,7 @@ export default function SimTrackerLog() {
             handleCloseModal();
             if (selectedSim) handleEdit(selectedSim);
           }}
+          canEditSim={canEditSim}
         />
       </div>
 

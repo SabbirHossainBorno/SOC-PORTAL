@@ -1,3 +1,4 @@
+// ecosystem.config.js
 module.exports = {
   apps: [{
     name: "SOC-PORTAL",
@@ -10,24 +11,25 @@ module.exports = {
     watch: false,
     max_memory_restart: "1G",
     
-    // CRITICAL: Environment variables for production
+    // Environment variables - UPDATE UPLOAD_DIR
     env: {
       NODE_ENV: "production",
       PORT: 5001,
       HOST: "0.0.0.0",
       NEXTAUTH_URL: "http://167.88.38.114:8080",
       NEXTAUTH_SECRET: "your-secret-key-change-this-in-production",
-      // Add any other environment variables you need
+      UPLOAD_DIR: "/home/soc_portal/storage", // CHANGED PATH
     },
-    
+
     env_production: {
       NODE_ENV: "production",
       PORT: 5001,
-      HOST: "0.0.0.0", 
+      HOST: "0.0.0.0",
       NEXTAUTH_URL: "http://167.88.38.114:8080",
       NEXTAUTH_SECRET: "your-secret-key-change-this-in-production",
+      UPLOAD_DIR: "/home/soc_portal/storage", // CHANGED PATH
     },
-    
+
     log_file: "/home/soc_portal/pm2_logs/combined.log",
     out_file: "/home/soc_portal/pm2_logs/out.log",
     error_file: "/home/soc_portal/pm2_logs/err.log",

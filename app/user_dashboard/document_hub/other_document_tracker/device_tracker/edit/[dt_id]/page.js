@@ -53,6 +53,10 @@ export default function EditDeviceTracker() {
   const params = useParams();
   const dt_id = params.dt_id;
 
+    // Add these states for permission checking
+  const [hasEditPermission, setHasEditPermission] = useState(false);
+  const [permissionLoading, setPermissionLoading] = useState(true);
+
   const [formData, setFormData] = useState({
     sim_1: '',
     sim_1_persona: '',
@@ -72,6 +76,55 @@ export default function EditDeviceTracker() {
   const [isLoading, setIsLoading] = useState(true);
   const [errors, setErrors] = useState({});
   const [userInfo, setUserInfo] = useState(null);
+
+  useEffect(() => {
+  const checkEditPermission = async () => {
+    try {
+      const cookies = document.cookie.split(';');
+      const socPortalIdCookie = cookies.find(c => c.trim().startsWith('socPortalId='));
+      const roleTypeCookie = cookies.find(c => c.trim().startsWith('roleType='));
+      
+      if (socPortalIdCookie && roleTypeCookie) {
+        const socPortalId = socPortalIdCookie.split('=')[1];
+        const roleType = roleTypeCookie.split('=')[1];
+
+        const response = await fetch(
+          `/api/admin_dashboard/role_permission/role_management/user_permissions?soc_portal_id=${socPortalId}&role_type=${roleType}`
+        );
+        const data = await response.json();
+        
+        if (data.success) {
+          // Check for base path permission (simplified)
+          const editPermission = data.permissions.includes(
+            '/user_dashboard/document_hub/other_document_tracker/device_tracker/edit'
+          );
+          
+          setHasEditPermission(editPermission);
+          
+          if (!editPermission) {
+            toast.error('You do not have permission to edit access forms');
+            return;
+          }
+        } else {
+          toast.error('Failed to verify permissions');
+          return;
+        }
+      } else {
+        toast.error('User information not found');
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      toast.error('Error verifying permissions');
+    } finally {
+      setPermissionLoading(false);
+    }
+  };
+
+  checkEditPermission();
+}, [router]);
+
+  
   
   // New state for duplicate checks and unbind popup
   const [duplicateChecks, setDuplicateChecks] = useState({

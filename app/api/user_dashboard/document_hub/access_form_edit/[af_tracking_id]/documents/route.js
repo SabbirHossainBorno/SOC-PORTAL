@@ -7,7 +7,8 @@ export async function GET(request, { params }) {
   const { af_tracking_id } = await params;
   
   try {
-    const uploadDir = '/home/soc_portal/public/storage/access_form';
+    // UPDATED: Change to new storage location
+    const uploadDir = path.join(process.cwd(), 'storage', 'access_form');
     
     try {
       const files = await readdir(uploadDir);
@@ -23,7 +24,8 @@ export async function GET(request, { params }) {
           
           documents.push({
             version: `V${version}`,
-            url: `/storage/access_form/${file}`,
+            // UPDATED: Use API route URL
+            url: `/api/storage/access_form/${file}`,
             uploaded_at: fileStats.mtime.toISOString()
           });
         }

@@ -1,3 +1,4 @@
+//app/admin_dashboard/view_user/[soc_portal_id]/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -175,16 +176,18 @@ export default function ViewUserPage() {
               {/* Profile Photo */}
               <div className="text-center mb-6">
                 <div className="relative mx-auto w-32 h-32 mb-4">
-                  <Image
-                    src={user.profile_photo_url || '/storage/user_dp/default_DP.png'}
-                    alt={`${user.first_name} ${user.last_name}`}
-                    fill
-                    className="rounded-full object-cover border-4 border-white shadow-lg"
-                    onError={(e) => {
-                      e.target.src = '/storage/user_dp/default_DP.png';
-                    }}
-                  />
-                </div>
+  <Image
+    src={user.profile_photo_url || '/api/storage/user_dp/default_DP.png'}
+    alt={`${user.first_name} ${user.last_name}`}
+    fill
+    className="rounded-full object-cover border-4 border-white shadow-lg"
+    unoptimized
+    onError={(e) => {
+      e.target.onerror = null;
+      e.target.src = '/api/storage/user_dp/default_DP.png';
+    }}
+  />
+</div>
                 <h2 className="text-xl font-bold text-gray-800">
                   {user.first_name} {user.last_name}
                 </h2>
