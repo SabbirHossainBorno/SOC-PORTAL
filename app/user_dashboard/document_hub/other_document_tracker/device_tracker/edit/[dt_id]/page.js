@@ -437,51 +437,69 @@ const checkDuplicate = useCallback(async (field, value, currentDeviceId) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix validation errors');
-      return;
-    }
+  // In handleSubmit function of the edit page, update the success handling:
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    toast.error('Please fix validation errors');
+    return;
+  }
 
-    // Final duplicate check before submission
-    const hasDuplicates = Object.values(duplicateChecks).some(check => check.exists);
-    if (hasDuplicates) {
-      toast.error('Please resolve duplicate SIM numbers before submitting');
-      return;
-    }
+  // Final duplicate check before submission
+  const hasDuplicates = Object.values(duplicateChecks).some(check => check.exists);
+  if (hasDuplicates) {
+    toast.error('Please resolve duplicate SIM numbers before submitting');
+    return;
+  }
+  
+  setIsSubmitting(true);
+  
+  try {
+    const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/${dt_id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(formData)
+    });
     
-    setIsSubmitting(true);
+    const result = await response.json();
     
-    try {
-      const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/device_tracker/${dt_id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
+    if (result.success) {
+      toast.success('Device information updated successfully!');
       
-      const result = await response.json();
-      
-      if (result.success) {
-        toast.success('Device information updated successfully!');
+      // Show toast for auto-created SIMs
+      if (result.auto_created_sims_count > 0) {
+        const simCount = result.auto_created_sims_count;
         
-        // Redirect to device log page after success
-        setTimeout(() => {
-          router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
-        }, 1500);
-      } else {
-        toast.error(result.message || 'Failed to update device information');
+        if (simCount === 1) {
+          toast.success('1 New SIM Added To SIM Tracker', {
+            duration: 5000,
+            icon: '✅'
+          });
+        } else if (simCount === 2) {
+          toast.success('2 New SIMs Added To SIM Tracker', {
+            duration: 5000,
+            icon: '✅'
+          });
+        }
       }
-    } catch (error) {
-      console.error('Error updating device information:', error);
-      toast.error('Failed to update device information');
-    } finally {
-      setIsSubmitting(false);
+      
+      // Redirect to device log page after success
+      setTimeout(() => {
+        router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
+      }, 2000);
+    } else {
+      toast.error(result.message || 'Failed to update device information');
     }
-  };
+  } catch (error) {
+    console.error('Error updating device information:', error);
+    toast.error('Failed to update device information');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Helper function to render duplicate status
   const renderDuplicateStatus = (field) => {

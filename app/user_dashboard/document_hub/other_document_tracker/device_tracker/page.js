@@ -425,82 +425,101 @@ export default function DeviceTracker() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix validation errors');
-      return;
-    }
+// In handleSubmit function, after successful response
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    toast.error('Please fix validation errors');
+    return;
+  }
 
-    // Final duplicate check before submission
-    const hasDuplicates = Object.values(duplicateChecks).some(check => check.exists);
-    if (hasDuplicates) {
-      toast.error('Please resolve duplicate IMEI or SIM numbers before submitting');
-      return;
-    }
+  // Final duplicate check before submission
+  const hasDuplicates = Object.values(duplicateChecks).some(check => check.exists);
+  if (hasDuplicates) {
+    toast.error('Please resolve duplicate IMEI or SIM numbers before submitting');
+    return;
+  }
+  
+  setIsSubmitting(true);
+  
+  try {
+    const response = await fetch('/api/user_dashboard/document_hub/other_document_tracker/device_tracker', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(formData)
+    });
     
-    setIsSubmitting(true);
+    const result = await response.json();
     
-    try {
-      const response = await fetch('/api/user_dashboard/document_hub/other_document_tracker/device_tracker', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
+    if (result.success) {
+      toast.success('Device information saved successfully!');
+      
+      // Show toast for auto-created SIMs - Show count only (1/2)
+      if (result.auto_created_sims_count > 0) {
+        const simCount = result.auto_created_sims_count;
+        
+        if (simCount === 1) {
+          toast.success('1 New SIM Added To SIM Tracker', {
+            duration: 5000,
+            icon: '✅'
+          });
+        } else if (simCount === 2) {
+          toast.success('2 New SIMs Added To SIM Tracker', {
+            duration: 5000,
+            icon: '✅'
+          });
+        }
+        // If somehow more than 2, we don't show (shouldn't happen)
+      }
+      
+      // Reset form
+      setFormData({
+        brand_name: '',
+        device_model: '',
+        imei_1: '',
+        imei_2: '',
+        sim_1: '',
+        sim_1_persona: '',
+        sim_2: '',
+        sim_2_persona: '',
+        purpose: '',
+        handover_to: '',
+        handover_date: '',
+        return_date: '',
+        remark: '',
+        device_status: 'Working',
+        device_status_details: ''
+      });
+
+      // Reset duplicate checks
+      setDuplicateChecks({
+        imei_1: { checking: false, exists: false, existingDevice: null },
+        imei_2: { checking: false, exists: false, existingDevice: null },
+        sim_1: { checking: false, exists: false, existingDevice: null },
+        sim_2: { checking: false, exists: false, existingDevice: null }
       });
       
-      const result = await response.json();
-      
-      if (result.success) {
-        toast.success('Device information saved successfully!');
-        
-        // Reset form
-        setFormData({
-          brand_name: '',
-          device_model: '',
-          imei_1: '',
-          imei_2: '',
-          sim_1: '',
-          sim_1_persona: '',
-          sim_2: '',
-          sim_2_persona: '',
-          purpose: '',
-          handover_to: '',
-          handover_date: '',
-          return_date: '',
-          remark: '',
-          device_status: 'Working',
-          device_status_details: ''
-        });
-
-        // Reset duplicate checks
-        setDuplicateChecks({
-          imei_1: { checking: false, exists: false, existingDevice: null },
-          imei_2: { checking: false, exists: false, existingDevice: null },
-          sim_1: { checking: false, exists: false, existingDevice: null },
-          sim_2: { checking: false, exists: false, existingDevice: null }
-        });
-        
-        // Redirect to device log page after success
-        setTimeout(() => {
-          router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
-        }, 2000);
+      // Redirect to device log page after success
+      setTimeout(() => {
+        router.push('/user_dashboard/document_hub/other_document_log/device_tracker_log');
+      }, 3000);
+    } else {
+      if (result.message?.includes('duplicate') || result.message?.includes('already exists')) {
+        toast.error(result.message);
       } else {
-        if (result.message?.includes('duplicate') || result.message?.includes('already exists')) {
-          toast.error(result.message);
-        } else {
-          toast.error(result.message || 'Failed to save device information');
-        }
+        toast.error(result.message || 'Failed to save device information');
       }
-    } catch (error) {
-      console.error('Error saving device information:', error);
-      toast.error('Failed to save device information');
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  } catch (error) {
+    console.error('Error saving device information:', error);
+    toast.error('Failed to save device information');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Helper function to render duplicate status
   const renderDuplicateStatus = (field) => {

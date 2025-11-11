@@ -67,6 +67,11 @@ export async function GET() {
           path: '/user_dashboard/document_hub/other_document_tracker/sim_tracker/edit', 
           label: 'Edit SIM Tracker', 
           isHidden: true 
+        },
+        { 
+          path: '/user_dashboard/document_hub/other_document_tracker/portal_tracker/edit', 
+          label: 'Edit Portal Tracker', 
+          isHidden: true 
         }
       ]
     },

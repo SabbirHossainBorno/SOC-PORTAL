@@ -248,31 +248,126 @@ const ReportDowntime = () => {
     'REMITTANCE', 'BANK TO NAGAD'
   ];
 
-  // Category mappings for automatic selection
+// Comprehensive category mappings for automatic selection
 const serviceToCategoriesMap = {
-  'ALL TRANSACTIONS': [
-    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
-    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
-    'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
-    'E-COM PAYMENT', 'REMITTANCE', 'BANK TO NAGAD'
-  ],
-  'TRANSACTION HISTORY': ['TRANSACTION HISTORY'],
-  'RE-SUBMIT KYC': ['RE-SUBMIT KYC'],
-  'REGISTRATION': ['REGISTRATION'],
-  'PROFILE VISIBILITY': ['PROFILE VISIBILITY'],
+  // WEB Channel - Portal specific mappings
   'BLOCK OPERATION': ['BLOCK OPERATION'],
+  'PROFILE VISIBILITY': ['PROFILE VISIBILITY'],
   'LIFTING': ['LIFTING'],
   'REFUND': ['REFUND'],
   'DISBURSEMENT': ['DISBURSEMENT'],
   'REVERSAL': ['REVERSAL'],
+  'CLAWBACK': ['CLAWBACK'],
   'KYC OPERATIONS': ['KYC OPERATIONS'],
   'PARTNER REGISTRATION': ['PARTNER REGISTRATION'],
-  'DEVICE CHANGE': ['DEVICE CHANGE'],
-  // SMS Channel specific mappings
+  
+  // USSD Channel mappings
+  'ALL TRANSACTIONS': [
+    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'B2B', 'B2M', 'CASHIN'
+  ],
+  'MOBILE RECHARGE': ['MOBILE RECHARGE'],
+  'TRANSACTION HISTORY': ['TRANSACTION HISTORY'],
+  
+  // SMS Channel mappings
   'E-COM PAYMENT': ['E-COM PAYMENT'],
+  'REGISTRATION': ['REGISTRATION'],
   'KYC': ['RE-SUBMIT KYC'],
+  
+  // APP Channel mappings - ALL TRANSACTIONS excludes non-transaction categories
+  'ALL TRANSACTIONS': [
+    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+    'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 'E-COM PAYMENT'
+  ],
+  'TRANSACTION HISTORY': ['TRANSACTION HISTORY'],
+  'RE-SUBMIT KYC': ['RE-SUBMIT KYC'],
+  'REGISTRATION': ['REGISTRATION'],
+  'DEVICE CHANGE': ['DEVICE CHANGE'],
+  
   // WEB + E-COM WEB specific mapping
-  'RPG-WEB': ['E-COM PAYMENT']  // Add this mapping
+  'RPG-WEB': ['E-COM PAYMENT'],
+  
+  // MIDDLEWARE mapping
+  'BILL-PAYMENT': ['BILL PAYMENT'],
+  
+  // INWARD SERVICE mappings
+  'REMITTANCE': ['REMITTANCE'],
+  'BANK TO NAGAD': ['BANK TO NAGAD']
+};
+
+// Portal to Services mapping for WEB channel
+const portalToServicesMap = {
+  'CC': ['BLOCK OPERATION', 'PROFILE VISIBILITY'],
+  'SYS': ['LIFTING', 'REFUND', 'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 'PARTNER REGISTRATION'],
+  'DMS': ['LIFTING', 'REFUND', 'DISBURSEMENT'],
+  'E-COM WEB': ['RPG-WEB']
+};
+
+// Persona to Categories mapping for APP channel
+const personaToCategoriesMap = {
+  'CU': [
+    'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+    'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+    'TRANSFER MONEY', 'DEVICE CHANGE', 'TRANSACTION HISTORY'
+  ],
+  'AG': [
+    'B2B', 'CASHIN', 'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 
+    'REGISTRATION', 'BILL PAYMENT', 'EMI PAYMENT', 'DEVICE CHANGE'
+  ],
+  'DSO': ['B2B', 'TRANSACTION HISTORY', 'DEVICE CHANGE'],
+  'DH': ['B2M', 'TRANSACTION HISTORY', 'DEVICE CHANGE']
+};
+
+// Get APP categories based on selected personas
+const getAppCategoriesByPersona = (selectedPersonas) => {
+  if (selectedPersonas.includes('ALL')) {
+    // Return all APP categories when ALL personas selected
+    return [
+      'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+      'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+      'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 
+      'TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'E-COM PAYMENT',
+      'DEVICE CHANGE'
+    ];
+  }
+
+  const categories = new Set();
+  selectedPersonas.forEach(persona => {
+    if (personaToCategoriesMap[persona]) {
+      personaToCategoriesMap[persona].forEach(category => {
+        categories.add(category);
+      });
+    }
+  });
+  
+  return Array.from(categories);
+};
+
+// Get categories for APP channel when ALL TRANSACTIONS service is selected
+const getAppAllTransactionsCategories = (selectedPersonas) => {
+  if (selectedPersonas.includes('ALL')) {
+    // For ALL personas, return transaction categories only
+    return [
+      'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+      'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'ADD MONEY', 
+      'TRANSFER MONEY', 'B2B', 'B2M', 'CASHIN', 'E-COM PAYMENT'
+    ];
+  }
+
+  const categories = new Set();
+  selectedPersonas.forEach(persona => {
+    if (personaToCategoriesMap[persona]) {
+      // Only include transaction-related categories from each persona
+      const personaCats = personaToCategoriesMap[persona];
+      const transactionCats = personaCats.filter(cat => 
+        !['TRANSACTION HISTORY', 'RE-SUBMIT KYC', 'REGISTRATION', 'DEVICE CHANGE'].includes(cat)
+      );
+      transactionCats.forEach(cat => categories.add(cat));
+    }
+  });
+  
+  return Array.from(categories);
 };
   
   const impactTypes = ['FULL', 'PARTIAL'];
@@ -341,18 +436,20 @@ const serviceToCategoriesMap = {
     fetchData();
   }, []);
 
-  // Auto-select categories when affected service changes
-  useEffect(() => {
+// Auto-select categories when affected service changes
+useEffect(() => {
   if (isCategoriesManuallyModified) return;
 
   const selectedServices = formData.affectedService;
   const selectedChannels = formData.affectedChannel;
   const selectedPortals = formData.affectedPortal;
+  const selectedPersonas = formData.affectedPersona;
   
   console.log('Auto-select triggered:', {
     selectedServices,
     selectedChannels,
     selectedPortals,
+    selectedPersonas,
     isCategoriesManuallyModified
   });
 
@@ -374,36 +471,91 @@ const serviceToCategoriesMap = {
     return;
   }
 
-  // If ALL is selected, select all categories
+  // If ALL is selected in affected service
   if (selectedServices.includes('ALL')) {
+    const categoriesSet = new Set();
+    
+    // Handle each channel type
+    if (selectedChannels.includes('WEB')) {
+      // WEB channel logic
+      if (selectedPortals.includes('ALL')) {
+        // ALL portals selected - get all WEB categories
+        [
+          'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING', 'REFUND', 
+          'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 
+          'PARTNER REGISTRATION'
+        ].forEach(cat => categoriesSet.add(cat));
+      } else {
+        // Specific portals selected - get union of all selected portal categories
+        selectedPortals.forEach(portal => {
+          if (portalToServicesMap[portal]) {
+            portalToServicesMap[portal].forEach(service => {
+              if (serviceToCategoriesMap[service]) {
+                serviceToCategoriesMap[service].forEach(cat => categoriesSet.add(cat));
+              }
+            });
+          }
+        });
+      }
+      console.log('WEB channel with ALL services, setting categories:', Array.from(categoriesSet));
+    }
+    
+    if (selectedChannels.includes('USSD')) {
+      // USSD channel with ALL services
+      [
+        'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+        'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'B2B', 'B2M', 'CASHIN'
+      ].forEach(cat => categoriesSet.add(cat));
+      console.log('USSD channel with ALL services, setting specific categories');
+    }
+    
+    if (selectedChannels.includes('SMS')) {
+      // SMS channel with ALL services - only the three specific categories
+      ['E-COM PAYMENT', 'REGISTRATION', 'RE-SUBMIT KYC'].forEach(cat => categoriesSet.add(cat));
+      console.log('SMS channel with ALL services, setting SMS categories');
+    }
+    
+    if (selectedChannels.includes('APP')) {
+      // APP channel with ALL services - persona-based categories (includes all)
+      const appCategories = getAppCategoriesByPersona(selectedPersonas);
+      appCategories.forEach(cat => categoriesSet.add(cat));
+      console.log('APP channel with ALL services, setting all persona-based categories:', appCategories);
+    }
+    
+    if (selectedChannels.includes('MIDDLEWARE')) {
+      // MIDDLEWARE channel with ALL service
+      categoriesSet.add('BILL PAYMENT');
+      console.log('MIDDLEWARE channel with ALL service, setting BILL PAYMENT category');
+    }
+    
+    if (selectedChannels.includes('INWARD SERVICE')) {
+      // INWARD SERVICE channel with ALL services
+      ['REMITTANCE', 'BANK TO NAGAD'].forEach(cat => categoriesSet.add(cat));
+      console.log('INWARD SERVICE channel with ALL services, setting categories');
+    }
+    
     setFormData(prev => ({
       ...prev,
-      categories: [...allCategories]
+      categories: Array.from(categoriesSet)
     }));
     return;
   }
 
-  // Auto-select based on service mappings
+  // Individual service mappings
   const autoCategories = new Set();
   
   selectedServices.forEach(service => {
-    if (serviceToCategoriesMap[service]) {
+    // Special handling for APP channel ALL TRANSACTIONS
+    if (service === 'ALL TRANSACTIONS' && selectedChannels.includes('APP')) {
+      const appTransactionCategories = getAppAllTransactionsCategories(selectedPersonas);
+      appTransactionCategories.forEach(cat => autoCategories.add(cat));
+      console.log('APP channel with ALL TRANSACTIONS service, setting transaction-only categories:', appTransactionCategories);
+    }
+    // Direct mapping from serviceToCategoriesMap for other cases
+    else if (serviceToCategoriesMap[service]) {
       serviceToCategoriesMap[service].forEach(category => {
         autoCategories.add(category);
       });
-    }
-    
-    // Special handling for SMS channel services
-    if (selectedChannels.includes('SMS')) {
-      if (service === 'E-COM PAYMENT') {
-        autoCategories.add('E-COM PAYMENT');
-      }
-      if (service === 'REGISTRATION') {
-        autoCategories.add('REGISTRATION');
-      }
-      if (service === 'KYC') {
-        autoCategories.add('RE-SUBMIT KYC');
-      }
     }
   });
 
@@ -422,7 +574,7 @@ const serviceToCategoriesMap = {
       categories: []
     }));
   }
-}, [formData.affectedService, formData.affectedChannel, formData.affectedPortal, isCategoriesManuallyModified]);
+}, [formData.affectedService, formData.affectedChannel, formData.affectedPortal, formData.affectedPersona, isCategoriesManuallyModified]);
 
   // Update category times
   useEffect(() => {
@@ -1032,109 +1184,137 @@ const handleClearAll = (name) => {
     return formatter.format(new Date(date));
   };
 
-  // Get affected services based on selected channels, personas, and portals
-const getAffectedServices = () => {
-  const services = new Set(['ALL']);
+  // Helper function to get categories for multiple channel selection
+const getCategoriesForMultipleChannels = (channels, services, portals) => {
+  const categories = new Set();
   
-  console.log('Calculating services for:', {
-    channels: formData.affectedChannel,
-    personas: formData.affectedPersona,
-    portals: formData.affectedPortal
+  channels.forEach(channel => {
+    if (channel === 'WEB') {
+      // WEB channel categories
+      if (portals.includes('ALL')) {
+        // All WEB categories
+        [
+          'PROFILE VISIBILITY', 'BLOCK OPERATION', 'LIFTING', 'REFUND', 
+          'DISBURSEMENT', 'REVERSAL', 'CLAWBACK', 'KYC OPERATIONS', 
+          'PARTNER REGISTRATION'
+        ].forEach(cat => categories.add(cat));
+      } else {
+        // Specific portal categories
+        portals.forEach(portal => {
+          if (portalToServicesMap[portal]) {
+            portalToServicesMap[portal].forEach(service => {
+              if (serviceToCategoriesMap[service]) {
+                serviceToCategoriesMap[service].forEach(cat => categories.add(cat));
+              }
+            });
+          }
+        });
+      }
+    }
+    else if (channel === 'USSD' && services.includes('ALL TRANSACTIONS')) {
+      // USSD categories for ALL TRANSACTIONS
+      [
+        'SEND MONEY', 'CASHOUT', 'BILL PAYMENT', 'EMI PAYMENT', 
+        'MERCHANT PAYMENT', 'MOBILE RECHARGE', 'B2B', 'B2M', 'CASHIN'
+      ].forEach(cat => categories.add(cat));
+    }
+    else if (channel === 'SMS') {
+      // SMS categories
+      ['E-COM PAYMENT', 'REGISTRATION', 'RE-SUBMIT KYC'].forEach(cat => categories.add(cat));
+    }
+    // Add other channel mappings as needed
   });
+  
+  return Array.from(categories);
+};
 
-  // Check for specific WEB + E-COM WEB only scenario
-  const isOnlyWebWithEcomWeb = 
-    formData.affectedChannel.length === 1 && 
-    formData.affectedChannel[0] === 'WEB' &&
-    formData.affectedPortal.length === 1 && 
-    formData.affectedPortal[0] === 'E-COM WEB';
-
-  if (isOnlyWebWithEcomWeb) {
-    console.log('Special case: Only WEB + E-COM WEB selected, returning only RPG-WEB');
-    return ['RPG-WEB']; // Return only RPG-WEB without ALL
-  }
-
-  // Process each selected channel
-  formData.affectedChannel.forEach(channel => {
-    console.log(`Processing channel: ${channel}`);
+  // Get affected services based on selected channels, personas, and portals
+  const getAffectedServices = () => {
+    const services = new Set();
     
-    if (channel === 'APP') {
-      // APP channel services based on persona
-      if (formData.affectedPersona.includes('ALL') || 
-          formData.affectedPersona.some(p => ['CU', 'AG'].includes(p))) {
-        // Show all APP services for CU/AG or when ALL personas selected
+    console.log('Calculating services for:', {
+      channels: formData.affectedChannel,
+      personas: formData.affectedPersona,
+      portals: formData.affectedPortal
+    });
+
+    // Always add ALL option for channels that support multiple services
+    const shouldShowAll = formData.affectedChannel.some(channel => 
+      ['APP', 'USSD', 'SMS', 'WEB', 'INWARD SERVICE'].includes(channel)
+    );
+    
+    if (shouldShowAll) {
+      services.add('ALL');
+    }
+
+    // Process each selected channel
+    formData.affectedChannel.forEach(channel => {
+      console.log(`Processing channel: ${channel}`);
+      
+      if (channel === 'APP') {
+        // APP channel services
+        services.add('ALL TRANSACTIONS');
         services.add('TRANSACTION HISTORY');
         services.add('RE-SUBMIT KYC');
         services.add('REGISTRATION');
-      }
-
-      // Add MOBILE RECHARGE only if CU is specifically included
-      if (formData.affectedPersona.includes('CU')) {
         services.add('MOBILE RECHARGE');
-      }
-      
-      if (formData.affectedPersona.includes('ALL') || 
-          formData.affectedPersona.some(p => ['DSO', 'DH'].includes(p))) {
-        // Show transaction history for DSO/DH
+        
+      } else if (channel === 'USSD') {
+        // USSD channel services
+        services.add('ALL TRANSACTIONS');
+        services.add('MOBILE RECHARGE');
         services.add('TRANSACTION HISTORY');
+        
+      } else if (channel === 'SMS') {
+        // SMS channel services - removed ALL TRANSACTIONS
+        services.add('E-COM PAYMENT');
+        services.add('REGISTRATION');
+        services.add('KYC');
+        
+      } else if (channel === 'WEB') {
+        // WEB channel services based on portal selection
+        if (formData.affectedPortal.includes('ALL')) {
+          // Add all WEB services when ALL portals selected
+          Object.values(portalToServicesMap).forEach(portalServices => {
+            portalServices.forEach(service => services.add(service));
+          });
+        } else {
+          // Add services for selected portals only
+          formData.affectedPortal.forEach(portal => {
+            if (portalToServicesMap[portal]) {
+              portalToServicesMap[portal].forEach(service => services.add(service));
+            }
+          });
+        }
+        
+      } else if (channel === 'MIDDLEWARE') {
+        // MIDDLEWARE channel services - only BILL-PAYMENT, no ALL
+        services.add('BILL-PAYMENT');
+        
+      } else if (channel === 'INWARD SERVICE') {
+        // INWARD SERVICE channel services - removed ALL TRANSACTIONS
+        services.add('REMITTANCE');
+        services.add('BANK TO NAGAD');
       }
-      
-      services.add('ALL TRANSACTIONS');
-      
-    } else if (channel === 'USSD') {
-      // USSD channel services
-      services.add('ALL TRANSACTIONS');
-      services.add('TRANSACTION HISTORY');
-      
-    } else if (channel === 'SMS') {
-      // SMS channel services
-      services.add('E-COM PAYMENT');
-      services.add('REGISTRATION');
-      services.add('KYC');
-      services.add('ALL TRANSACTIONS');
-      
-    } else if (channel === 'WEB') {
-      // WEB channel services based on portal selection
-      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('CC')) {
-        services.add('PROFILE VISIBILITY');
-        services.add('BLOCK OPERATION');
-      }
-      
-      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('SYS')) {
-        services.add('LIFTING');
-        services.add('REFUND');
-        services.add('DISBURSEMENT');
-        services.add('REVERSAL');
-        services.add('KYC OPERATIONS');
-        services.add('PARTNER REGISTRATION');
-        services.add('CLAWBACK');
-      }
-      
-      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('DMS')) {
-        services.add('LIFTING');
-        services.add('REFUND');
-        services.add('DISBURSEMENT');
-      }
+    });
 
-      if (formData.affectedPortal.includes('ALL') || formData.affectedPortal.includes('E-COM WEB')) {
-        services.add('RPG-WEB');
-      }
-      
-    } else if (channel === 'MIDDLEWARE') {
-      // MIDDLEWARE channel services
-      services.add('BILL-PAYMENT');
-      
-    } else if (channel === 'INWARD SERVICE') {
-      // INWARD SERVICE channel services
-      services.add('REMITTANCE');
-      services.add('BANK TO NAGAD');
-      services.add('ALL TRANSACTIONS');
-    }
-  });
+    const result = Array.from(services).sort();
+    console.log('Final available services:', result);
+    return result;
+  };
 
-  const result = Array.from(services).sort();
-  console.log('Final available services:', result);
-  return result;
+// Get persona options based on selected channels
+const getPersonaOptions = () => {
+  const basePersonas = ['ALL', 'CU', 'AG', 'DSO', 'DH'];
+  
+  // If MIDDLEWARE is selected, remove DSO and DH
+  if (formData.affectedChannel.includes('MIDDLEWARE') && 
+      !formData.affectedChannel.includes('APP') && 
+      !formData.affectedChannel.includes('USSD')) {
+    return basePersonas.filter(persona => !['DSO', 'DH'].includes(persona));
+  }
+  
+  return basePersonas;
 };
 
   // Auto-select indicator component
@@ -1333,15 +1513,15 @@ setIsCategoriesManuallyModified(false);
                       {(formData.affectedChannel.includes('APP') || formData.affectedChannel.includes('MIDDLEWARE')) && (
                         <div className="md:col-span-2">
                           <MultiSelectDropdown
-                            label="Affected Persona"
-                            name="affectedPersona"
-                            options={allPersonas}
-                            selectedValues={formData.affectedPersona}
-                            errors={errors}
-                            onSelectChange={handleMultiSelectChange}
-                            onSelectAll={handleSelectAll}
-                            onClearAll={handleClearAll}
-                          />
+  label="Affected Persona"
+  name="affectedPersona"
+  options={getPersonaOptions()}
+  selectedValues={formData.affectedPersona}
+  errors={errors}
+  onSelectChange={handleMultiSelectChange}
+  onSelectAll={handleSelectAll}
+  onClearAll={handleClearAll}
+/>
                         </div>
                       )}
 
@@ -1778,7 +1958,7 @@ setIsCategoriesManuallyModified(false);
     
     {/* Show category time errors summary */}
     {errors.categoryTimes && Object.keys(errors.categoryTimes).length > 0 && (
-      <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+      <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded">
         <div className="flex items-center mb-2">
           <FaExclamationTriangle className="text-red-500 mr-2" />
           <span className="font-semibold text-red-800">Category Time Errors:</span>

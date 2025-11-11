@@ -119,17 +119,22 @@ const getMNOFromMSISDN = (msisdn) => {
 
 // Auto-create SIM entry if not exists
 const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, userInfo, additionalData = {}) => {
+  const { eid, sessionId, socPortalId, ipAddress, userAgent } = additionalData;
+  
   try {
     if (!msisdn || msisdn.length !== 11) {
       logger.debug('SIM_AUTO_CREATION_SKIPPED_INVALID_MSISDN', {
         meta: {
+          eid: eid,
+          sid: sessionId,
           taskName: 'DeviceTracker',
           action: 'auto_create_sim',
           step: 'validation_failed',
           details: `Skipping SIM auto-creation - invalid MSISDN format or length`,
           msisdn: msisdn,
           msisdnLength: msisdn?.length || 0,
-          deviceTrackingId: deviceTrackingId
+          deviceTrackingId: deviceTrackingId,
+          userId: socPortalId
         }
       });
       return null;
@@ -137,13 +142,16 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
 
     logger.debug('SIM_AUTO_CREATION_CHECK_STARTED', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'check_existing_sim',
         details: `Checking if SIM already exists in database before auto-creation`,
         msisdn: msisdn,
         deviceTrackingId: deviceTrackingId,
-        persona: persona
+        persona: persona,
+        userId: socPortalId
       }
     });
 
@@ -156,13 +164,16 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
     if (existingSim.rows.length > 0) {
       logger.debug('SIM_AUTO_CREATION_SKIPPED_ALREADY_EXISTS', {
         meta: {
+          eid: eid,
+          sid: sessionId,
           taskName: 'DeviceTracker',
           action: 'auto_create_sim',
           step: 'sim_already_exists',
           details: `SIM already exists in database, skipping auto-creation`,
           msisdn: msisdn,
           existingSimId: existingSim.rows[0].st_id,
-          deviceTrackingId: deviceTrackingId
+          deviceTrackingId: deviceTrackingId,
+          userId: socPortalId
         }
       });
       return { exists: true, st_id: existingSim.rows[0].st_id };
@@ -170,13 +181,16 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
 
     logger.debug('SIM_AUTO_CREATION_PROCEEDING', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'creating_new_sim',
         details: `SIM not found in database, proceeding with auto-creation`,
         msisdn: msisdn,
         deviceTrackingId: deviceTrackingId,
-        persona: persona
+        persona: persona,
+        userId: socPortalId
       }
     });
 
@@ -195,18 +209,23 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
     if (!mno) {
       logger.warn('SIM_AUTO_CREATION_MNO_DETECTION_FAILED', {
         meta: {
+          eid: eid,
+          sid: sessionId,
           taskName: 'DeviceTracker',
           action: 'auto_create_sim',
           step: 'mno_detection_failed',
           details: `Could not detect MNO from MSISDN prefix`,
           msisdn: msisdn,
-          simTrackingId: simTrackingId
+          simTrackingId: simTrackingId,
+          userId: socPortalId
         }
       });
     }
 
     logger.debug('SIM_AUTO_CREATION_PARAMS_PREPARED', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'preparing_insert_params',
@@ -216,7 +235,8 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
         mno: mno,
         persona: persona || 'N/A',
         profileType: profileType,
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
 
@@ -248,6 +268,8 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
 
     logger.info('SIM_AUTO_CREATION_SUCCESS', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'sim_created_success',
@@ -258,7 +280,8 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
         persona: persona || 'N/A',
         profileType: profileType,
         msisdnStatus: 'ACTIVE',
-        trackedBy: userInfo.short_name
+        trackedBy: userInfo.short_name,
+        userId: socPortalId
       }
     });
 
@@ -268,13 +291,16 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
 
     logger.debug('SIM_AUTO_CREATION_NOTIFICATIONS_CREATING', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'creating_notifications',
         details: `Creating admin and user notifications for auto-created SIM`,
         simTrackingId: simTrackingId,
         adminNotificationId: adminNotificationId,
-        userNotificationId: userNotificationId
+        userNotificationId: userNotificationId,
+        userId: socPortalId
       }
     });
 
@@ -293,7 +319,7 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
         userNotificationId,
         `SIM Auto-Created: ${msisdn} (${simTrackingId}) for Device ${deviceTrackingId}`,
         'Unread',
-        additionalData.socPortalId
+        socPortalId
       ]
     );
 
@@ -301,25 +327,28 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
     await client.query(
       'INSERT INTO user_activity_log (soc_portal_id, action, description, eid, sid, ip_address, device_info) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [
-        additionalData.socPortalId,
+        socPortalId,
         'AUTO_CREATE_SIM_TRACKER',
         `Auto-created SIM tracker for ${msisdn} (${simTrackingId}) from device ${deviceTrackingId}`,
-        additionalData.eid,
-        additionalData.sessionId,
-        additionalData.ipAddress,
-        additionalData.userAgent
+        eid,
+        sessionId,
+        ipAddress,
+        userAgent
       ]
     );
 
     logger.debug('SIM_AUTO_CREATION_COMPLETED', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'sim_creation_complete',
         details: `SIM auto-creation process completed successfully`,
         simTrackingId: simTrackingId,
         msisdn: msisdn,
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
 
@@ -330,13 +359,16 @@ const autoCreateSimEntry = async (client, msisdn, persona, deviceTrackingId, use
       error: error.message,
       stack: error.stack,
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'auto_create_sim',
         step: 'creation_failed',
         details: `Failed to auto-create SIM entry in database`,
         msisdn: msisdn,
         deviceTrackingId: deviceTrackingId,
-        persona: persona
+        persona: persona,
+        userId: socPortalId
       }
     });
     throw new Error(`Error auto-creating SIM entry: ${error.message}`);
@@ -441,17 +473,22 @@ const generateNotificationId = async (prefix, table, client) => {
 };
 
 // Check and update SIM records with device tag
-const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim2) => {
+const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim2, additionalData = {}) => {
+  const { eid, sessionId, socPortalId } = additionalData;
+  
   try {
     logger.debug('SIM_RECORDS_UPDATE_WITH_DEVICE_TAG_STARTED', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'update_sim_records',
         step: 'starting_sim_update',
         details: `Updating SIM records with device tag`,
         deviceTrackingId: deviceTrackingId,
         sim1: sim1,
-        sim2: sim2
+        sim2: sim2,
+        userId: socPortalId
       }
     });
 
@@ -472,23 +509,29 @@ const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim
         updatedSims.push({ msisdn: sim1, st_id: sim1Check.rows[0].st_id });
         logger.debug('SIM_1_UPDATED_WITH_DEVICE_TAG', {
           meta: {
+            eid: eid,
+            sid: sessionId,
             taskName: 'DeviceTracker',
             action: 'update_sim_records',
             step: 'sim1_updated',
             details: `SIM 1 updated with device tag successfully`,
             msisdn: sim1,
             simId: sim1Check.rows[0].st_id,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
       } else {
         logger.debug('SIM_1_NOT_FOUND_FOR_UPDATE', {
           meta: {
+            eid: eid,
+            sid: sessionId,
             taskName: 'DeviceTracker',
             action: 'update_sim_records',
             step: 'sim1_not_found',
             details: `SIM 1 not found in sim_info table, skipping device tag update`,
-            msisdn: sim1
+            msisdn: sim1,
+            userId: socPortalId
           }
         });
       }
@@ -509,23 +552,29 @@ const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim
         updatedSims.push({ msisdn: sim2, st_id: sim2Check.rows[0].st_id });
         logger.debug('SIM_2_UPDATED_WITH_DEVICE_TAG', {
           meta: {
+            eid: eid,
+            sid: sessionId,
             taskName: 'DeviceTracker',
             action: 'update_sim_records',
             step: 'sim2_updated',
             details: `SIM 2 updated with device tag successfully`,
             msisdn: sim2,
             simId: sim2Check.rows[0].st_id,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
       } else {
         logger.debug('SIM_2_NOT_FOUND_FOR_UPDATE', {
           meta: {
+            eid: eid,
+            sid: sessionId,
             taskName: 'DeviceTracker',
             action: 'update_sim_records',
             step: 'sim2_not_found',
             details: `SIM 2 not found in sim_info table, skipping device tag update`,
-            msisdn: sim2
+            msisdn: sim2,
+            userId: socPortalId
           }
         });
       }
@@ -533,13 +582,16 @@ const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim
 
     logger.info('SIM_RECORDS_UPDATE_COMPLETED', {
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'update_sim_records',
         step: 'sim_update_completed',
         details: `SIM records update process completed`,
         deviceTrackingId: deviceTrackingId,
         updatedSimsCount: updatedSims.length,
-        updatedSims: updatedSims
+        updatedSims: updatedSims,
+        userId: socPortalId
       }
     });
 
@@ -549,11 +601,14 @@ const updateSimRecordsWithDeviceTag = async (client, deviceTrackingId, sim1, sim
       error: error.message,
       stack: error.stack,
       meta: {
+        eid: eid,
+        sid: sessionId,
         taskName: 'DeviceTracker',
         action: 'update_sim_records',
         step: 'sim_update_failed',
         details: 'Failed to update SIM records with device tag',
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
     throw new Error(`Error updating SIM records: ${error.message}`);
@@ -578,7 +633,8 @@ export async function POST(request) {
       step: 'request_start',
       details: `User ${socPortalId} submitting device information`,
       ipAddress: ipAddress,
-      userAgent: userAgent?.substring(0, 50)
+      userAgent: userAgent?.substring(0, 50),
+      userId: socPortalId
     }
   });
 
@@ -591,7 +647,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'parse_request',
         step: 'json_parsing',
-        details: 'Starting JSON parsing of request body'
+        details: 'Starting JSON parsing of request body',
+        userId: socPortalId
       }
     });
     
@@ -610,7 +667,8 @@ export async function POST(request) {
         imei1: formData.imei_1?.substring(0, 8) + '...',
         sim1: formData.sim_1 || 'Not provided',
         sim2: formData.sim_2 || 'Not provided',
-        purpose: formData.purpose?.substring(0, 30) + '...'
+        purpose: formData.purpose?.substring(0, 30) + '...',
+        userId: socPortalId
       }
     });
 
@@ -622,7 +680,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'validate_form',
         step: 'required_fields_check',
-        details: 'Starting validation of required fields'
+        details: 'Starting validation of required fields',
+        userId: socPortalId
       }
     });
     
@@ -668,7 +727,8 @@ export async function POST(request) {
           action: 'validate_form',
           step: 'status_details_validation',
           details: 'Device status details required when status is "Not Working"',
-          deviceStatus: formData.device_status
+          deviceStatus: formData.device_status,
+          userId: socPortalId
         }
       });
       
@@ -691,7 +751,8 @@ export async function POST(request) {
         step: 'imei_validation',
         details: 'Validating IMEI formats',
         imei1: formData.imei_1,
-        imei2: formData.imei_2 || 'Not provided'
+        imei2: formData.imei_2 || 'Not provided',
+        userId: socPortalId
       }
     });
     
@@ -705,7 +766,8 @@ export async function POST(request) {
           step: 'imei1_invalid',
           details: 'IMEI 1 validation failed - must be exactly 15 digits',
           imei1: formData.imei_1,
-          imei1Length: formData.imei_1?.length || 0
+          imei1Length: formData.imei_1?.length || 0,
+          userId: socPortalId
         }
       });
       
@@ -728,7 +790,8 @@ export async function POST(request) {
           step: 'imei2_invalid',
           details: 'IMEI 2 validation failed - must be exactly 15 digits',
           imei2: formData.imei_2,
-          imei2Length: formData.imei_2.length
+          imei2Length: formData.imei_2.length,
+          userId: socPortalId
         }
       });
       
@@ -759,7 +822,8 @@ export async function POST(request) {
         step: 'date_validation',
         details: 'Validating date fields',
         handoverDate: handoverDate,
-        returnDate: returnDate
+        returnDate: returnDate,
+        userId: socPortalId
       }
     });
 
@@ -774,7 +838,8 @@ export async function POST(request) {
           step: 'date_validation_failed',
           details: 'Return date must be after handover date',
           handoverDate: handoverDate,
-          returnDate: returnDate
+          returnDate: returnDate,
+          userId: socPortalId
         }
       });
       
@@ -794,7 +859,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'database_operation',
         step: 'acquire_connection',
-        details: 'Connecting to database and starting transaction'
+        details: 'Connecting to database and starting transaction',
+        userId: socPortalId
       }
     });
     
@@ -809,7 +875,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'database_operation',
         step: 'query_user_info',
-        details: `Querying user information for SOC Portal ID: ${socPortalId}`
+        details: `Querying user information for SOC Portal ID: ${socPortalId}`,
+        userId: socPortalId
       }
     });
     
@@ -828,7 +895,8 @@ export async function POST(request) {
           taskName: 'DeviceTracker',
           action: 'database_operation',
           step: 'user_not_found',
-          details: `No user found with SOC Portal ID: ${socPortalId}`
+          details: `No user found with SOC Portal ID: ${socPortalId}`,
+          userId: socPortalId
         }
       });
       
@@ -851,9 +919,23 @@ export async function POST(request) {
         step: 'user_info_retrieved',
         details: 'User information retrieved successfully',
         userShortName: userInfo.short_name,
-        socPortalId: socPortalId
+        socPortalId: socPortalId,
+        userId: socPortalId
       }
     });
+
+    // Create common additional data object for all functions
+    const commonAdditionalData = {
+      eid: eid,
+      sessionId: sessionId,
+      socPortalId: socPortalId,
+      ipAddress: ipAddress,
+      userAgent: userAgent,
+      handed_over: formData.handover_to,
+      handover_date: handoverDate,
+      return_date: returnDate,
+      remark: formData.remark
+    };
 
     // Generate device tracking ID
     const deviceTrackingId = await generateDeviceTrackingId(client);
@@ -868,7 +950,8 @@ export async function POST(request) {
         details: `Inserting device information into database with tracking ID: ${deviceTrackingId}`,
         deviceTrackingId: deviceTrackingId,
         brandName: formData.brand_name,
-        deviceModel: formData.device_model
+        deviceModel: formData.device_model,
+        userId: socPortalId
       }
     });
     
@@ -915,7 +998,8 @@ export async function POST(request) {
         brandName: formData.brand_name,
         deviceModel: formData.device_model,
         deviceStatus: formData.device_status,
-        trackedBy: userInfo.short_name
+        trackedBy: userInfo.short_name,
+        userId: socPortalId
       }
     });
     
@@ -939,17 +1023,6 @@ export async function POST(request) {
 
     // NEW LOGIC: Auto-create SIM entries if they don't exist
     const autoCreatedSims = [];
-    const simCreationData = {
-      handed_over: formData.handover_to,
-      handover_date: handoverDate,
-      return_date: returnDate,
-      remark: formData.remark,
-      socPortalId: socPortalId,
-      eid: eid,
-      sessionId: sessionId,
-      ipAddress: ipAddress,
-      userAgent: userAgent
-    };
 
     logger.debug('DEVICE_TRACKER_SIM_AUTO_CREATION_STARTED', {
       meta: {
@@ -961,7 +1034,8 @@ export async function POST(request) {
         details: 'Starting SIM auto-creation process for provided SIM numbers',
         deviceTrackingId: deviceTrackingId,
         sim1Provided: !!formData.sim_1,
-        sim2Provided: !!formData.sim_2
+        sim2Provided: !!formData.sim_2,
+        userId: socPortalId
       }
     });
 
@@ -978,7 +1052,8 @@ export async function POST(request) {
             details: `Attempting to auto-create SIM 1 if not exists`,
             msisdn: formData.sim_1,
             persona: formData.sim_1_persona,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
 
@@ -988,7 +1063,7 @@ export async function POST(request) {
           formData.sim_1_persona,
           deviceTrackingId,
           userInfo,
-          simCreationData
+          commonAdditionalData
         );
         
         if (sim1Result && sim1Result.auto_created) {
@@ -1003,7 +1078,8 @@ export async function POST(request) {
               details: `SIM 1 auto-created successfully`,
               msisdn: formData.sim_1,
               simTrackingId: sim1Result.st_id,
-              deviceTrackingId: deviceTrackingId
+              deviceTrackingId: deviceTrackingId,
+              userId: socPortalId
             }
           });
         } else if (sim1Result && sim1Result.exists) {
@@ -1016,7 +1092,8 @@ export async function POST(request) {
               step: 'sim1_exists',
               details: `SIM 1 already exists in database, skipping auto-creation`,
               msisdn: formData.sim_1,
-              existingSimId: sim1Result.st_id
+              existingSimId: sim1Result.st_id,
+              userId: socPortalId
             }
           });
         }
@@ -1031,7 +1108,8 @@ export async function POST(request) {
             step: 'sim1_creation_failed',
             details: `SIM 1 auto-creation failed, but continuing with device creation`,
             msisdn: formData.sim_1,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
         // Continue with device creation even if SIM auto-creation fails
@@ -1051,7 +1129,8 @@ export async function POST(request) {
             details: `Attempting to auto-create SIM 2 if not exists`,
             msisdn: formData.sim_2,
             persona: formData.sim_2_persona,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
 
@@ -1061,7 +1140,7 @@ export async function POST(request) {
           formData.sim_2_persona,
           deviceTrackingId,
           userInfo,
-          simCreationData
+          commonAdditionalData
         );
         
         if (sim2Result && sim2Result.auto_created) {
@@ -1076,7 +1155,8 @@ export async function POST(request) {
               details: `SIM 2 auto-created successfully`,
               msisdn: formData.sim_2,
               simTrackingId: sim2Result.st_id,
-              deviceTrackingId: deviceTrackingId
+              deviceTrackingId: deviceTrackingId,
+              userId: socPortalId
             }
           });
         } else if (sim2Result && sim2Result.exists) {
@@ -1089,7 +1169,8 @@ export async function POST(request) {
               step: 'sim2_exists',
               details: `SIM 2 already exists in database, skipping auto-creation`,
               msisdn: formData.sim_2,
-              existingSimId: sim2Result.st_id
+              existingSimId: sim2Result.st_id,
+              userId: socPortalId
             }
           });
         }
@@ -1104,7 +1185,8 @@ export async function POST(request) {
             step: 'sim2_creation_failed',
             details: `SIM 2 auto-creation failed, but continuing with device creation`,
             msisdn: formData.sim_2,
-            deviceTrackingId: deviceTrackingId
+            deviceTrackingId: deviceTrackingId,
+            userId: socPortalId
           }
         });
         // Continue with device creation even if SIM auto-creation fails
@@ -1121,7 +1203,8 @@ export async function POST(request) {
         details: `SIM auto-creation process completed`,
         deviceTrackingId: deviceTrackingId,
         autoCreatedSimsCount: autoCreatedSims.length,
-        autoCreatedSims: autoCreatedSims
+        autoCreatedSims: autoCreatedSims,
+        userId: socPortalId
       }
     });
 
@@ -1130,7 +1213,8 @@ export async function POST(request) {
       client, 
       deviceTrackingId, 
       formData.sim_1, 
-      formData.sim_2
+      formData.sim_2,
+      commonAdditionalData
     );
 
     // Create notifications
@@ -1141,7 +1225,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'create_notifications',
         step: 'generating_notification_ids',
-        details: 'Creating admin and user notifications for device tracking'
+        details: 'Creating admin and user notifications for device tracking',
+        userId: socPortalId
       }
     });
 
@@ -1157,7 +1242,8 @@ export async function POST(request) {
         step: 'insert_admin_notification',
         details: `Inserting admin notification`,
         adminNotificationId: adminNotificationId,
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
 
@@ -1179,7 +1265,8 @@ export async function POST(request) {
         step: 'insert_user_notification',
         details: `Inserting user notification`,
         userNotificationId: userNotificationId,
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
 
@@ -1229,7 +1316,8 @@ export async function POST(request) {
         action: 'send_telegram_alert',
         step: 'formatting_message',
         details: 'Preparing Telegram alert message',
-        deviceTrackingId: deviceTrackingId
+        deviceTrackingId: deviceTrackingId,
+        userId: socPortalId
       }
     });
 
@@ -1269,7 +1357,8 @@ export async function POST(request) {
         step: 'sending_message',
         details: `Sending Telegram alert`,
         deviceTrackingId: deviceTrackingId,
-        messageLength: telegramMessage.length
+        messageLength: telegramMessage.length,
+        userId: socPortalId
       }
     });
 
@@ -1282,7 +1371,8 @@ export async function POST(request) {
         taskName: 'DeviceTracker',
         action: 'database_operation',
         step: 'commit_transaction',
-        details: 'Finalizing database transaction - committing changes'
+        details: 'Finalizing database transaction - committing changes',
+        userId: socPortalId
       }
     });
 
@@ -1313,7 +1403,7 @@ export async function POST(request) {
       message: 'Device information saved successfully',
       device_tracking_id: deviceTrackingId,
       updated_sims: updatedSims,
-      auto_created_sims: autoCreatedSims.length,
+      auto_created_sims_count: autoCreatedSims.length,
       auto_created_sims_details: autoCreatedSims
     }), {
       status: 200,
@@ -1331,7 +1421,8 @@ export async function POST(request) {
           taskName: 'DeviceTracker',
           action: 'error_handling',
           step: 'rollback_transaction',
-          details: 'Rolling back database transaction due to error'
+          details: 'Rolling back database transaction due to error',
+          userId: socPortalId
         }
       });
       
@@ -1371,7 +1462,8 @@ export async function POST(request) {
             taskName: 'DeviceTracker',
             action: 'cleanup',
             step: 'release_connection',
-            details: 'Releasing database connection back to pool'
+            details: 'Releasing database connection back to pool',
+            userId: socPortalId
           }
         });
         
@@ -1387,7 +1479,8 @@ export async function POST(request) {
             taskName: 'DeviceTracker',
             action: 'cleanup',
             step: 'release_failed',
-            details: 'Failed to release database connection'
+            details: 'Failed to release database connection',
+            userId: socPortalId
           }
         });
       }

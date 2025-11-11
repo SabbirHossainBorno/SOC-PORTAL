@@ -1,70 +1,63 @@
-//app/api/user_dashboard/document_hub/other_document_tracker/sim_tracker/route.js
+// app/api/user_dashboard/document_hub/other_document_tracker/portal_tracker/route.js
 import { getDbConnection } from '../../../../../../lib/db';
 import logger from '../../../../../../lib/logger';
 import sendTelegramAlert from '../../../../../../lib/telegramAlert';
 import { getCurrentDateTime } from '../../../../../../lib/auditUtils';
 
-// Generate SIM Tracking ID
-const generateSimTrackingId = async (client) => {
+// Generate Portal Tracking ID in correct format: PT1SOCP, PT2SOCP, PT10SOCP, PT100SOCP, etc.
+const generatePortalTrackingId = async (client) => {
   try {
-    logger.debug('Starting SIM tracking ID generation', {
+    logger.debug('Starting portal tracking ID generation', {
       meta: {
-        taskName: 'SimTracker',
-        details: 'Querying MAX serial from sim_info table'
+        taskName: 'PortalTracker',
+        details: 'Querying MAX serial from portal_info table'
       }
     });
     
-    const result = await client.query('SELECT MAX(serial) AS max_serial FROM sim_info');
+    const result = await client.query('SELECT MAX(serial) AS max_serial FROM portal_info');
     const maxSerial = result.rows[0]?.max_serial || 0;
     const nextId = maxSerial + 1;
-    const simTrackingId = `ST${nextId}SOCP`;
+    const portalTrackingId = `PT${nextId}SOCP`;
     
-    logger.debug('SIM tracking ID generated successfully', {
+    logger.debug('Portal tracking ID generated successfully', {
       meta: {
-        taskName: 'SimTracker',
-        details: `Generated ID: ${simTrackingId}, Previous max serial: ${maxSerial}`
+        taskName: 'PortalTracker',
+        details: `Generated ID: ${portalTrackingId}, Previous max serial: ${maxSerial}`
       }
     });
     
-    return simTrackingId;
+    return portalTrackingId;
   } catch (error) {
-    logger.error('Error generating SIM tracking ID', {
+    logger.error('Error generating portal tracking ID', {
       error: error.message,
       stack: error.stack,
       meta: {
-        taskName: 'SimTracker',
-        details: 'Failed to generate SIM tracking ID'
+        taskName: 'PortalTracker',
+        details: 'Failed to generate portal tracking ID'
       }
     });
-    throw new Error(`Error generating SIM tracking ID: ${error.message}`);
+    throw new Error(`Error generating portal tracking ID: ${error.message}`);
   }
 };
 
-// Format Telegram alert for SIM tracker
-const formatSimTrackerAlert = (simTrackingId, msisdn, mno, assignedPersona, profileType, msisdnStatus, deviceTag, additionalInfo = {}) => {
+// Format Telegram alert for Portal tracker
+const formatPortalTrackerAlert = (portalTrackingId, portalCategory, portalName, portalUrl, userIdentifier, role, additionalInfo = {}) => {
   const time = getCurrentDateTime();
   const userId = additionalInfo.userId || 'N/A';
   const eid = additionalInfo.eid || 'N/A';
   const trackedBy = additionalInfo.trackedBy || 'N/A';
   const ipAddress = additionalInfo.ipAddress || 'N/A';
   const userAgent = additionalInfo.userAgent || 'N/A';
-  const handedOver = additionalInfo.handedOver || 'N/A';
-  const handoverDate = additionalInfo.handoverDate || 'N/A';
-  const returnDate = additionalInfo.returnDate || 'N/A';
   const remark = additionalInfo.remark || 'N/A';
   
-  const message = `📱 SOC PORTAL | SIM TRACKER 📱
+  const message = `🌐 SOC PORTAL | PORTAL TRACKER 🌐
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🆔 SIM Tracking ID    : ${simTrackingId}
-📞 MSISDN             : ${msisdn}
-🏢 MNO                : ${mno}
-👤 Assigned Persona   : ${assignedPersona}
-📊 Profile Type       : ${profileType}
-🔧 MSISDN Status      : ${msisdnStatus}
-📱 Device Tag         : ${deviceTag || 'N/A'}
-👤 Handed Over To     : ${handedOver}
-📅 Handover Date      : ${handoverDate}
-📅 Return Date        : ${returnDate}
+🆔 Portal ID          : ${portalTrackingId}
+📁 Category           : ${portalCategory}
+🏷️ Portal Name        : ${portalName}
+🔗 Portal URL         : ${portalUrl}
+👤 User ID            : ${userIdentifier}
+🎯 Role               : ${role}
 📝 Remark             : ${remark}
 👤 Tracked By         : ${trackedBy}
 👤 Reported By        : ${userId}
@@ -81,7 +74,7 @@ const generateNotificationId = async (prefix, table, client) => {
   try {
     logger.debug('Starting notification ID generation', {
       meta: {
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Generating ${prefix} ID for table: ${table}`
       }
     });
@@ -93,7 +86,7 @@ const generateNotificationId = async (prefix, table, client) => {
     
     logger.debug('Notification ID generated successfully', {
       meta: {
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Generated ${prefix} ID: ${notificationId}, Previous max serial: ${maxSerial}`
       }
     });
@@ -106,34 +99,11 @@ const generateNotificationId = async (prefix, table, client) => {
       prefix,
       table,
       meta: {
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Failed to generate ${prefix} notification ID`
       }
     });
     throw new Error(`Error generating notification ID: ${error.message}`);
-  }
-};
-
-// Get MNO from MSISDN prefix
-const getMNOFromMSISDN = (msisdn) => {
-  if (!msisdn || msisdn.length < 3) return '';
-  
-  const prefix = msisdn.substring(0, 3);
-  switch (prefix) {
-    case '017':
-    case '013':
-      return 'Grameenphone';
-    case '019':
-    case '014':
-      return 'Banglalink';
-    case '018':
-      return 'Robi';
-    case '016':
-      return 'Airtel';
-    case '015':
-      return 'Teletalk';
-    default:
-      return '';
   }
 };
 
@@ -146,12 +116,12 @@ export async function POST(request) {
 
   const requestStartTime = Date.now();
   
-  logger.info('SIM tracker submission request received', {
+  logger.info('Portal tracker submission request received', {
     meta: {
       eid,
       sid: sessionId,
-      taskName: 'SimTracker',
-      details: `User ${socPortalId} submitting SIM information | IP: ${ipAddress} | User Agent: ${userAgent?.substring(0, 50)}...`
+      taskName: 'PortalTracker',
+      details: `User ${socPortalId} submitting portal information | IP: ${ipAddress} | User Agent: ${userAgent?.substring(0, 50)}...`
     }
   });
 
@@ -161,19 +131,19 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Starting JSON parsing'
       }
     });
     
     const formData = await request.json();
     
-    logger.debug('SIM tracker form data received and parsed', {
+    logger.debug('Portal tracker form data received and parsed', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Form fields - MSISDN: ${formData.msisdn?.substring(0, 8)}..., Persona: ${formData.assigned_persona}, Status: ${formData.msisdn_status}`
+        taskName: 'PortalTracker',
+        details: `Form fields - Portal: ${formData.portal_name}, URL: ${formData.portal_url?.substring(0, 30)}..., Category: ${formData.portal_category}`
       }
     });
 
@@ -182,23 +152,25 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Validating required fields'
       }
     });
     
     const missingFields = [];
-    if (!formData.msisdn) missingFields.push('MSISDN');
-    if (!formData.assigned_persona) missingFields.push('Assigned Persona');
-    if (!formData.profile_type) missingFields.push('Profile Type');
-    if (!formData.msisdn_status) missingFields.push('MSISDN Status');
+    if (!formData.portal_category) missingFields.push('Portal Category');
+    if (!formData.portal_name) missingFields.push('Portal Name');
+    if (!formData.portal_url) missingFields.push('Portal URL');
+    if (!formData.user_identifier) missingFields.push('User ID/Email/Phone Number');
+    if (!formData.password) missingFields.push('Password');
+    if (!formData.role) missingFields.push('Role');
 
     if (missingFields.length > 0) {
-      logger.warn('SIM tracker validation failed - missing required fields', {
+      logger.warn('Portal tracker validation failed - missing required fields', {
         meta: {
           eid,
           sid: sessionId,
-          taskName: 'SimTracker',
+          taskName: 'PortalTracker',
           details: `Missing required fields: ${missingFields.join(', ')}`,
           userId: socPortalId,
           missingFields
@@ -214,89 +186,31 @@ export async function POST(request) {
       });
     }
 
-    // Validate MSISDN format
-    logger.debug('Validating MSISDN format', {
+    // Validate URL format
+    logger.debug('Validating URL format', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `MSISDN: ${formData.msisdn}`
+        taskName: 'PortalTracker',
+        details: `URL: ${formData.portal_url}`
       }
     });
     
-    const validPrefixes = ['017', '013', '019', '014', '016', '018', '015'];
-    if (!/^\d{11}$/.test(formData.msisdn) || !validPrefixes.includes(formData.msisdn.substring(0, 3))) {
-      logger.warn('MSISDN validation failed', {
+    try {
+      new URL(formData.portal_url);
+    } catch {
+      logger.warn('URL validation failed', {
         meta: {
           eid,
           sid: sessionId,
-          taskName: 'SimTracker',
-          details: `MSISDN must be 11 digits starting with valid prefix, got: ${formData.msisdn}`
+          taskName: 'PortalTracker',
+          details: `Invalid URL format: ${formData.portal_url}`
         }
       });
       
       return new Response(JSON.stringify({
         success: false,
-        message: 'MSISDN must be 11 digits starting with 017, 013, 019, 014, 016, 018, or 015'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Auto-detect MNO
-    const mno = getMNOFromMSISDN(formData.msisdn);
-    if (!mno) {
-      logger.warn('MNO detection failed', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'SimTracker',
-          details: `Could not detect MNO for MSISDN: ${formData.msisdn}`
-        }
-      });
-      
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'Could not detect Mobile Network Operator from MSISDN'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Process date fields - convert empty strings to null
-    const handoverDate = formData.handover_date && formData.handover_date.trim() !== '' 
-      ? formData.handover_date 
-      : null;
-      
-    const returnDate = formData.return_date && formData.return_date.trim() !== '' 
-      ? formData.return_date 
-      : null;
-
-    logger.debug('Validating date fields', {
-      meta: {
-        eid,
-        sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Handover date: ${handoverDate}, Return date: ${returnDate}`
-      }
-    });
-
-    // Validate dates only if both are provided
-    if (handoverDate && returnDate && new Date(returnDate) <= new Date(handoverDate)) {
-      logger.warn('Date validation failed', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'SimTracker',
-          details: `Return date (${returnDate}) must be after handover date (${handoverDate})`
-        }
-      });
-      
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'Return date must be after handover date'
+        message: 'Please enter a valid URL including protocol (http:// or https://)'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -307,24 +221,20 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Acquiring database connection'
       }
     });
     
-    // Get client from pool using your existing pattern
     client = await getDbConnection().connect();
-    
-    // Set timezone for this client session
     await client.query(`SET TIME ZONE 'Asia/Dhaka';`);
-    
     await client.query('BEGIN');
 
     logger.debug('Querying user information', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Looking up user with SOC Portal ID: ${socPortalId}`
       }
     });
@@ -341,7 +251,7 @@ export async function POST(request) {
         meta: {
           eid,
           sid: sessionId,
-          taskName: 'SimTracker',
+          taskName: 'PortalTracker',
           details: `No user found with SOC Portal ID: ${socPortalId}`
         }
       });
@@ -360,101 +270,99 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `User short_name: ${userInfo.short_name}`
       }
     });
 
-    // Check for duplicate MSISDN
-    logger.debug('Checking for duplicate MSISDN', {
-      meta: {
-        eid,
-        sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Checking MSISDN: ${formData.msisdn}`
-      }
-    });
-    
-    const duplicateCheck = await client.query(
-      'SELECT st_id, assigned_persona FROM sim_info WHERE msisdn = $1',
-      [formData.msisdn]
-    );
-    
-    if (duplicateCheck.rows.length > 0) {
-      logger.warn('Duplicate MSISDN found', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'SimTracker',
-          details: `MSISDN ${formData.msisdn} already exists in SIM ${duplicateCheck.rows[0].st_id}`
-        }
-      });
-      
-      await client.query('ROLLBACK');
-      return new Response(JSON.stringify({
-        success: false,
-        message: `MSISDN already exists in SIM ${duplicateCheck.rows[0].st_id}`
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    // Check for duplicate Portal URL + Role + User combination
+logger.debug('Checking for duplicate Portal URL, Role and User combination', {
+  meta: {
+    eid,
+    sid: sessionId,
+    taskName: 'PortalTracker',
+    details: `Checking URL: ${formData.portal_url}, Role: ${formData.role}, User: ${formData.user_identifier}`
+  }
+});
+
+// In the POST function, replace the duplicate check with:
+const duplicateCheck = await client.query(
+  'SELECT pt_id, portal_name FROM portal_info WHERE portal_url = $1 AND role = $2 AND user_identifier = $3',
+  [formData.portal_url, formData.role, formData.user_identifier]
+);
+
+if (duplicateCheck.rows.length > 0) {
+  logger.warn('Duplicate Portal URL, Role and User combination found', {
+    meta: {
+      eid,
+      sid: sessionId,
+      taskName: 'PortalTracker',
+      details: `Portal URL ${formData.portal_url} with role ${formData.role} and user ${formData.user_identifier} already exists in Portal ${duplicateCheck.rows[0].pt_id}`
     }
+  });
+  
+  await client.query('ROLLBACK');
+  return new Response(JSON.stringify({
+    success: false,
+    message: `Portal URL with the same role and user identifier already exists in Portal ${duplicateCheck.rows[0].pt_id}`
+  }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 
-    // Generate SIM tracking ID
-    const simTrackingId = await generateSimTrackingId(client);
+    // Generate Portal tracking ID in correct format: PT01SOCP, PT02SOCP, etc.
+    const portalTrackingId = await generatePortalTrackingId(client);
 
-    logger.debug('Inserting SIM information into database', {
+    logger.debug('Inserting portal information into database', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Inserting SIM with tracking ID: ${simTrackingId}`
+        taskName: 'PortalTracker',
+        details: `Inserting portal with tracking ID: ${portalTrackingId}`
       }
     });
     
-    // Insert into sim_info table
+    // Insert into portal_info table
     const insertQuery = `
-      INSERT INTO sim_info (
-        st_id, msisdn, mno, assigned_persona, profile_type, msisdn_status,
-        device_tag, handed_over, handover_date, return_date, remark, track_by
+      INSERT INTO portal_info (
+        pt_id, portal_category, portal_name, portal_url, 
+        user_identifier, password, role, remark, track_by
       ) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `;
     
     const insertParams = [
-      simTrackingId,
-      formData.msisdn,
-      mno,
-      formData.assigned_persona,
-      formData.profile_type,
-      formData.msisdn_status,
-      formData.device_tag || null,
-      formData.handed_over || null,
-      handoverDate,
-      returnDate,
+      portalTrackingId,
+      formData.portal_category,
+      formData.portal_name,
+      formData.portal_url,
+      formData.user_identifier,
+      formData.password,
+      formData.role,
       formData.remark || null,
       userInfo.short_name
     ];
     
-    logger.debug('SIM insert parameters prepared', {
+    logger.debug('Portal insert parameters prepared', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Insert params - MSISDN: ${formData.msisdn}, MNO: ${mno}, Persona: ${formData.assigned_persona}, Status: ${formData.msisdn_status}`
+        taskName: 'PortalTracker',
+        details: `Insert params - Name: ${formData.portal_name}, URL: ${formData.portal_url}, Category: ${formData.portal_category}`
       }
     });
     
     await client.query(insertQuery, insertParams);
 
-    logger.info('SIM information inserted successfully', {
+    logger.info('Portal information inserted successfully', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `SIM information saved with ID: ${simTrackingId} | MSISDN: ${formData.msisdn} | MNO: ${mno} | Persona: ${formData.assigned_persona}`,
+        taskName: 'PortalTracker',
+        details: `Portal information saved with ID: ${portalTrackingId} | Name: ${formData.portal_name} | URL: ${formData.portal_url} | Category: ${formData.portal_category}`,
         userId: socPortalId,
-        simTrackingId
+        portalTrackingId
       }
     });
 
@@ -463,7 +371,7 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Creating admin and user notifications'
       }
     });
@@ -475,7 +383,7 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Admin notification ID: ${adminNotificationId}`
       }
     });
@@ -484,7 +392,7 @@ export async function POST(request) {
       'INSERT INTO admin_notification_details (notification_id, title, status) VALUES ($1, $2, $3)',
       [
         adminNotificationId,
-        `New SIM Tracked: ${formData.msisdn} (${simTrackingId}) By ${userInfo.short_name}`,
+        `New Portal Tracked: ${formData.portal_name} (${portalTrackingId}) By ${userInfo.short_name}`,
         'Unread'
       ]
     );
@@ -493,7 +401,7 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `User notification ID: ${userNotificationId}`
       }
     });
@@ -502,7 +410,7 @@ export async function POST(request) {
       'INSERT INTO user_notification_details (notification_id, title, status, soc_portal_id) VALUES ($1, $2, $3, $4)',
       [
         userNotificationId,
-        `SIM Tracked: ${formData.msisdn} (${simTrackingId})`,
+        `Portal Tracked: ${formData.portal_name} (${portalTrackingId})`,
         'Unread',
         socPortalId
       ]
@@ -513,8 +421,8 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `Activity: ADD_SIM_TRACKER for ${simTrackingId}`
+        taskName: 'PortalTracker',
+        details: `Activity: ADD_PORTAL_TRACKER for ${portalTrackingId}`
       }
     });
     
@@ -522,8 +430,8 @@ export async function POST(request) {
       'INSERT INTO user_activity_log (soc_portal_id, action, description, eid, sid, ip_address, device_info) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [
         socPortalId,
-        'ADD_SIM_TRACKER',
-        `Added SIM tracker for ${formData.msisdn} (${simTrackingId})`,
+        'ADD_PORTAL_TRACKER',
+        `Added portal tracker for ${formData.portal_name} (${portalTrackingId})`,
         eid,
         sessionId,
         ipAddress,
@@ -531,33 +439,29 @@ export async function POST(request) {
       ]
     );
 
-    // Send Telegram alert
+    // Send Telegram alert (without password for security)
     logger.debug('Preparing Telegram alert', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Formatting Telegram message'
       }
     });
     
-    const telegramMessage = formatSimTrackerAlert(
-      simTrackingId,
-      formData.msisdn,
-      mno,
-      formData.assigned_persona,
-      formData.profile_type,
-      formData.msisdn_status,
-      formData.device_tag,
+    const telegramMessage = formatPortalTrackerAlert(
+      portalTrackingId,
+      formData.portal_category,
+      formData.portal_name,
+      formData.portal_url,
+      formData.user_identifier,
+      formData.role,
       {
         userId: socPortalId,
         eid,
         trackedBy: userInfo.short_name,
         ipAddress,
         userAgent,
-        handedOver: formData.handed_over,
-        handoverDate: handoverDate,
-        returnDate: returnDate,
         remark: formData.remark
       }
     );
@@ -566,7 +470,7 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Telegram message length: ${telegramMessage.length} characters`
       }
     });
@@ -577,7 +481,7 @@ export async function POST(request) {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: 'Finalizing database transaction'
       }
     });
@@ -586,22 +490,22 @@ export async function POST(request) {
 
     const requestDuration = Date.now() - requestStartTime;
     
-    logger.info('SIM tracker submission completed successfully', {
+    logger.info('Portal tracker submission completed successfully', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
-        details: `SIM tracker submission completed in ${requestDuration}ms | SIM ID: ${simTrackingId} | User: ${socPortalId}`,
+        taskName: 'PortalTracker',
+        details: `Portal tracker submission completed in ${requestDuration}ms | Portal ID: ${portalTrackingId} | User: ${socPortalId}`,
         userId: socPortalId,
-        simTrackingId,
+        portalTrackingId,
         duration: requestDuration
       }
     });
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'SIM information saved successfully',
-      sim_tracking_id: simTrackingId
+      message: 'Portal information saved successfully',
+      portal_tracking_id: portalTrackingId
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
@@ -615,7 +519,7 @@ export async function POST(request) {
         meta: {
           eid,
           sid: sessionId,
-          taskName: 'SimTracker',
+          taskName: 'PortalTracker',
           details: 'Database rollback initiated'
         }
       });
@@ -623,11 +527,11 @@ export async function POST(request) {
       await client.query('ROLLBACK');
     }
     
-    logger.error('Error in SIM tracker submission', {
+    logger.error('Error in portal tracker submission', {
       meta: {
         eid,
         sid: sessionId,
-        taskName: 'SimTracker',
+        taskName: 'PortalTracker',
         details: `Unexpected error after ${errorDuration}ms: ${error.message}`,
         userId: socPortalId,
         error: error.message,
@@ -636,10 +540,9 @@ export async function POST(request) {
       }
     });
 
-    // Provide specific error messages for common issues
     let errorMessage = 'Internal server error';
     if (error.message.includes('duplicate key')) {
-      errorMessage = 'SIM with this MSISDN already exists';
+      errorMessage = 'Portal with this URL already exists';
     } else if (error.message.includes('connection') || error.message.includes('timeout')) {
       errorMessage = 'Database connection error. Please try again.';
     }
@@ -655,13 +558,12 @@ export async function POST(request) {
   } finally {
     if (client) {
       try {
-        // Release client back to pool using your existing pattern
         client.release();
         logger.debug('Database connection released', {
           meta: {
             eid,
             sid: sessionId,
-            taskName: 'SimTracker',
+            taskName: 'PortalTracker',
             details: 'Database client released successfully'
           }
         });
@@ -671,11 +573,70 @@ export async function POST(request) {
           meta: {
             eid,
             sid: sessionId,
-            taskName: 'SimTracker',
+            taskName: 'PortalTracker',
             details: 'Failed to release database connection'
           }
         });
       }
     }
   }
+}
+
+// Duplicate check endpoint
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const url = searchParams.get('url');
+  const role = searchParams.get('role');
+  const user = searchParams.get('user');
+
+  // If we have all three parameters, it's a duplicate check
+  if (url && role && user) {
+    let client;
+    try {
+      client = await getDbConnection().connect();
+      
+      const result = await client.query(
+        'SELECT pt_id, portal_name, portal_url, role, user_identifier FROM portal_info WHERE portal_url = $1 AND role = $2 AND user_identifier = $3',
+        [url, role, user]
+      );
+      
+      return new Response(JSON.stringify({
+        exists: result.rows.length > 0,
+        existingPortal: result.rows[0] || null
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      logger.error('Error checking duplicate portal combination', {
+        error: error.message,
+        meta: {
+          taskName: 'PortalTracker',
+          details: `Failed to check duplicate for URL: ${url}, Role: ${role}, User: ${user}`
+        }
+      });
+      
+      return new Response(JSON.stringify({
+        exists: false,
+        existingPortal: null
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  }
+
+  // If not a duplicate check, return method not allowed or empty response
+  return new Response(JSON.stringify({
+    success: false,
+    message: 'Method not allowed'
+  }), {
+    status: 405,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
