@@ -6,6 +6,7 @@ import {
   FaFileAlt, FaChartLine, FaCalendarAlt, FaChevronDown,
   FaBook, FaHistory
 } from 'react-icons/fa';
+import { BsMotherboardFill } from "react-icons/bs";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -67,6 +68,15 @@ const UserDashboardSidebar = () => {
         { label: 'Access Form Log', path: '/user_dashboard/document_hub/access_form_log' },
         { label: 'Document Tracker', path: '/user_dashboard/document_hub/other_document_tracker' },
         { label: 'Document Log', path: '/user_dashboard/document_hub/other_document_log' }
+      ]
+    },
+    { 
+      label: 'Operational Task', 
+      icon: <BsMotherboardFill className="text-xl" />, 
+      path: '/user_dashboard/operational_task',
+      color: 'text-green-500',
+      children: [
+        { label: 'Fee-Com Calculation', path: '/user_dashboard/operational_task/fee_com_cal' },
       ]
     },
     { 

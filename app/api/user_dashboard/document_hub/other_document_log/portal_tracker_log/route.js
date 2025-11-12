@@ -38,41 +38,15 @@ export async function GET(request) {
       }
     });
 
-    let queryString = `
-      SELECT 
-        pt_id,
-        portal_category,
-        portal_name,
-        portal_url,
-        user_identifier,
-        password,
-        role,
-        remark,
-        track_by,
-        created_at
-      FROM portal_info 
-      WHERE 1=1
-    `;
-    
-    let countQuery = `SELECT COUNT(*) as total FROM portal_info WHERE 1=1`;
-    
+    // Build base condition for both count and data queries
+    let baseCondition = 'FROM portal_info WHERE 1=1';
     let queryParams = [];
     let paramCount = 0;
 
     // Add search filter if provided
     if (search) {
       paramCount++;
-      queryString += ` AND (
-        portal_category ILIKE $${paramCount} OR 
-        portal_name ILIKE $${paramCount} OR 
-        pt_id::text ILIKE $${paramCount} OR
-        portal_url ILIKE $${paramCount} OR
-        user_identifier ILIKE $${paramCount} OR
-        role ILIKE $${paramCount} OR
-        track_by ILIKE $${paramCount} OR
-        remark ILIKE $${paramCount}
-      )`;
-      countQuery += ` AND (
+      baseCondition += ` AND (
         portal_category ILIKE $${paramCount} OR 
         portal_name ILIKE $${paramCount} OR 
         pt_id::text ILIKE $${paramCount} OR
@@ -88,21 +62,51 @@ export async function GET(request) {
     // Add category filter if provided
     if (category && category !== 'all') {
       paramCount++;
-      queryString += ` AND portal_category = $${paramCount}`;
-      countQuery += ` AND portal_category = $${paramCount}`;
+      baseCondition += ` AND portal_category = $${paramCount}`;
       queryParams.push(category);
     }
 
-    // Add ordering and pagination
-    queryString += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
-    queryParams.push(limit, offset);
+    // COUNT QUERY: Count unique portal URLs (not individual records)
+    const countQuery = `
+      SELECT COUNT(DISTINCT portal_url) as total 
+      ${baseCondition}
+    `;
 
-    // Execute count query
-    const countResult = await query(countQuery, queryParams.slice(0, search ? (category ? 2 : 1) : (category ? 1 : 0)));
-    const totalCount = parseInt(countResult.rows[0]?.total || 0);
+    // DATA QUERY: Get paginated unique portal URLs with all their roles
+    const dataQuery = `
+      WITH UniquePortals AS (
+        SELECT DISTINCT portal_url, portal_category
+        ${baseCondition}
+        ORDER BY portal_url
+        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+      ),
+      PortalDetails AS (
+        SELECT 
+          p.pt_id,
+          p.portal_category,
+          p.portal_name,
+          p.portal_url,
+          p.user_identifier,
+          p.password,
+          p.role,
+          p.remark,
+          p.track_by,
+          p.created_at,
+          p.updated_at
+        FROM portal_info p
+        INNER JOIN UniquePortals up ON p.portal_url = up.portal_url
+        ORDER BY p.portal_url, p.role
+      )
+      SELECT * FROM PortalDetails
+    `;
 
-    // Execute main query
-    const result = await query(queryString, queryParams);
+    // Execute count query for unique URLs
+    const countResult = await query(countQuery, queryParams);
+    const totalUniqueUrls = parseInt(countResult.rows[0]?.total || 0);
+
+    // Execute main data query
+    const dataParams = [...queryParams, limit, offset];
+    const result = await query(dataQuery, dataParams);
     const portals = result.rows;
 
     logger.info('Portal tracker logs fetched successfully', {
@@ -110,7 +114,7 @@ export async function GET(request) {
         eid,
         sid: sessionId,
         taskName: 'PortalTrackerLog',
-        details: `Fetched ${portals.length} portals out of ${totalCount} total, Category filter: ${category}`
+        details: `Fetched ${portals.length} portal records for ${totalUniqueUrls} unique URLs, Page: ${page}, Limit: ${limit}`
       }
     });
 
@@ -120,8 +124,8 @@ export async function GET(request) {
       pagination: {
         page,
         limit,
-        total: totalCount,
-        pages: Math.ceil(totalCount / limit)
+        total: totalUniqueUrls, // Total unique URLs, not individual records
+        pages: Math.ceil(totalUniqueUrls / limit)
       }
     }), {
       status: 200,

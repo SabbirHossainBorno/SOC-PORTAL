@@ -161,8 +161,6 @@ export async function POST(request) {
     if (!formData.portal_category) missingFields.push('Portal Category');
     if (!formData.portal_name) missingFields.push('Portal Name');
     if (!formData.portal_url) missingFields.push('Portal URL');
-    if (!formData.user_identifier) missingFields.push('User ID/Email/Phone Number');
-    if (!formData.password) missingFields.push('Password');
     if (!formData.role) missingFields.push('Role');
 
     if (missingFields.length > 0) {
@@ -185,6 +183,12 @@ export async function POST(request) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    const processedData = {
+      ...formData,
+      user_identifier: formData.user_identifier?.trim() || 'Individual',
+      password: formData.password?.trim() || 'Individual'
+    };
 
     // Validate URL format
     logger.debug('Validating URL format', {
@@ -285,11 +289,12 @@ logger.debug('Checking for duplicate Portal URL, Role and User combination', {
   }
 });
 
-// In the POST function, replace the duplicate check with:
-const duplicateCheck = await client.query(
-  'SELECT pt_id, portal_name FROM portal_info WHERE portal_url = $1 AND role = $2 AND user_identifier = $3',
-  [formData.portal_url, formData.role, formData.user_identifier]
-);
+  // Update the duplicate check to handle "Individual" values
+  const userIdentifierForDuplicateCheck = processedData.user_identifier;
+  const duplicateCheck = await client.query(
+    'SELECT pt_id, portal_name FROM portal_info WHERE portal_url = $1 AND role = $2 AND user_identifier = $3',
+    [processedData.portal_url, processedData.role, userIdentifierForDuplicateCheck]
+  );
 
 if (duplicateCheck.rows.length > 0) {
   logger.warn('Duplicate Portal URL, Role and User combination found', {
@@ -332,17 +337,18 @@ if (duplicateCheck.rows.length > 0) {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `;
     
-    const insertParams = [
-      portalTrackingId,
-      formData.portal_category,
-      formData.portal_name,
-      formData.portal_url,
-      formData.user_identifier,
-      formData.password,
-      formData.role,
-      formData.remark || null,
-      userInfo.short_name
-    ];
+    // Use processedData instead of formData for the insert
+const insertParams = [
+  portalTrackingId,
+  processedData.portal_category,
+  processedData.portal_name,
+  processedData.portal_url,
+  processedData.user_identifier, // This will be "Individual" if empty
+  processedData.password, // This will be "Individual" if empty
+  processedData.role,
+  processedData.remark || null,
+  userInfo.short_name
+];
     
     logger.debug('Portal insert parameters prepared', {
       meta: {

@@ -2,11 +2,58 @@
 import { query, getDbConnection } from '../../../../../../../lib/db';
 import logger from '../../../../../../../lib/logger';
 import sendTelegramAlert from '../../../../../../../lib/telegramAlert';
-import { getCurrentDateTime } from '../../../../../../../lib/auditUtils';
+
+// Generate notification IDs
+const generateNotificationId = async (prefix, table, client) => {
+  try {
+    logger.debug('Generating notification ID', {
+      meta: {
+        taskName: 'PortalTracker',
+        details: `Generating ${prefix} ID for table: ${table}`
+      }
+    });
+    
+    const result = await client.query(`SELECT MAX(serial) AS max_serial FROM ${table}`);
+    const maxSerial = result.rows[0]?.max_serial || 0;
+    const nextId = (maxSerial + 1).toString().padStart(4, '0');
+    const notificationId = `${prefix}${nextId}SOCP`;
+    
+    logger.debug('Notification ID generated successfully', {
+      meta: {
+        taskName: 'PortalTracker',
+        details: `Generated ${prefix} ID: ${notificationId}, Previous max serial: ${maxSerial}`
+      }
+    });
+    
+    return notificationId;
+  } catch (error) {
+    logger.error('Error generating notification ID', {
+      error: error.message,
+      stack: error.stack,
+      prefix,
+      table,
+      meta: {
+        taskName: 'PortalTracker',
+        details: `Failed to generate ${prefix} notification ID`
+      }
+    });
+    throw new Error(`Error generating notification ID: ${error.message}`);
+  }
+};
 
 // Format Telegram alert for Portal tracker update
 const formatPortalUpdateAlert = (portalTrackingId, portalName, portalUrl, role, updatedFields, additionalInfo = {}) => {
-  const time = getCurrentDateTime();
+  const time = new Date().toLocaleString('en-US', {
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
   const userId = additionalInfo.userId || 'N/A';
   const eid = additionalInfo.eid || 'N/A';
   const updatedBy = additionalInfo.updatedBy || 'N/A';
@@ -167,25 +214,7 @@ export async function PUT(request, { params }) {
       }
     });
 
-    // Validate required fields
-    if (!formData.user_identifier || !formData.password) {
-      logger.warn('Portal update validation failed', {
-        meta: {
-          eid,
-          sid: sessionId,
-          taskName: 'UpdatePortal',
-          details: 'Missing required fields: user_identifier and password'
-        }
-      });
-      
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'User Identifier and Password are required'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    // No required field validation - allow empty fields (will become "Individual")
 
     client = await getDbConnection();
     await client.query('BEGIN');
@@ -220,7 +249,7 @@ export async function PUT(request, { params }) {
 
     // Get current portal data for comparison and Telegram alert
     const currentPortalResponse = await client.query(
-      'SELECT portal_name, portal_url, role FROM portal_info WHERE pt_id = $1',
+      'SELECT portal_name, portal_url, role, user_identifier, password, remark FROM portal_info WHERE pt_id = $1',
       [pt_id]
     );
 
@@ -247,6 +276,13 @@ export async function PUT(request, { params }) {
 
     const currentPortal = currentPortalResponse.rows[0];
 
+    // Process data - convert empty fields to "Individual"
+    const processedData = {
+      user_identifier: formData.user_identifier?.trim() || 'Individual',
+      password: formData.password?.trim() || 'Individual',
+      remark: formData.remark || null
+    };
+
     // Update portal information - only allowed fields
     const updateQuery = `
       UPDATE portal_info 
@@ -261,9 +297,9 @@ export async function PUT(request, { params }) {
     `;
     
     const updateParams = [
-      formData.user_identifier,
-      formData.password,
-      formData.remark || null,
+      processedData.user_identifier,
+      processedData.password,
+      processedData.remark,
       userInfo.short_name,
       pt_id
     ];
@@ -291,6 +327,49 @@ export async function PUT(request, { params }) {
       });
     }
 
+    // === ADD USER NOTIFICATION SECTION ===
+    logger.debug('Generating user notification for portal update', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'UpdatePortal',
+        details: `Creating user notification for portal ${pt_id}`
+      }
+    });
+    
+    const userNotificationId = await generateNotificationId('UN', 'user_notification_details', client);
+
+    logger.debug('Inserting user notification', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'UpdatePortal',
+        details: `User notification ID: ${userNotificationId}`
+      }
+    });
+    
+    await client.query(
+      'INSERT INTO user_notification_details (notification_id, title, status, soc_portal_id) VALUES ($1, $2, $3, $4)',
+      [
+        userNotificationId,
+        `Portal Updated: ${currentPortal.portal_name} (${pt_id})`,
+        'Unread',
+        socPortalId
+      ]
+    );
+
+    logger.info('User notification created successfully', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'UpdatePortal',
+        details: `User notification ${userNotificationId} created for portal update`,
+        userId: socPortalId,
+        portalTrackingId: pt_id
+      }
+    });
+    // === END USER NOTIFICATION SECTION ===
+
     // Log activity
     await client.query(
       'INSERT INTO user_activity_log (soc_portal_id, action, description, eid, sid, ip_address, device_info) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -306,14 +385,25 @@ export async function PUT(request, { params }) {
     );
 
     // Send Telegram alert for update
-    const updatedFields = ['User Identifier', 'Password', ...(formData.remark ? ['Remark'] : [])].join(', ');
+    const updatedFields = [];
+    if (currentPortal.user_identifier !== processedData.user_identifier) {
+      updatedFields.push('User Identifier');
+    }
+    if (currentPortal.password !== processedData.password) {
+      updatedFields.push('Password');
+    }
+    if (formData.remark !== undefined && formData.remark !== currentPortal.remark) {
+      updatedFields.push('Remark');
+    }
+
+    const fieldsChanged = updatedFields.length > 0 ? updatedFields.join(', ') : 'No changes';
     
     const telegramMessage = formatPortalUpdateAlert(
       pt_id,
       currentPortal.portal_name,
       currentPortal.portal_url,
       currentPortal.role,
-      updatedFields,
+      fieldsChanged,
       {
         userId: socPortalId,
         eid,
@@ -327,14 +417,17 @@ export async function PUT(request, { params }) {
 
     await client.query('COMMIT');
 
+    const requestDuration = Date.now() - requestStartTime;
+    
     logger.info('Portal updated successfully', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'UpdatePortal',
-        details: `Portal ${pt_id} updated successfully by ${userInfo.short_name}`,
+        details: `Portal ${pt_id} updated successfully by ${userInfo.short_name} in ${requestDuration}ms`,
         userId: socPortalId,
-        portalTrackingId: pt_id
+        portalTrackingId: pt_id,
+        duration: requestDuration
       }
     });
 
@@ -352,21 +445,29 @@ export async function PUT(request, { params }) {
       await client.query('ROLLBACK');
     }
     
+    const errorDuration = Date.now() - requestStartTime;
+    
     logger.error('Error updating portal', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'UpdatePortal',
-        details: `Unexpected error: ${error.message}`,
+        details: `Unexpected error after ${errorDuration}ms: ${error.message}`,
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
+        duration: errorDuration
       }
     });
 
+    let errorMessage = 'Failed to update portal information';
+    if (error.message.includes('connection') || error.message.includes('timeout')) {
+      errorMessage = 'Database connection error. Please try again.';
+    }
+
     return new Response(JSON.stringify({
       success: false,
-      message: 'Failed to update portal information',
-      error: error.message
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

@@ -260,14 +260,6 @@ export default function PortalTracker() {
       newErrors.portal_url = `Portal URL with same role and user already exists in Portal ${duplicateCheck.existingPortal?.pt_id || 'another portal'}`;
     }
     
-    if (!formData.user_identifier?.trim()) {
-      newErrors.user_identifier = 'User ID/Email/Phone Number is required';
-    }
-    
-    if (!formData.password?.trim()) {
-      newErrors.password = 'Password is required';
-    }
-    
     if (!formData.role?.trim()) {
       newErrors.role = 'Role is required';
     }
@@ -292,12 +284,19 @@ export default function PortalTracker() {
     setIsSubmitting(true);
     
     try {
+      // Prepare data with "Individual" for empty user_identifier and password
+    const submissionData = {
+      ...formData,
+      user_identifier: formData.user_identifier?.trim() || 'Individual',
+      password: formData.password?.trim() || 'Individual'
+    };
+
       const response = await fetch('/api/user_dashboard/document_hub/other_document_tracker/portal_tracker', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submissionData)
       });
       
       const result = await response.json();
@@ -482,18 +481,18 @@ export default function PortalTracker() {
                       {isReadOnly && <span className="text-blue-600 text-xs ml-1">(Pre-filled)</span>}
                     </label>
                     <input
-                      type="text"
-                      name="portal_name"
-                      value={formData.portal_name}
-                      onChange={handleChange}
-                      readOnly={isReadOnly}
-                      className={`w-full px-4 py-3 rounded border ${
-                        errors.portal_name ? 'border-red-500 ring-2 ring-red-200' : 
-                        isReadOnly ? 'border-gray-300 bg-gray-100 cursor-not-allowed text-gray-700' : 
-                        'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500`}
-                      placeholder="Enter portal name"
-                    />
+  type="text"
+  name="portal_name"
+  value={formData.portal_name}
+  onChange={handleChange}
+  readOnly={isReadOnly}
+  className={`w-full px-4 py-3 rounded border ${
+    errors.portal_name ? 'border-red-500 ring-2 ring-red-200' : 
+    isReadOnly ? 'border-gray-300 bg-gray-100 cursor-not-allowed text-gray-700' : 
+    'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  } transition-all placeholder-gray-500 text-gray-900`} // Added text-gray-900 here
+  placeholder="Enter portal name"
+/>
                     {errors.portal_name && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.portal_name}
@@ -507,18 +506,18 @@ export default function PortalTracker() {
                       {isReadOnly && <span className="text-blue-600 text-xs ml-1">(Pre-filled)</span>}
                     </label>
                     <input
-                      type="url"
-                      name="portal_url"
-                      value={formData.portal_url}
-                      onChange={handleChange}
-                      readOnly={isReadOnly}
-                      className={`w-full px-4 py-3 rounded border ${
-                        errors.portal_url ? 'border-red-500 ring-2 ring-red-200' : 
-                        isReadOnly ? 'border-gray-300 bg-gray-100 cursor-not-allowed text-gray-700' : 
-                        'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500`}
-                      placeholder="https://example.com"
-                    />
+  type="url"
+  name="portal_url"
+  value={formData.portal_url}
+  onChange={handleChange}
+  readOnly={isReadOnly}
+  className={`w-full px-4 py-3 rounded border ${
+    errors.portal_url ? 'border-red-500 ring-2 ring-red-200' : 
+    isReadOnly ? 'border-gray-300 bg-gray-100 cursor-not-allowed text-gray-700' : 
+    'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  } transition-all placeholder-gray-500 text-gray-900`} // Added text-gray-900 here
+  placeholder="https://example.com"
+/>
                     {errors.portal_url && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.portal_url}
@@ -545,15 +544,15 @@ export default function PortalTracker() {
                       User ID / Email / Phone Number *
                     </label>
                     <input
-                      type="text"
-                      name="user_identifier"
-                      value={formData.user_identifier}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded border ${
-                        errors.user_identifier ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="Username, email, or phone number"
-                    />
+  type="text"
+  name="user_identifier"
+  value={formData.user_identifier}
+  onChange={handleChange}
+  className={`w-full px-4 py-3 rounded border ${
+    errors.user_identifier ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  } transition-all placeholder-gray-500 text-gray-900`} // Added text-gray-900 here
+  placeholder="Username, email, phone number, or leave empty for Individual"
+/>
                     {errors.user_identifier && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.user_identifier}
@@ -567,15 +566,15 @@ export default function PortalTracker() {
                     </label>
                     <div className="relative">
                       <input
-                        type={showPassword ? "text" : "password"}
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        className={`w-full px-4 py-3 rounded border ${
-                          errors.password ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                        } transition-all placeholder-gray-500 text-gray-900 pr-10`}
-                        placeholder="Enter password"
-                      />
+  type={showPassword ? "text" : "password"}
+  name="password"
+  value={formData.password}
+  onChange={handleChange}
+  className={`w-full px-4 py-3 rounded border ${
+    errors.password ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  } transition-all placeholder-gray-500 text-gray-900 pr-10`} // Added text-gray-900 here
+  placeholder="Enter password or leave empty for Individual"
+/>
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -596,15 +595,15 @@ export default function PortalTracker() {
                       Role *
                     </label>
                     <input
-                      type="text"
-                      name="role"
-                      value={formData.role}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded border ${
-                        errors.role ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="e.g., Admin, User, Viewer, etc."
-                    />
+  type="text"
+  name="role"
+  value={formData.role}
+  onChange={handleChange}
+  className={`w-full px-4 py-3 rounded border ${
+    errors.role ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
+  } transition-all placeholder-gray-500 text-gray-900`} // Added text-gray-900 here
+  placeholder="e.g., Admin, User, Viewer, etc."
+/>
                     {errors.role && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.role}
@@ -628,13 +627,13 @@ export default function PortalTracker() {
                     Remark (Optional)
                   </label>
                   <textarea
-                    name="remark"
-                    value={formData.remark}
-                    onChange={handleChange}
-                    rows={4}
-                    className="w-full px-4 py-3 rounded border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900 resize-none"
-                    placeholder="Any additional remarks or notes about this portal access..."
-                  />
+  name="remark"
+  value={formData.remark}
+  onChange={handleChange}
+  rows={4}
+  className="w-full px-4 py-3 rounded border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all placeholder-gray-500 text-gray-900 resize-none" // Added text-gray-900 here
+  placeholder="Any additional remarks or notes about this portal access..."
+/>
                 </div>
                 
                 {/* Tracked By Info */}

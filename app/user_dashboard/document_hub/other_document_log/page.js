@@ -1,4 +1,4 @@
-// app/user_dashboard/document_hub/other_document/page.js
+// app/user_dashboard/document_hub/other_document_log/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -164,7 +164,6 @@ const documentTypes = [
 export default function OtherDocumentLog() {
   const [selectedType, setSelectedType] = useState('');
   const [isNavigating, setIsNavigating] = useState(false);
-  const [navigatingTo, setNavigatingTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState({
     totalEntries: 0,
@@ -179,20 +178,18 @@ export default function OtherDocumentLog() {
     if (!documentType) return;
 
     setSelectedType(type);
-    setNavigatingTo(documentType.label);
     setIsNavigating(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Short delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Navigate to the specific log page using the route from documentTypes
+      // Navigate to the specific log page
       router.push(documentType.route);
       
     } catch (error) {
       console.error('Navigation error:', error);
-    } finally {
       setIsNavigating(false);
-      setNavigatingTo('');
     }
   };
 
@@ -201,15 +198,15 @@ export default function OtherDocumentLog() {
     doc.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const selectedDocument = documentTypes.find(doc => doc.value === selectedType);
+  // Show only the loading spinner when navigating
+  if (isNavigating) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-6 px-4 sm:px-6 lg:px-8">
-      {/* Loading Spinner */}
-      {isNavigating && <LoadingSpinner />}
-      
       <div className="max-w-7xl mx-auto">
-        {/* Header Section - Made more compact */}
+        {/* Header Section */}
         <div className="mb-6">
           <div className="bg-white rounded shadow-lg p-6 border border-slate-200 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/10 to-indigo-600/10 rounded-full -translate-y-12 translate-x-12"></div>
@@ -232,7 +229,7 @@ export default function OtherDocumentLog() {
                 </div>
               </div>
               
-              {/* Quick Actions - Moved to right side middle */}
+              {/* Quick Actions */}
               <div className="flex items-center justify-end lg:justify-center">
                 <button className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded text-sm hover:bg-slate-50 transition-all shadow-sm">
                   <FaSync className="text-slate-500 mr-1.5 text-xs" />
@@ -243,7 +240,7 @@ export default function OtherDocumentLog() {
           </div>
         </div>
 
-        {/* Quick Stats Section - Made more compact */}
+        {/* Quick Stats Section */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded shadow-md p-4 border border-slate-200 hover:shadow-lg transition-all duration-300 group">
             <div className="flex items-center justify-between">
@@ -294,7 +291,7 @@ export default function OtherDocumentLog() {
           </div>
         </div>
 
-        {/* Type Selection Section - Made more compact with 4 columns */}
+        {/* Type Selection Section */}
         <div className="bg-white rounded shadow-lg p-6 border border-slate-200 mb-6">
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-3">
@@ -331,12 +328,11 @@ export default function OtherDocumentLog() {
               <button
                 key={docType.value}
                 onClick={() => handleTypeSelect(docType.value)}
-                disabled={isNavigating}
                 className={`p-4 rounded border transition-all duration-300 group relative overflow-hidden ${
                   selectedType === docType.value
                     ? `${docType.borderColor} ${docType.bgColor} ring-1 ring-opacity-50 ${docType.color.replace('text', 'ring')} shadow-md scale-[1.02]`
                     : 'border-slate-200 bg-white hover:shadow-lg hover:scale-[1.02] hover:border-slate-300'
-                } ${isNavigating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
                 {/* Background Gradient Effect */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${docType.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`}></div>
@@ -366,31 +362,6 @@ export default function OtherDocumentLog() {
               </button>
             ))}
           </div>
-
-          {/* Selected Type Info - Compact */}
-          {selectedDocument && (
-            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="p-2 bg-white rounded shadow-sm mr-3 border border-blue-100">
-                    {selectedDocument.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-blue-800 text-sm">
-                      {selectedDocument.label} Selected
-                    </h3>
-                    <p className="text-blue-600 text-xs">
-                      Preparing to view {selectedDocument.description.toLowerCase()}.
-                      {isNavigating && ' Loading...'}
-                    </p>
-                  </div>
-                </div>
-                {isNavigating && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

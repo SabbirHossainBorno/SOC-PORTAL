@@ -5,9 +5,9 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   FaGlobe, FaUser, FaLock, FaInfoCircle,
-  FaPaperPlane, FaSpinner, FaTimes, FaArrowLeft,
-  FaSave, FaIdCard, FaCheckCircle, FaExclamationCircle,
-  FaEdit, FaEye, FaEyeSlash
+  FaSpinner, FaTimes, FaArrowLeft,
+  FaSave, FaIdCard, FaExclamationCircle,
+  FaEdit, FaEye, FaEyeSlash, FaCopy
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 
@@ -29,6 +29,39 @@ export default function EditPortalTracker() {
   const [userInfo, setUserInfo] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Copy to clipboard function
+  const copyToClipboard = async (text, type) => {
+    if (!text) {
+      toast.error('No text to copy');
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        toast.success(`${type} copied to clipboard!`);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+          toast.success(`${type} copied to clipboard!`);
+        } else {
+          throw new Error('Copy failed');
+        }
+      }
+    } catch (err) {
+      console.error('Copy failed:', err);
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
   // Fetch portal data and user info
   useEffect(() => {
     const fetchData = async () => {
@@ -46,10 +79,10 @@ export default function EditPortalTracker() {
         
         if (portalData.success) {
           setPortalInfo(portalData.data);
-          // Pre-fill form with existing data
+          // Pre-fill form with existing data - convert "Individual" to empty strings for editing
           setFormData({
-            user_identifier: portalData.data.user_identifier || '',
-            password: portalData.data.password || '',
+            user_identifier: portalData.data.user_identifier === 'Individual' ? '' : portalData.data.user_identifier,
+            password: portalData.data.password === 'Individual' ? '' : portalData.data.password,
             remark: portalData.data.remark || ''
           });
         } else {
@@ -87,17 +120,9 @@ export default function EditPortalTracker() {
     }
   };
 
+  // Validation - allow empty fields (will be converted to "Individual")
   const validateForm = () => {
     const newErrors = {};
-    
-    if (!formData.user_identifier?.trim()) {
-      newErrors.user_identifier = 'User ID/Email/Phone Number is required';
-    }
-    
-    if (!formData.password?.trim()) {
-      newErrors.password = 'Password is required';
-    }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -113,12 +138,19 @@ export default function EditPortalTracker() {
     setIsSubmitting(true);
     
     try {
+      // Prepare data with "Individual" for empty user_identifier and password
+      const submissionData = {
+        ...formData,
+        user_identifier: formData.user_identifier?.trim() || 'Individual',
+        password: formData.password?.trim() || 'Individual'
+      };
+      
       const response = await fetch(`/api/user_dashboard/document_hub/other_document_tracker/portal_tracker/${pt_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submissionData)
       });
       
       const result = await response.json();
@@ -224,12 +256,22 @@ export default function EditPortalTracker() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Tracking ID
                     </label>
-                    <input
-                      type="text"
-                      value={portalInfo.pt_id}
-                      disabled
-                      className="w-full px-4 py-3 rounded border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed font-mono"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={portalInfo.pt_id}
+                        disabled
+                        className="w-full px-4 py-3 rounded border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(portalInfo.pt_id, 'Portal ID')}
+                        className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                        title="Copy Portal ID"
+                      >
+                        <FaCopy className="text-sm" />
+                      </button>
+                    </div>
                   </div>
                   
                   <div>
@@ -272,12 +314,22 @@ export default function EditPortalTracker() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Portal URL
                     </label>
-                    <input
-                      type="text"
-                      value={portalInfo.portal_url}
-                      disabled
-                      className="w-full px-4 py-3 rounded border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed break-all"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={portalInfo.portal_url}
+                        disabled
+                        className="w-full px-4 py-3 rounded border border-gray-300 bg-gray-100 text-gray-600 cursor-not-allowed break-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(portalInfo.portal_url, 'Portal URL')}
+                        className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                        title="Copy Portal URL"
+                      >
+                        <FaCopy className="text-sm" />
+                      </button>
+                    </div>
                   </div>
 
                   <div>
@@ -322,28 +374,53 @@ export default function EditPortalTracker() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-900 mb-2">
-                      User ID / Email / Phone Number *
+                      User ID / Email / Phone Number
+                      <span className="text-sm font-normal text-gray-600 ml-2">
+                        (Leave empty for Individual)
+                      </span>
                     </label>
-                    <input
-                      type="text"
-                      name="user_identifier"
-                      value={formData.user_identifier}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 rounded border ${
-                        errors.user_identifier ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200'
-                      } transition-all placeholder-gray-500 text-gray-900`}
-                      placeholder="Username, email, or phone number"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="user_identifier"
+                        value={formData.user_identifier}
+                        onChange={handleChange}
+                        className={`w-full px-4 py-3 rounded border ${
+                          errors.user_identifier ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200'
+                        } transition-all placeholder-gray-500 text-gray-900 pr-12`}
+                        placeholder="Leave empty for Individual access"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(formData.user_identifier, 'User ID')}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-purple-600 p-2"
+                        title="Copy User ID"
+                      >
+                        <FaCopy className="text-sm" />
+                      </button>
+                    </div>
                     {errors.user_identifier && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.user_identifier}
                       </p>
                     )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current value: <span className={`font-semibold ${
+                        portalInfo.user_identifier === 'Individual' 
+                          ? 'text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-200' 
+                          : 'text-gray-700 bg-gray-50 px-2 py-1 rounded border'
+                      }`}>
+                        {portalInfo.user_identifier}
+                      </span>
+                    </p>
                   </div>
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-900 mb-2">
-                      Password *
+                      Password
+                      <span className="text-sm font-normal text-gray-600 ml-2">
+                        (Leave empty for Individual)
+                      </span>
                     </label>
                     <div className="relative">
                       <input
@@ -353,22 +430,42 @@ export default function EditPortalTracker() {
                         onChange={handleChange}
                         className={`w-full px-4 py-3 rounded border ${
                           errors.password ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200'
-                        } transition-all placeholder-gray-500 text-gray-900 pr-12`}
-                        placeholder="Enter password"
+                        } transition-all placeholder-gray-500 text-gray-900 pr-24`}
+                        placeholder="Leave empty for Individual access"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 p-2"
-                      >
-                        {showPassword ? <FaEyeSlash /> : <FaEye />}
-                      </button>
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-gray-500 hover:text-purple-600 p-2"
+                          title={showPassword ? 'Hide Password' : 'Show Password'}
+                        >
+                          {showPassword ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(formData.password, 'Password')}
+                          className="text-gray-500 hover:text-purple-600 p-2"
+                          title="Copy Password"
+                        >
+                          <FaCopy className="text-sm" />
+                        </button>
+                      </div>
                     </div>
                     {errors.password && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <FaTimes className="mr-1 text-xs" /> {errors.password}
                       </p>
                     )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current value: <span className={`font-mono font-semibold ${
+                        portalInfo.password === 'Individual' 
+                          ? 'text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200' 
+                          : 'text-gray-700 bg-gray-50 px-2 py-1 rounded border'
+                      }`}>
+                        {portalInfo.password === 'Individual' ? 'Individual' : '••••••••••••'}
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
