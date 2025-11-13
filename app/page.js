@@ -7,9 +7,11 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import toast, { Toaster } from 'react-hot-toast';
+import ForgotPasswordModal from './components/ForgotPasswordModal';
 
 export default function ServiceOperationsLogin() {
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
@@ -217,9 +219,13 @@ export default function ServiceOperationsLogin() {
 
               <div className="flex items-center justify-between pt-2">
                 <div className="text-xs">
-                  <a href="#" className="font-medium text-blue-400 hover:text-blue-300">
-                    Forgot password?
-                  </a>
+                  <button
+  type="button"
+  onClick={() => setShowForgotPassword(true)}
+  className="font-medium text-blue-400 hover:text-blue-300 transition-colors duration-300 bg-transparent border-none cursor-pointer p-0 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded"
+>
+  🔐 Forgot password?
+</button>
                 </div>
               </div>
 
@@ -249,6 +255,10 @@ export default function ServiceOperationsLogin() {
           </div>
         </motion.div>
       </div>
+      <ForgotPasswordModal 
+  isOpen={showForgotPassword}
+  onClose={() => setShowForgotPassword(false)}
+/>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { 
   FaFileAlt, FaMobile, FaSimCard, FaKey, 
   FaUsers, FaComment, FaCog, FaArrowRight,
-  FaSearch, FaEye, FaEdit, FaTrash,
+  FaEye, FaEdit, FaTrash,
   FaChartLine, FaDatabase, FaHistory,
   FaFilter, FaDownload, FaSync,
   FaMoneyBillWave, FaClipboardCheck, FaBullhorn,
@@ -164,7 +164,6 @@ const documentTypes = [
 export default function OtherDocumentLog() {
   const [selectedType, setSelectedType] = useState('');
   const [isNavigating, setIsNavigating] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState({
     totalEntries: 0,
     activeDevices: 0,
@@ -192,11 +191,6 @@ export default function OtherDocumentLog() {
       setIsNavigating(false);
     }
   };
-
-  const filteredDocumentTypes = documentTypes.filter(doc =>
-    doc.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   // Show only the loading spinner when navigating
   if (isNavigating) {
@@ -306,25 +300,11 @@ export default function OtherDocumentLog() {
                 Select a log type to view detailed tracking information
               </p>
             </div>
-            
-            {/* Search Bar */}
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <FaSearch className="text-slate-400 text-sm" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search log types..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full lg:w-64 text-sm"
-              />
-            </div>
           </div>
 
           {/* Compact Type Cards Grid - 4 columns */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredDocumentTypes.map((docType) => (
+            {documentTypes.map((docType) => (
               <button
                 key={docType.value}
                 onClick={() => handleTypeSelect(docType.value)}

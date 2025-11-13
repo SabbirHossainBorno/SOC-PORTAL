@@ -18,7 +18,8 @@ import SummaryReport from '../components/downtime_chart/SummaryReport';
 import ReliabilityBarChart from '../components/downtime_chart/ReliabilityBarChart';
 import DowntimeTrendChart from '../components/downtime_chart/DowntimeTrendChart';
 import UserDashboardCard from '../components/UserDashboardCard';
-import LoadingSpinner from '../components/LoadingSpinner'
+import LoadingSpinner from '../components/LoadingSpinner';
+import WelcomeModal from '../components/WelcomeModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Force dynamic rendering to bypass prerendering
@@ -41,6 +42,11 @@ export default function UserDashboard() {
   const [lastUpdated, setLastUpdated] = useState('');
   const [roleType, setRoleType] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Welcome Modal States
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeData, setWelcomeData] = useState(null);
+  const [checkingWelcome, setCheckingWelcome] = useState(true);
 
   const fetchCardsData = async (isRefresh = false) => {
     try {
@@ -70,12 +76,44 @@ export default function UserDashboard() {
     }
   };
 
+  // Check if welcome modal should be shown
+  const checkWelcomeStatus = async () => {
+    try {
+      setCheckingWelcome(true);
+      const response = await fetch('/api/welcome-check');
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.showWelcome && result.userInfo) {
+          setWelcomeData(result.userInfo);
+          setShowWelcomeModal(true);
+          
+          // Log the welcome modal display
+          console.log('Welcome modal shown for first-time user:', result.userInfo.socPortalId);
+        }
+      } else {
+        console.warn('Failed to check welcome status');
+      }
+    } catch (error) {
+      console.error('Error checking welcome status:', error);
+    } finally {
+      setCheckingWelcome(false);
+    }
+  };
+
   useEffect(() => {
     // Get role type from cookies
     const userRoleType = getCookie('roleType');
     setRoleType(userRoleType || '');
     
+    // Fetch dashboard data
     fetchCardsData();
+    
+    // Check welcome status after a short delay
+    setTimeout(() => {
+      checkWelcomeStatus();
+    }, 1000);
     
     // Refresh data every 5 minutes
     const interval = setInterval(() => fetchCardsData(true), 5 * 60 * 1000);
@@ -158,12 +196,24 @@ export default function UserDashboard() {
     fetchCardsData(true);
   };
 
-  if (loading) {
+  const handleCloseWelcomeModal = () => {
+    setShowWelcomeModal(false);
+  };
+
+  // Show loading spinner only when both loading and checking welcome
+  if (loading && checkingWelcome) {
     return <LoadingSpinner />;
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        isOpen={showWelcomeModal}
+        onClose={handleCloseWelcomeModal}
+        userInfo={welcomeData}
+      />
+
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Dashboard Header */}
         <motion.div 

@@ -6,10 +6,11 @@ import { cookies } from 'next/headers';
 
 export async function PUT(request, { params }) {
   try {
-    const id = params.id;
+    // FIX: Await the params to get the id
+    const { id } = await params;
     
-    // Get cookies
-    const cookieStore = cookies();
+    // FIX: Await the cookies to get the cookie store
+    const cookieStore = await cookies();
     const eid = cookieStore.get('eid')?.value || 'N/A';
     const sid = cookieStore.get('sessionId')?.value || 'N/A';
     const socPortalId = cookieStore.get('socPortalId')?.value || 'N/A';
@@ -91,11 +92,14 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    // Get cookies inside catch block
-    const cookieStore = cookies();
+    // FIX: Await cookies in catch block too
+    const cookieStore = await cookies();
     const eid = cookieStore.get('eid')?.value || 'N/A';
     const sid = cookieStore.get('sessionId')?.value || 'N/A';
     const socPortalId = cookieStore.get('socPortalId')?.value || 'N/A';
+    
+    // FIX: Get the id from awaited params in catch block
+    const { id } = await params;
     
     logger.error('Failed to mark notification as read', {
       meta: {
@@ -103,8 +107,8 @@ export async function PUT(request, { params }) {
         sid,
         socPortalId,
         taskName: 'NotificationUpdate',
-        details: `Error updating notification ${params.id}: ${error.message}`,
-        notificationId: params.id,
+        details: `Error updating notification ${id}: ${error.message}`,
+        notificationId: id,
         error: error.message,
         stack: error.stack
       }

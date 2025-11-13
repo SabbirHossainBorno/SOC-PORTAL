@@ -1,7 +1,7 @@
 // app/user_dashboard/activity_log/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { 
   FaHistory, FaSearch, FaFilter, FaSync, FaChevronDown, 
   FaCalendarAlt, FaUser, FaInfoCircle, FaSort, FaSortUp, FaSortDown,
@@ -501,59 +501,59 @@ export default function ActivityLogPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {sortedLogs.map((log) => (
-                        <>
-                          <motion.tr 
-                            key={log.serial}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            whileHover={{ backgroundColor: '#f9fafb' }}
-                            className="transition-colors cursor-pointer"
-                            onClick={() => toggleRow(log.serial)}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{log.serial}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getActionColor(log.action)}`}>
-                                {log.action}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-900 max-w-md">{log.description}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.createdAt}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{log.ipAddress}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <FaChevronDown
-                                className={`transition-transform ${
-                                  expandedRows.has(log.serial) ? 'rotate-180 text-blue-500' : 'text-gray-400'
-                                }`}
-                              />
-                            </td>
-                          </motion.tr>
-                          
-                          {expandedRows.has(log.serial) && (
-                            <tr>
-                              <td colSpan="6" className="p-0">
-                                <div className="bg-gray-50 border-t border-gray-200 px-4 py-2">
-                                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium text-gray-500">EID:</span>
-                                      <span>{log.eid}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium text-gray-500">SID:</span>
-                                      <span>{log.sid}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium text-gray-500">Device:</span>
-                                      <span>{log.deviceInfo}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </>
-                      ))}
-                    </tbody>
+  {sortedLogs.map((log) => (
+    <Fragment key={log.serial}>
+      <motion.tr 
+        key={log.serial}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        whileHover={{ backgroundColor: '#f9fafb' }}
+        className="transition-colors cursor-pointer"
+        onClick={() => toggleRow(log.serial)}
+      >
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{log.serial}</td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <span className={`px-2 py-1 rounded text-xs font-medium ${getActionColor(log.action)}`}>
+            {log.action}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-sm text-gray-900 max-w-md">{log.description}</td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{log.createdAt}</td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{log.ipAddress}</td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <FaChevronDown
+            className={`transition-transform ${
+              expandedRows.has(log.serial) ? 'rotate-180 text-blue-500' : 'text-gray-400'
+            }`}
+          />
+        </td>
+      </motion.tr>
+      
+      {expandedRows.has(log.serial) && (
+        <tr key={`${log.serial}-expanded`}>
+          <td colSpan="6" className="p-0">
+            <div className="bg-gray-50 border-t border-gray-200 px-4 py-2">
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-gray-500">EID:</span>
+                  <span>{log.eid}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-gray-500">SID:</span>
+                  <span>{log.sid}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-gray-500">Device:</span>
+                  <span>{log.deviceInfo}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  ))}
+</tbody>
                   </table>
                 </div>
               </div>

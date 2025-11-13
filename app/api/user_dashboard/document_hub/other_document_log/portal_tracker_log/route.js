@@ -27,6 +27,7 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit')) || 10;
     const search = searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
+    const portalName = searchParams.get('portalName') || '';
     const offset = (page - 1) * limit;
 
     logger.debug('Fetching portal tracker logs from database', {
@@ -34,7 +35,7 @@ export async function GET(request) {
         eid,
         sid: sessionId,
         taskName: 'PortalTrackerLog',
-        details: `Page: ${page}, Limit: ${limit}, Search: ${search}, Category: ${category}`
+        details: `Page: ${page}, Limit: ${limit}, Search: ${search}, Category: ${category}, PortalName: ${portalName}`
       }
     });
 
@@ -66,6 +67,13 @@ export async function GET(request) {
       queryParams.push(category);
     }
 
+    // Add portal name filter if provided
+    if (portalName && portalName !== 'all') {
+      paramCount++;
+      baseCondition += ` AND portal_name = $${paramCount}`;
+      queryParams.push(portalName);
+    }
+
     // COUNT QUERY: Count unique portal URLs (not individual records)
     const countQuery = `
       SELECT COUNT(DISTINCT portal_url) as total 
@@ -75,7 +83,7 @@ export async function GET(request) {
     // DATA QUERY: Get paginated unique portal URLs with all their roles
     const dataQuery = `
       WITH UniquePortals AS (
-        SELECT DISTINCT portal_url, portal_category
+        SELECT DISTINCT portal_url, portal_category, portal_name
         ${baseCondition}
         ORDER BY portal_url
         LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
@@ -109,6 +117,29 @@ export async function GET(request) {
     const result = await query(dataQuery, dataParams);
     const portals = result.rows;
 
+    // Get overall counts for cards (without filters)
+    const overallCountsQuery = `
+      SELECT 
+        COUNT(*) as total_portals,
+        COUNT(DISTINCT portal_url) as unique_urls,
+        COUNT(*) FILTER (WHERE portal_category = 'Live Web') as live_web,
+        COUNT(*) FILTER (WHERE portal_category = 'Staging Web') as staging_web
+      FROM portal_info
+    `;
+    
+    const overallCountsResult = await query(overallCountsQuery);
+    const overallCounts = overallCountsResult.rows[0];
+
+    // Get unique portal names for filter
+    const portalNamesQuery = `SELECT DISTINCT portal_name FROM portal_info ORDER BY portal_name`;
+    const portalNamesResult = await query(portalNamesQuery);
+    const portalNames = portalNamesResult.rows.map(row => row.portal_name);
+
+    // Get unique categories for filter
+    const categoriesQuery = `SELECT DISTINCT portal_category FROM portal_info ORDER BY portal_category`;
+    const categoriesResult = await query(categoriesQuery);
+    const categories = categoriesResult.rows.map(row => row.portal_category);
+
     logger.info('Portal tracker logs fetched successfully', {
       meta: {
         eid,
@@ -121,10 +152,20 @@ export async function GET(request) {
     return new Response(JSON.stringify({
       success: true,
       data: portals,
+      overallCounts: {
+        totalPortals: parseInt(overallCounts.total_portals),
+        uniqueUrls: parseInt(overallCounts.unique_urls),
+        liveWeb: parseInt(overallCounts.live_web),
+        stagingWeb: parseInt(overallCounts.staging_web)
+      },
+      filterOptions: {
+        portalNames,
+        categories
+      },
       pagination: {
         page,
         limit,
-        total: totalUniqueUrls, // Total unique URLs, not individual records
+        total: totalUniqueUrls,
         pages: Math.ceil(totalUniqueUrls / limit)
       }
     }), {

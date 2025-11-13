@@ -10,12 +10,13 @@ import {
   FaCheckCircle, FaExclamationTriangle,
   FaCaretDown, FaCaretUp, FaCopy,
   FaGlobe, FaUser, FaLock, FaEyeSlash,
-  FaChevronDown, FaChevronRight, FaLink
+  FaChevronDown, FaChevronRight, FaLink,
+  FaExternalLinkAlt
 } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 
 // Enhanced Portal Details Modal Component - Shows ALL roles for the same URL
-const PortalDetailsModal = ({ portalGroup, isOpen, onClose, onEdit, canCreatePortal, copyToClipboard, onAddRole }) => {
+const PortalDetailsModal = ({ portalGroup, isOpen, onClose, onEdit, canCreatePortal, copyToClipboard, openPortalUrl, onAddRole }) => {
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
   if (!isOpen || !portalGroup || portalGroup.portals.length === 0) return null;
@@ -102,13 +103,22 @@ const PortalDetailsModal = ({ portalGroup, isOpen, onClose, onEdit, canCreatePor
                   <p className="text-slate-800 font-semibold flex-1 bg-white p-3 rounded border border-slate-200 truncate">
                     {mainPortal.portal_url}
                   </p>
-                  <button
-                    onClick={() => copyToClipboard(mainPortal.portal_url, 'Portal URL')}
-                    className="p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                    title="Copy URL"
-                  >
-                    <FaCopy className="text-sm" />
-                  </button>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => copyToClipboard(mainPortal.portal_url, 'Portal URL')}
+                      className="p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                      title="Copy URL"
+                    >
+                      <FaCopy className="text-sm" />
+                    </button>
+                    <button
+                      onClick={() => openPortalUrl(mainPortal.portal_url)}
+                      className="p-2 text-green-600 hover:bg-green-50 rounded transition-colors"
+                      title="Open URL in new tab"
+                    >
+                      <FaExternalLinkAlt className="text-sm" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -153,76 +163,76 @@ const PortalDetailsModal = ({ portalGroup, isOpen, onClose, onEdit, canCreatePor
                     </div>
 
                     {/* User Identifier */}
-<div className="lg:col-span-3">
-  <div>
-    <label className="text-sm font-medium text-slate-500">User ID / Email / Phone</label>
-    <div className="flex items-center gap-2 mt-1">
-      <div className={`font-semibold flex-1 p-3 rounded border break-all ${
-        portal.user_identifier === 'Individual'
-          ? 'text-orange-600 font-bold bg-orange-50 border-orange-200'
-          : 'text-slate-800 bg-slate-50 border-slate-200'
-      }`}>
-        {portal.user_identifier}
-      </div>
-      <button
-        onClick={() => copyToClipboard(portal.user_identifier, 'User ID')}
-        className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
-        title="Copy User ID"
-      >
-        <FaCopy className="text-sm" />
-      </button>
-    </div>
-  </div>
-</div>
+                    <div className="lg:col-span-3">
+                      <div>
+                        <label className="text-sm font-medium text-slate-500">User ID / Email / Phone</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className={`font-semibold flex-1 p-3 rounded border break-all ${
+                            portal.user_identifier === 'Individual'
+                              ? 'text-orange-600 font-bold bg-orange-50 border-orange-200'
+                              : 'text-slate-800 bg-slate-50 border-slate-200'
+                          }`}>
+                            {portal.user_identifier}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(portal.user_identifier, 'User ID')}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
+                            title="Copy User ID"
+                          >
+                            <FaCopy className="text-sm" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-{/* Password */}
-<div className="lg:col-span-3">
-  <div>
-    <label className="text-sm font-medium text-slate-500">Password</label>
-    <div className="flex items-center gap-2 mt-1">
-      {portal.password === 'Individual' ? (
-        <div className="font-mono font-bold text-red-600 bg-red-50 p-3 rounded border border-red-200 flex-1 break-all">
-          Individual
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center">
-          <p className="text-slate-800 font-mono font-semibold bg-slate-50 p-3 rounded border border-slate-200 flex-1 break-all">
-            {visiblePasswords[portal.pt_id] ? portal.password : '••••••••••••'}
-          </p>
-        </div>
-      )}
-      <div className="flex gap-1 flex-shrink-0">
-        {portal.password !== 'Individual' && (
-          <>
-            <button
-              onClick={() => togglePasswordVisibility(portal.pt_id)}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-              title={visiblePasswords[portal.pt_id] ? 'Hide Password' : 'Show Password'}
-            >
-              {visiblePasswords[portal.pt_id] ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
-            </button>
-            <button
-              onClick={() => copyToClipboard(portal.password, 'Password')}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-              title="Copy Password"
-            >
-              <FaCopy className="text-sm" />
-            </button>
-          </>
-        )}
-        {portal.password === 'Individual' && (
-          <button
-            onClick={() => copyToClipboard(portal.password, 'Password')}
-            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-            title="Copy Password"
-          >
-            <FaCopy className="text-sm" />
-          </button>
-        )}
-      </div>
-    </div>
-  </div>
-</div>
+                    {/* Password */}
+                    <div className="lg:col-span-3">
+                      <div>
+                        <label className="text-sm font-medium text-slate-500">Password</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          {portal.password === 'Individual' ? (
+                            <div className="font-mono font-bold text-red-600 bg-red-50 p-3 rounded border border-red-200 flex-1 break-all">
+                              Individual
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex items-center">
+                              <p className="text-slate-800 font-mono font-semibold bg-slate-50 p-3 rounded border border-slate-200 flex-1 break-all">
+                                {visiblePasswords[portal.pt_id] ? portal.password : '••••••••••••'}
+                              </p>
+                            </div>
+                          )}
+                          <div className="flex gap-1 flex-shrink-0">
+                            {portal.password !== 'Individual' && (
+                              <>
+                                <button
+                                  onClick={() => togglePasswordVisibility(portal.pt_id)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title={visiblePasswords[portal.pt_id] ? 'Hide Password' : 'Show Password'}
+                                >
+                                  {visiblePasswords[portal.pt_id] ? <FaEyeSlash className="text-sm" /> : <FaEye className="text-sm" />}
+                                </button>
+                                <button
+                                  onClick={() => copyToClipboard(portal.password, 'Password')}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Copy Password"
+                                >
+                                  <FaCopy className="text-sm" />
+                                </button>
+                              </>
+                            )}
+                            {portal.password === 'Individual' && (
+                              <button
+                                onClick={() => copyToClipboard(portal.password, 'Password')}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Copy Password"
+                              >
+                                <FaCopy className="text-sm" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Actions */}
                     <div className="lg:col-span-3">
@@ -300,6 +310,7 @@ const GroupedPortalRow = ({
   onViewDetails, 
   onEdit, 
   copyToClipboard, 
+  openPortalUrl,
   visiblePasswords, 
   togglePasswordVisibility,
   canCreatePortal,
@@ -313,38 +324,50 @@ const GroupedPortalRow = ({
       {/* Main Row - Group Header */}
       <tr className="bg-slate-50 hover:bg-slate-100 transition-colors group cursor-pointer" onClick={onToggle}>
         <td className="px-6 py-4 border-b border-slate-200">
-  <div className="flex items-center">
-    <div className="flex items-center mr-3 text-purple-600">
-      {isExpanded ? <FaChevronDown className="text-sm" /> : <FaChevronRight className="text-sm" />}
-    </div>
-    <div className="flex-1">
-      <div className="flex items-center gap-2">
-        <FaLink className="text-purple-500 flex-shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-slate-900 truncate">
-            {mainPortal.portal_name}
+          <div className="flex items-center">
+            <div className="flex items-center mr-3 text-purple-600">
+              {isExpanded ? <FaChevronDown className="text-sm" /> : <FaChevronRight className="text-sm" />}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <FaLink className="text-purple-500 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900 truncate">
+                    {mainPortal.portal_name}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                    <span className="truncate flex-1">{portalUrl}</span>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(portalUrl, 'Portal URL');
+                        }}
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Copy URL"
+                      >
+                        <FaCopy className="text-xs" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPortalUrl(portalUrl);
+                        }}
+                        className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                        title="Open URL in new tab"
+                      >
+                        <FaExternalLinkAlt className="text-xs" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {portals.length} role{portals.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-            <span className="truncate flex-1">{portalUrl}</span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                copyToClipboard(portalUrl, 'Portal URL');
-              }}
-              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
-              title="Copy URL"
-            >
-              <FaCopy className="text-xs" />
-            </button>
-          </div>
-          <div className="text-xs text-slate-500">
-            {portals.length} role{portals.length > 1 ? 's' : ''}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</td>
+        </td>
         
         <td className="px-6 py-4 border-b border-slate-200">
           <span className="inline-flex items-center px-3 py-1 rounded text-sm font-medium bg-purple-100 text-purple-800 border border-purple-200">
@@ -422,68 +445,68 @@ const GroupedPortalRow = ({
                       </div>
 
                       {/* User Identifier in expanded row */}
-<div className="lg:col-span-3">
-  <div className="flex items-center gap-2">
-    <div className={`text-sm truncate flex-1 ${
-      portal.user_identifier === 'Individual' 
-        ? 'text-orange-600 font-bold bg-orange-50 px-3 py-2 rounded border border-orange-200' 
-        : 'text-slate-800 font-medium'
-    }`}>
-      {portal.user_identifier}
-    </div>
-    <button
-      onClick={() => copyToClipboard(portal.user_identifier, 'User ID')}
-      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
-      title="Copy User ID"
-    >
-      <FaCopy className="text-xs" />
-    </button>
-  </div>
-</div>
+                      <div className="lg:col-span-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`text-sm truncate flex-1 ${
+                            portal.user_identifier === 'Individual' 
+                              ? 'text-orange-600 font-bold bg-orange-50 px-3 py-2 rounded border border-orange-200' 
+                              : 'text-slate-800 font-medium'
+                          }`}>
+                            {portal.user_identifier}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(portal.user_identifier, 'User ID')}
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors flex-shrink-0"
+                            title="Copy User ID"
+                          >
+                            <FaCopy className="text-xs" />
+                          </button>
+                        </div>
+                      </div>
 
-{/* Password in expanded row */}
-<div className="lg:col-span-3">
-  <div className="flex items-center gap-2">
-    {portal.password === 'Individual' ? (
-      <div className="text-sm font-mono font-bold text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200 flex-1">
-        Individual
-      </div>
-    ) : (
-      <div className="text-sm font-mono font-semibold text-slate-800 flex-1">
-        {visiblePasswords[portal.pt_id] ? portal.password : '••••••••••••'}
-      </div>
-    )}
-    <div className="flex gap-1 flex-shrink-0">
-      {portal.password !== 'Individual' && (
-        <>
-          <button
-            onClick={() => togglePasswordVisibility(portal.pt_id)}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title={visiblePasswords[portal.pt_id] ? 'Hide Password' : 'Show Password'}
-          >
-            {visiblePasswords[portal.pt_id] ? <FaEyeSlash className="text-xs" /> : <FaEye className="text-xs" />}
-          </button>
-          <button
-            onClick={() => copyToClipboard(portal.password, 'Password')}
-            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title="Copy Password"
-          >
-            <FaCopy className="text-xs" />
-          </button>
-        </>
-      )}
-      {portal.password === 'Individual' && (
-        <button
-          onClick={() => copyToClipboard(portal.password, 'Password')}
-          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-          title="Copy Password"
-        >
-          <FaCopy className="text-xs" />
-        </button>
-      )}
-    </div>
-  </div>
-</div>
+                      {/* Password in expanded row */}
+                      <div className="lg:col-span-3">
+                        <div className="flex items-center gap-2">
+                          {portal.password === 'Individual' ? (
+                            <div className="text-sm font-mono font-bold text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200 flex-1">
+                              Individual
+                            </div>
+                          ) : (
+                            <div className="text-sm font-mono font-semibold text-slate-800 flex-1">
+                              {visiblePasswords[portal.pt_id] ? portal.password : '••••••••••••'}
+                            </div>
+                          )}
+                          <div className="flex gap-1 flex-shrink-0">
+                            {portal.password !== 'Individual' && (
+                              <>
+                                <button
+                                  onClick={() => togglePasswordVisibility(portal.pt_id)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title={visiblePasswords[portal.pt_id] ? 'Hide Password' : 'Show Password'}
+                                >
+                                  {visiblePasswords[portal.pt_id] ? <FaEyeSlash className="text-xs" /> : <FaEye className="text-xs" />}
+                                </button>
+                                <button
+                                  onClick={() => copyToClipboard(portal.password, 'Password')}
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Copy Password"
+                                >
+                                  <FaCopy className="text-xs" />
+                                </button>
+                              </>
+                            )}
+                            {portal.password === 'Individual' && (
+                              <button
+                                onClick={() => copyToClipboard(portal.password, 'Password')}
+                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Copy Password"
+                              >
+                                <FaCopy className="text-xs" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
                       {/* Actions */}
                       <div className="lg:col-span-3">
@@ -532,11 +555,23 @@ export default function PortalTrackerLog({ authInfo }) {
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [portalNameFilter, setPortalNameFilter] = useState('all');
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [overallCounts, setOverallCounts] = useState({
+    totalPortals: 0,
+    uniqueUrls: 0,
+    liveWeb: 0,
+    stagingWeb: 0
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    portalNames: [],
+    categories: []
+  });
 
   // Enhanced auth handling
   const [effectiveAuthInfo, setEffectiveAuthInfo] = useState(authInfo);
+  const [searchTimeout, setSearchTimeout] = useState(null);
   
   useEffect(() => {
     if (!authInfo?.role) {
@@ -565,6 +600,7 @@ export default function PortalTrackerLog({ authInfo }) {
         groups[portal.portal_url] = {
           portal_url: portal.portal_url,
           portal_category: portal.portal_category,
+          portal_name: portal.portal_name,
           portals: []
         };
       }
@@ -631,6 +667,28 @@ export default function PortalTrackerLog({ authInfo }) {
     }
   }, [fallbackCopyMethod]);
 
+  // Open URL in new tab
+  const openPortalUrl = useCallback((url) => {
+    if (!url) {
+      toast.error('No URL to open');
+      return;
+    }
+
+    // Ensure the URL has a protocol
+    let formattedUrl = url;
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = 'https://' + formattedUrl;
+    }
+
+    try {
+      window.open(formattedUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Opening portal in new tab...');
+    } catch (error) {
+      console.error('Error opening URL:', error);
+      toast.error('Failed to open URL');
+    }
+  }, []);
+
   // Toggle password visibility
   const togglePasswordVisibility = useCallback((portalId) => {
     setVisiblePasswords(prev => ({
@@ -685,7 +743,8 @@ export default function PortalTrackerLog({ authInfo }) {
         sort: sortField,
         order: sortDirection,
         ...(search && { search }),
-        ...(categoryFilter !== 'all' && { category: categoryFilter })
+        ...(categoryFilter !== 'all' && { category: categoryFilter }),
+        ...(portalNameFilter !== 'all' && { portalName: portalNameFilter })
       });
 
       const response = await fetch(`/api/user_dashboard/document_hub/other_document_log/portal_tracker_log?${queryParams}`);
@@ -701,6 +760,15 @@ export default function PortalTrackerLog({ authInfo }) {
         setTotalPages(result.pagination.pages);
         setTotalCount(result.pagination.total);
         setCurrentPage(page);
+        
+        // Set overall counts and filter options
+        if (result.overallCounts) {
+          setOverallCounts(result.overallCounts);
+        }
+        if (result.filterOptions) {
+          setFilterOptions(result.filterOptions);
+        }
+        
         // Reset visible passwords and expanded groups when data changes
         setVisiblePasswords({});
         setExpandedGroups({});
@@ -713,16 +781,37 @@ export default function PortalTrackerLog({ authInfo }) {
     } finally {
       setLoading(false);
     }
-  }, [sortField, sortDirection, categoryFilter, itemsPerPage]);
+  }, [sortField, sortDirection, categoryFilter, portalNameFilter, itemsPerPage]);
 
   useEffect(() => {
     fetchPortals();
   }, [fetchPortals]);
 
-  const handleSearch = useCallback((e) => {
-    e.preventDefault();
-    fetchPortals(1, searchTerm);
-  }, [fetchPortals, searchTerm]);
+  // Enhanced search handler with debouncing
+  const handleSearchChange = useCallback((value) => {
+    setSearchTerm(value);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set new timeout for dynamic search
+    const newTimeout = setTimeout(() => {
+      fetchPortals(1, value);
+    }, 500); // 500ms delay
+    
+    setSearchTimeout(newTimeout);
+  }, [searchTimeout, fetchPortals]);
+
+  // Clear search handler
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    fetchPortals(1, '');
+  }, [searchTimeout, fetchPortals]);
 
   const handlePageChange = useCallback((page) => {
     fetchPortals(page, searchTerm);
@@ -749,13 +838,11 @@ export default function PortalTrackerLog({ authInfo }) {
       <FaCaretDown className="text-blue-600 ml-1" />;
   }, [sortField, sortDirection]);
 
-  // Get unique categories for filter
-  const categories = useMemo(() => 
-    [...new Set(portals.map(portal => portal.portal_category))].sort(),
-    [portals]
-  );
+  // Get unique categories for filter (from API response)
+  const categories = filterOptions.categories || [];
+  const portalNames = filterOptions.portalNames || [];
 
-  // Calculate statistics
+  // Calculate statistics for current view
   const categoryCounts = useMemo(() => 
     portals.reduce((acc, portal) => {
       acc[portal.portal_category] = (acc[portal.portal_category] || 0) + 1;
@@ -812,13 +899,13 @@ export default function PortalTrackerLog({ authInfo }) {
           </div>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats - Using overall counts from API */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <div className="bg-white rounded shadow-lg p-6 border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Total Portals</p>
-                <p className="text-3xl font-bold text-slate-800 mt-2">{totalCount}</p>
+                <p className="text-3xl font-bold text-slate-800 mt-2">{overallCounts.totalPortals}</p>
               </div>
               <div className="p-4 bg-purple-50 rounded">
                 <FaGlobe className="text-2xl text-purple-600" />
@@ -830,7 +917,7 @@ export default function PortalTrackerLog({ authInfo }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Unique URLs</p>
-                <p className="text-3xl font-bold text-indigo-600 mt-2">{uniqueUrlsCount}</p>
+                <p className="text-3xl font-bold text-indigo-600 mt-2">{overallCounts.uniqueUrls}</p>
               </div>
               <div className="p-4 bg-indigo-50 rounded">
                 <FaLink className="text-2xl text-indigo-600" />
@@ -842,7 +929,7 @@ export default function PortalTrackerLog({ authInfo }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Live Web</p>
-                <p className="text-3xl font-bold text-emerald-600 mt-2">{categoryCounts['Live Web'] || 0}</p>
+                <p className="text-3xl font-bold text-emerald-600 mt-2">{overallCounts.liveWeb}</p>
               </div>
               <div className="p-4 bg-emerald-50 rounded">
                 <FaCheckCircle className="text-2xl text-emerald-600" />
@@ -854,7 +941,7 @@ export default function PortalTrackerLog({ authInfo }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Staging Web</p>
-                <p className="text-3xl font-bold text-amber-600 mt-2">{categoryCounts['Staging Web'] || 0}</p>
+                <p className="text-3xl font-bold text-amber-600 mt-2">{overallCounts.stagingWeb}</p>
               </div>
               <div className="p-4 bg-amber-50 rounded">
                 <FaExclamationTriangle className="text-2xl text-amber-600" />
@@ -866,7 +953,7 @@ export default function PortalTrackerLog({ authInfo }) {
         {/* Enhanced Search and Filters */}
         <div className="bg-white rounded shadow-lg p-6 border border-slate-200 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <form onSubmit={handleSearch} className="flex-1">
+            <div className="flex-1">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <FaSearch className="text-slate-400" />
@@ -874,14 +961,34 @@ export default function PortalTrackerLog({ authInfo }) {
                 <input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search by portal name, URL, category, user ID, or role..."
-                  className="block w-full pl-12 pr-4 py-3 border border-slate-300 rounded bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-700 placeholder-slate-500"
+                  className="block w-full pl-12 pr-12 py-3 border border-slate-300 rounded bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-700 placeholder-slate-500"
                 />
+                {searchTerm && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <FaTimes className="text-lg" />
+                  </button>
+                )}
               </div>
-            </form>
+            </div>
             
             <div className="flex flex-col sm:flex-row gap-4">
+              {/* Portal Name Filter */}
+              <select
+                value={portalNameFilter}
+                onChange={(e) => setPortalNameFilter(e.target.value)}
+                className="px-4 py-3 border border-slate-300 rounded bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-700"
+              >
+                <option value="all">All Portal Names</option>
+                {portalNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+
               {/* Category Filter */}
               <select
                 value={categoryFilter}
@@ -935,7 +1042,7 @@ export default function PortalTrackerLog({ authInfo }) {
               </div>
               <h3 className="text-xl font-semibold text-slate-700 mb-3">No portals found</h3>
               <p className="text-slate-500 mb-8 max-w-md mx-auto">
-                {searchTerm || categoryFilter !== 'all' 
+                {searchTerm || categoryFilter !== 'all' || portalNameFilter !== 'all'
                   ? 'No portals match your current filters. Try adjusting your search criteria.' 
                   : 'Start tracking your first portal to manage your access credentials efficiently.'}
               </p>
@@ -996,6 +1103,7 @@ export default function PortalTrackerLog({ authInfo }) {
                         onViewDetails={handleViewDetails}
                         onEdit={handleEdit}
                         copyToClipboard={copyToClipboard}
+                        openPortalUrl={openPortalUrl}
                         visiblePasswords={visiblePasswords}
                         togglePasswordVisibility={togglePasswordVisibility}
                         canCreatePortal={canCreatePortal}
@@ -1082,6 +1190,7 @@ export default function PortalTrackerLog({ authInfo }) {
           onEdit={handleEdit}
           canCreatePortal={canCreatePortal}
           copyToClipboard={copyToClipboard}
+          openPortalUrl={openPortalUrl}
           onAddRole={() => selectedPortalGroup && handleAddRole(selectedPortalGroup.portals[0])}
         />
       </div>
