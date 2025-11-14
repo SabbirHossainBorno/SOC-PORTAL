@@ -74,7 +74,7 @@ const UserDashboardSidebar = () => {
       label: 'Operational Task', 
       icon: <BsMotherboardFill className="text-xl" />, 
       path: '/user_dashboard/operational_task',
-      color: 'text-green-500',
+      color: 'text-slate-500',
       children: [
         { label: 'Fee-Com Calculation', path: '/user_dashboard/operational_task/fee_com_cal' },
       ]
@@ -212,8 +212,17 @@ const UserDashboardSidebar = () => {
             />
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex-1 flex items-center justify-center space-x-2">
+          {[0, 1, 2].map((index) => (
+            <div
+              key={index}
+              className="w-3 h-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full animate-bounce"
+              style={{
+                animationDelay: `${index * 0.1}s`,
+                animationDuration: '0.6s'
+              }}
+            ></div>
+          ))}
         </div>
       </aside>
     );

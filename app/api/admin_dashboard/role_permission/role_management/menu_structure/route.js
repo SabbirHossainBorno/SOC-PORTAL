@@ -75,6 +75,14 @@ export async function GET() {
         }
       ]
     },
+    { 
+      path: '/user_dashboard/operational_task',
+      label: 'Operational Task', 
+      icon: 'BsMotherboardFill', 
+      children: [
+        { path: '/user_dashboard/operational_task/fee_com_cal', label: 'Fee-Com Calculation' },
+      ]
+    },
       {
         path: '/user_dashboard/reports',
         label: 'Performance Reports',

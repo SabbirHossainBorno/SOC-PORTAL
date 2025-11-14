@@ -175,7 +175,16 @@ export async function GET(request) {
       FROM device_info
     `;
 
-    // 5. Total Activity Count
+    // 5. SIM Count - Actual data from sim_info table
+    const simQuery = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN msisdn_status = 'ACTIVE' THEN 1 END) as active,
+        COUNT(CASE WHEN msisdn_status != 'ACTIVE' THEN 1 END) as inactive
+      FROM sim_info
+    `;
+
+    // 6. Total Activity Count
     const activityQuery = `
       SELECT COUNT(*) as count 
       FROM user_activity_log 
@@ -185,21 +194,23 @@ export async function GET(request) {
     logger.info('Executing database queries', {
       meta: {
         taskName,
-        queries: ['downtime', 'mail', 'document', 'device', 'activity'],
+        queries: ['downtime', 'mail', 'document', 'device', 'sim', 'activity'],
         roleType
       }
     });
 
-    // Execute queries in parallel (except mail which is conditional)
+    // Execute queries in parallel
     const [
       downtimeResult,
       documentResult,
       deviceResult,
+      simResult,
       activityResult
     ] = await Promise.all([
       query(downtimeQuery),
       query(documentQuery),
       query(deviceQuery),
+      query(simQuery),
       query(activityQuery, [socPortalId])
     ]);
 
@@ -207,6 +218,7 @@ export async function GET(request) {
     const downtimeData = downtimeResult.rows[0] || {};
     const documentCount = parseInt(documentResult.rows[0]?.count) || 0;
     const deviceData = deviceResult.rows[0] || {};
+    const simData = simResult.rows[0] || {};
     const totalActivity = parseInt(activityResult.rows[0]?.count) || 0;
 
     logger.info('Database queries completed', {
@@ -216,6 +228,9 @@ export async function GET(request) {
         mailQueue,
         documentCount,
         deviceTotal: deviceData.total,
+        simTotal: simData.total,
+        simActive: simData.active,
+        simInactive: simData.inactive,
         totalActivity,
         roleType
       }
@@ -229,11 +244,6 @@ export async function GET(request) {
       total: 15,
       solved: 12,
       pending: 3
-    };
-
-    const simCount = {
-      active: 245,
-      inactive: 12
     };
 
     const myPerformance = {
@@ -275,8 +285,12 @@ export async function GET(request) {
         notWorking: parseInt(deviceData.not_working) || 0
       },
       
-      // Card 7: Sim Count (demo)
-      simCount,
+      // Card 7: Sim Count - ACTUAL DATA
+      simCount: {
+        total: parseInt(simData.total) || 0,
+        active: parseInt(simData.active) || 0,
+        inactive: parseInt(simData.inactive) || 0
+      },
       
       // Card 8: My Performance (demo)
       myPerformance,
@@ -317,6 +331,8 @@ export async function GET(request) {
           totalDuration: responseData.data.duration.total,
           mailQueue: responseData.data.mailQueue,
           documentCount: responseData.data.document,
+          deviceCount: responseData.data.deviceCount.total,
+          simCount: responseData.data.simCount.total,
           cardsReturned: Object.keys(responseData.data).length
         }
       }

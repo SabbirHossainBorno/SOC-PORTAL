@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { FaEnvelope, FaLock, FaEye, FaEyeSlash, FaSignInAlt, FaShieldAlt, FaServer, FaChartLine } from 'react-icons/fa';
+import { TbSquareKey } from "react-icons/tb";
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -222,9 +223,10 @@ export default function ServiceOperationsLogin() {
                   <button
   type="button"
   onClick={() => setShowForgotPassword(true)}
-  className="font-medium text-blue-400 hover:text-blue-300 transition-colors duration-300 bg-transparent border-none cursor-pointer p-0 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded"
+  className="flex items-center gap-1 font-medium text-blue-400 hover:text-blue-300 transition-colors duration-300 bg-transparent border-none cursor-pointer p-0 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded"
 >
-  🔐 Forgot password?
+  <TbSquareKey className="text-base" />
+  Forgot password?
 </button>
                 </div>
               </div>

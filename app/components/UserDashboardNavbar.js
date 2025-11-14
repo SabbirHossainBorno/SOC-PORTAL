@@ -15,23 +15,11 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationExpanded, setNotificationExpanded] = useState(false);
-  const [currentTime, setCurrentTime] = useState('');
   const [profilePhotoError, setProfilePhotoError] = useState(false);
   const dropdownRef = useRef(null);
   const notificationsRef = useRef(null);
   const router = useRouter();
 
-  // Digital Clock
-  useEffect(() => {
-    const updateClock = () => {
-      const now = DateTime.now().setZone('Asia/Dhaka');
-      setCurrentTime(now.toFormat('hh:mm:ss a'));
-    };
-
-    updateClock();
-    const clockInterval = setInterval(updateClock, 1000);
-    return () => clearInterval(clockInterval);
-  }, []);
 
   // Get cookies with proper decoding
   const getCookie = (name) => {
@@ -251,6 +239,9 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     setProfilePhotoError(true);
   };
 
+  // Check if any tray is open on mobile
+  const isTrayOpen = isMobile && (dropdownOpen || notificationsOpen);
+
   // Display loading state
   if (loading) {
     return (
@@ -268,58 +259,69 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm h-16 flex items-center px-4 sm:px-6 border-b border-gray-200">
-      {/* Mobile menu button */}
-      <button 
-        onClick={onMenuToggle}
-        className="mr-3 p-2 rounded text-gray-700 hover:bg-gray-100 focus:outline-none md:hidden transition-all duration-200"
-        aria-label="Toggle sidebar"
-      >
-        <FaBars className="h-5 w-5" />
-      </button>
+    <>
+      {/* Backdrop Blur for Mobile - ONLY THIS CHANGE */}
+      {isTrayOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => {
+            setDropdownOpen(false);
+            setNotificationsOpen(false);
+            setNotificationExpanded(false);
+          }}
+        />
+      )}
 
-      {/* Title */}
-      <div className="flex-1">
-        <h1 className="text-lg sm:text-xl font-bold text-[#000B58]">
-          SOC PORTAL
-        </h1>
-        <p className="text-xs text-blue-600/80 hidden sm:block">
-          Service Operations Center • Real-time Threat Management
-        </p>
-      </div>
+      <header className="sticky top-0 z-50 bg-white shadow-sm h-16 flex items-center px-4 sm:px-6 border-b border-gray-200">
+        {/* Mobile menu button */}
+        <button 
+          onClick={onMenuToggle}
+          className="mr-3 p-2 rounded text-gray-700 hover:bg-gray-100 focus:outline-none md:hidden transition-all duration-200"
+          aria-label="Toggle sidebar"
+        >
+          <FaBars className="h-5 w-5" />
+        </button>
 
-      {/* Right side controls */}
-      <div className="flex items-center space-x-4 sm:space-x-5">
-        {/* Digital Clock */}
-        <div className="hidden sm:flex items-center">
-          <div className="text-sm font-mono bg-gray-100 px-3 py-1.5 rounded border border-gray-300 text-gray-700">
-            {currentTime}
-          </div>
+        {/* Title */}
+        <div className="flex-1">
+          <h1 className="text-lg sm:text-xl font-bold text-[#000B58]">
+            SOC PORTAL
+          </h1>
+          <p className="text-xs text-blue-600/80 hidden sm:block">
+            Service Operations Center • Real-time Threat Management
+          </p>
         </div>
 
-        {/* Notification Icon */}
-        <div className="relative" ref={notificationsRef}>
-          <button
-            onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-0 relative transition-all duration-200 group"
-            aria-label="Notifications"
-          >
-            <div className="relative">
-              <FaBell className="h-6 w-6 text-gray-600 group-hover:text-blue-600 transition-colors" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center h-5 w-5 rounded-full bg-red-500 text-xs text-white font-bold border-2 border-white shadow-sm">
-                  {unreadCount}
-                </span>
-              )}
-            </div>
-          </button>
+        {/* Right side controls */}
+        <div className="flex items-center space-x-4 sm:space-x-5">
+          {/* Notification Icon */}
+          <div className="relative" ref={notificationsRef}>
+            <button
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              className="p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-0 relative transition-all duration-200 group"
+              aria-label="Notifications"
+            >
+              <div className="relative">
+                <FaBell className="h-6 w-6 text-gray-600 group-hover:text-blue-600 transition-colors" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center h-5 w-5 rounded-full bg-red-500 text-xs text-white font-bold border-2 border-white shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+            </button>
 
-          {/* Notification Tray */}
-          {notificationsOpen && (
+            {/* Notification Tray */}
+            {notificationsOpen && (
             <div 
-              className={`absolute ${
-                isMobile ? 'left-1/2 transform -translate-x-1/2' : 'right-0'
-              } mt-2 w-[90vw] max-w-md sm:w-96 bg-white border border-gray-200 rounded shadow-xl z-40 overflow-hidden`}
+              className={`
+                fixed md:absolute 
+                ${isMobile 
+                  ? 'left-4 right-4 top-[72px]' 
+                  : 'right-0 mt-2 w-96'
+                } 
+                bg-white border border-gray-200 rounded shadow-xl z-[60] overflow-hidden
+              `}
             >
               <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
                 <h3 className="font-bold text-gray-800 text-base">Notifications</h3>
@@ -619,5 +621,6 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         </div>
       </div>
     </header>
+    </>
   );
 }

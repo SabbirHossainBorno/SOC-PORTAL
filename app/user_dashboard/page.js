@@ -43,10 +43,42 @@ export default function UserDashboard() {
   const [roleType, setRoleType] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   
+  // Live Clock State
+  const [currentDateTime, setCurrentDateTime] = useState('');
+  
   // Welcome Modal States
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeData, setWelcomeData] = useState(null);
   const [checkingWelcome, setCheckingWelcome] = useState(true);
+
+  // Live Clock Effect
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const formattedTime = now.toLocaleDateString('en-US', { 
+        weekday: 'short',
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      }) + ' ' + now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }).toUpperCase();
+      
+      setCurrentDateTime(formattedTime);
+    };
+
+    // Update immediately
+    updateClock();
+    
+    // Update every second
+    const interval = setInterval(updateClock, 1000);
+    
+    // Cleanup interval on component unmount
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchCardsData = async (isRefresh = false) => {
     try {
@@ -215,55 +247,80 @@ export default function UserDashboard() {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Dashboard Header */}
+        {/* Dashboard Header - Professional with Live Clock */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4"
+          className="mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3"
         >
-          <div>
-            <motion.h1 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-              className="text-2xl sm:text-3xl font-bold text-gray-800"
-            >
-              User Dashboard
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-gray-600 mt-2"
-            >
-              Welcome Back! Here&apos;s Your Real-Time Nagad System Overview
-            </motion.p>
+          {/* Left Side - Title with Refresh Icon */}
+          <div className="flex items-center justify-between w-full lg:w-auto">
+            <div className="flex-1">
+              <motion.h1 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 }}
+                className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 flex items-center gap-3"
+              >
+                User Dashboard
+                {/* Refresh Button - Icon Only for Mobile */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="lg:hidden flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-all duration-200 disabled:opacity-50"
+                  title="Refresh Data"
+                >
+                  <motion.div
+                    animate={{ rotate: refreshing ? 360 : 0 }}
+                    transition={{ duration: refreshing ? 1 : 0, repeat: refreshing ? Infinity : 0 }}
+                  >
+                    <FaSync size={12} />
+                  </motion.div>
+                </motion.button>
+              </motion.h1>
+              <motion.p 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-gray-600 mt-1 text-sm lg:text-base"
+              >
+                Welcome Back! Here&apos;s Your Real-Time Nagad System Overview
+              </motion.p>
+            </div>
           </div>
           
+          {/* Right Side - Live Clock, Updated, and Desktop Refresh */}
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="flex items-center gap-4"
+            className="flex flex-row items-center gap-2 w-full lg:w-auto"
           >
-            <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1 rounded border border-gray-200">
-              <FaCalendarAlt className="text-gray-500" size={14} />
-              <span className="text-sm text-gray-700 font-medium">
-                {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'short', 
-                  year: 'numeric', 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </span>
+            {/* Live Clock and Updated in Single Row for Mobile */}
+            <div className="flex flex-row items-center gap-2 flex-1 lg:flex-none">
+              {/* Live Clock - Professional Blue */}
+              <div className="flex items-center gap-2 bg-blue-50 text-blue-800 px-3 py-2 lg:py-2 rounded border border-blue-200 flex-1 lg:flex-none justify-center lg:justify-start min-h-[36px]">
+                <FaCalendarAlt className="text-blue-600 flex-shrink-0" size={12} />
+                <span className="text-xs lg:text-sm font-medium truncate">
+                  {currentDateTime}
+                </span>
+              </div>
+              
+              {/* Updated Time - Professional Green */}
+              <div className="flex items-center text-xs lg:text-sm text-green-800 bg-green-50 px-3 py-2 lg:py-2 rounded border border-green-200 flex-1 lg:flex-none justify-center lg:justify-start min-h-[36px] font-medium">
+                Updated: {lastUpdated}
+              </div>
             </div>
             
+            {/* Refresh Button - Professional for Desktop */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md"
+              className="hidden lg:flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded border border-gray-300 hover:bg-gray-100 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 min-h-[36px] font-medium"
             >
               <motion.div
                 animate={{ rotate: refreshing ? 360 : 0 }}
@@ -278,22 +335,22 @@ export default function UserDashboard() {
           </motion.div>
         </motion.div>
 
-        {/* Role-based Information Banner */}
+        {/* Role-based Information Banner - Professional */}
         <AnimatePresence>
           {roleType === 'INTERN' && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-blue-50 border border-blue-200 rounded p-4 mb-6"
+              className="bg-blue-50 border border-blue-200 rounded p-3 mb-4"
             >
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-100 rounded">
-                  <FaUserGraduate className="text-blue-600" size={18} />
+              <div className="flex items-start gap-2">
+                <div className="p-1.5 bg-blue-100 rounded flex-shrink-0">
+                  <FaUserGraduate className="text-blue-600" size={14} />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-blue-900 mb-1">Intern Access</h3>
-                  <p className="text-blue-700 text-sm">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-blue-900 mb-1 text-sm">Intern Access</h3>
+                  <p className="text-blue-700 text-xs leading-relaxed">
                     You are viewing the intern dashboard with essential metrics for learning and development. 
                     Some advanced features are limited as per company policy.
                   </p>
@@ -303,35 +360,26 @@ export default function UserDashboard() {
           )}
         </AnimatePresence>
 
-        {/* Quick Stats Cards Section */}
+        {/* Quick Stats Cards Section - Professional Header */}
         <motion.section 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mb-12"
+          className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
             <motion.div 
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3"
+              className="flex items-center gap-2"
             >
-              <div className="p-2 bg-blue-100 rounded">
-                <FaChartPie className="text-blue-600" size={20} />
+              <div className="p-1.5 bg-blue-100 rounded">
+                <FaChartPie className="text-blue-600" size={16} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Quick Overview</h2>
-                <p className="text-gray-600 text-sm">Real-time metrics and performance indicators</p>
+                <h2 className="text-lg lg:text-xl font-bold text-gray-800">Quick Overview</h2>
+                <p className="text-gray-600 text-xs lg:text-sm">Real-time metrics and performance indicators</p>
               </div>
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-3 py-1 rounded border border-gray-200"
-            >
-              Updated: {lastUpdated}
             </motion.div>
           </div>
           
@@ -342,14 +390,14 @@ export default function UserDashboard() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-red-50 border border-red-200 rounded p-6 text-center"
+                className="bg-red-50 border border-red-200 rounded p-4 text-center"
               >
-                <FaExclamationTriangle className="text-red-500 text-2xl mx-auto mb-3" />
-                <h3 className="text-red-800 font-semibold mb-2">Failed to load dashboard cards</h3>
-                <p className="text-red-600 text-sm mb-4">{error}</p>
+                <FaExclamationTriangle className="text-red-500 text-xl mx-auto mb-2" />
+                <h3 className="text-red-800 font-semibold mb-1 text-sm">Failed to load dashboard cards</h3>
+                <p className="text-red-600 text-xs mb-3">{error}</p>
                 <button
                   onClick={handleRefresh}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+                  className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-xs font-medium"
                 >
                   Try Again
                 </button>
@@ -359,7 +407,7 @@ export default function UserDashboard() {
                 key="cards"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
               >
                 {filteredCards.map((card, index) => (
                   <UserDashboardCard
