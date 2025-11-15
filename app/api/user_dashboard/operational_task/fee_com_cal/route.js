@@ -6,6 +6,9 @@ import sendTelegramAlert from '../../../../../lib/telegramAlert';
 import getClientIP from '../../../../../lib/utils/ipUtils';
 import ExcelJS from 'exceljs';
 import { DateTime } from 'luxon';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 // Get current time in Asia/Dhaka
 const getCurrentDateTime = () => {
@@ -14,7 +17,7 @@ const getCurrentDateTime = () => {
 };
 
 // Format Telegram alert message
-const formatAlertMessage = (action, ipAddress, userAgent, userData, billerName, feeCommType) => {
+const formatAlertMessage = (action, ipAddress, userAgent, userData, fileName, feeCommType) => {
   const time = getCurrentDateTime();
   const statusEmoji = action.includes('SUCCESS') ? '✅' : '❌';
   const statusText = action.includes('SUCCESS') ? 'Successful' : 'Failed';
@@ -22,10 +25,11 @@ const formatAlertMessage = (action, ipAddress, userAgent, userData, billerName, 
   return `💰 *SOC Portal Fee-Commission Calculation ${statusText}*
   
 👤 *User ID:* ${userData.id}
+👨‍💼 *User Name:* ${userData.shortName || 'N/A'}
 📧 *Email:* ${userData.email}
 🌐 *IP Address:* ${ipAddress}
 🔖 *EID:* ${userData.eid}
-🏦 *Biller Name:* ${billerName}
+📁 *File Name:* ${fileName}
 📊 *Fee-Comm Type:* ${feeCommType}
 🕒 *Time:* ${time}
 📱 *Device:* ${userAgent.split(' ')[0]}
@@ -42,6 +46,153 @@ const generateNotificationId = async (prefix, table) => {
     return `${prefix}${nextId}SOCP`;
   } catch (error) {
     throw new Error(`Error generating notification ID: ${error.message}`);
+  }
+};
+
+// Generate fee_com_cal_id like FCC01SOCP, FCC02SOCP
+const generateFeeComCalId = async () => {
+  try {
+    const result = await query('SELECT MAX(serial) AS max_serial FROM fee_commission_calculation');
+    const maxSerial = result.rows[0]?.max_serial || 0;
+    const nextId = (maxSerial + 1).toString().padStart(4, '0');
+    return `FCC${nextId}SOCP`;
+  } catch (error) {
+    throw new Error(`Error generating fee_com_cal_id: ${error.message}`);
+  }
+};
+
+// Check if file already exists in database by file name
+const checkExistingFile = async (userId, fileName) => {
+  try {
+    const checkQuery = `
+      SELECT fee_com_cal_id, file_name, biller_name, created_at, track_by, calculation_results
+      FROM fee_commission_calculation 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `;
+    const result = await query(checkQuery, [userId, fileName]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    logger.error('Error checking existing file', { error: error.message });
+    return null;
+  }
+};
+
+// Generate file hash for unique identification
+const generateFileHash = async (file) => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    return hash;
+  } catch (error) {
+    logger.error('Error generating file hash', { error: error.message });
+    return null;
+  }
+};
+
+// Save file to storage directory
+const saveFileToStorage = async (file, feeComCalId) => {
+  try {
+    const storageDir = '/home/soc_portal/storage/fee_com_file';
+    
+    // Ensure directory exists
+    if (!fs.existsSync(storageDir)) {
+      fs.mkdirSync(storageDir, { recursive: true });
+    }
+    
+    const fileName = `${feeComCalId}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const filePath = path.join(storageDir, fileName);
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    fs.writeFileSync(filePath, buffer);
+    
+    logger.info('File saved to storage', { filePath, fileName });
+    return filePath;
+  } catch (error) {
+    logger.error('Error saving file to storage', { error: error.message });
+    throw new Error(`Failed to save file: ${error.message}`);
+  }
+};
+
+// Store calculation results in database
+const storeCalculationResults = async (feeComCalId, userId, billerName, feeCommType, filePath, fileName, fileHash, calculationResults, trackBy) => {
+  try {
+    const insertQuery = `
+      INSERT INTO fee_commission_calculation 
+      (fee_com_cal_id, soc_portal_id, biller_name, fee_comm_type, file_path, file_name, file_hash, calculation_results, track_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING fee_com_cal_id, created_at
+    `;
+    
+    const result = await query(insertQuery, [
+      feeComCalId,
+      userId,
+      billerName,
+      feeCommType,
+      filePath,
+      fileName,
+      fileHash,
+      JSON.stringify(calculationResults),
+      trackBy
+    ]);
+    
+    logger.info('Calculation results stored in database', { 
+      feeComCalId, 
+      trackBy,
+      billerName,
+      fileName
+    });
+    return result.rows[0];
+  } catch (error) {
+    logger.error('Error storing calculation results', { error: error.message });
+    throw new Error(`Failed to store calculation results: ${error.message}`);
+  }
+};
+
+// Get calculation history for user
+const getCalculationHistory = async (userId, searchTerm = '', limit = 10) => {
+  try {
+    let historyQuery = `
+      SELECT fee_com_cal_id, file_name, biller_name, fee_comm_type, created_at, track_by
+      FROM fee_commission_calculation 
+      WHERE soc_portal_id = $1
+    `;
+    
+    const queryParams = [userId];
+    
+    if (searchTerm) {
+      historyQuery += ` AND (file_name ILIKE $2 OR biller_name ILIKE $2)`;
+      queryParams.push(`%${searchTerm}%`);
+    }
+    
+    historyQuery += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1}`;
+    queryParams.push(limit);
+    
+    const result = await query(historyQuery, queryParams);
+    return result.rows;
+  } catch (error) {
+    logger.error('Error fetching calculation history', { error: error.message });
+    return [];
+  }
+};
+
+// Get calculation details by ID
+const getCalculationDetails = async (userId, feeComCalId) => {
+  try {
+    const detailsQuery = `
+      SELECT fee_com_cal_id, file_name, biller_name, fee_comm_type, created_at, track_by, calculation_results
+      FROM fee_commission_calculation 
+      WHERE soc_portal_id = $1 AND fee_com_cal_id = $2
+    `;
+    
+    const result = await query(detailsQuery, [userId, feeComCalId]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    logger.error('Error fetching calculation details', { error: error.message });
+    return null;
   }
 };
 
@@ -192,11 +343,10 @@ const calculateAdjustmentValues = (extractedValues) => {
 };
 
 // Parse Excel file and extract required values
-const parseExcelFile = async (file, billerName) => {
+const parseExcelFile = async (file, fileName) => {
   try {
     logger.info('Starting Excel file parsing for fee-commission calculation', {
-      fileName: file.name,
-      billerName,
+      fileName: fileName,
       fileSize: file.size
     });
 
@@ -241,6 +391,18 @@ const parseExcelFile = async (file, billerName) => {
     const bpoPpAppCustomer = getCellValue(worksheet, 'BC8');
     const bpoPpUssdCustomer = getCellValue(worksheet, 'BC10');
 
+    // Extract biller name from filename
+    let extractedBillerName = '';
+    const cleanFileName = fileName.replace('.xlsx', '');
+    
+    if (cleanFileName.includes('Fee-Commission Scheme for ')) {
+      extractedBillerName = cleanFileName.replace('Fee-Commission Scheme for ', '').split('_')[0];
+    } else if (cleanFileName.includes('Fee-Commission Scheme - ')) {
+      extractedBillerName = cleanFileName.replace('Fee-Commission Scheme - ', '').split(' - ')[0];
+    } else {
+      extractedBillerName = cleanFileName;
+    }
+
     // Log all extracted values for debugging
     logger.debug('Extracted Excel values', {
       feeRateAppUddokta,
@@ -262,7 +424,8 @@ const parseExcelFile = async (file, billerName) => {
       twltSpAppCustomer,
       twltSpUssdCustomer,
       bpoPpAppCustomer,
-      bpoPpUssdCustomer
+      bpoPpUssdCustomer,
+      extractedBillerName
     });
 
     // Create extracted values object
@@ -320,6 +483,7 @@ const parseExcelFile = async (file, billerName) => {
 
     return {
       extractedValues,
+      billerName: extractedBillerName,
       rawData: {
         feeRateAppUddokta,
         feeRateUssdUddokta,
@@ -472,32 +636,53 @@ export async function POST(request) {
   });
 
   let client;
-  let billerName, feeCommType;
+  let fileName;
   
   try {
     const formData = await request.formData();
     console.log('Form data received');
     
     const file = formData.get('file');
-    feeCommType = formData.get('feeCommType');
-    billerName = formData.get('billerName');
+    const feeCommType = formData.get('feeCommType');
+    fileName = file ? file.name : 'Unknown';
     
     console.log('Form data values:', { 
       feeCommType, 
-      billerName, 
+      fileName, 
       file: file ? file.name : 'No file' 
     });
     
-    if (!file || !feeCommType || !billerName) {
+    if (!file || !feeCommType) {
       console.error('Missing required fields:', { 
         file: !!file, 
-        feeCommType: !!feeCommType, 
-        billerName: !!billerName 
+        feeCommType: !!feeCommType
       });
       return NextResponse.json(
         { success: false, message: 'Missing required fields' },
         { status: 400 }
       );
+    }
+
+    // Check if file already exists for this user
+    const existingFile = await checkExistingFile(userId, fileName);
+    if (existingFile) {
+      logger.info('File already exists in database', {
+        fileName,
+        existingRecord: existingFile
+      });
+
+      return NextResponse.json({
+        success: false,
+        message: 'File has already been processed',
+        existingFile: {
+          fee_com_cal_id: existingFile.fee_com_cal_id,
+          file_name: existingFile.file_name,
+          biller_name: existingFile.biller_name,
+          created_at: existingFile.created_at,
+          track_by: existingFile.track_by,
+          calculation_results: existingFile.calculation_results
+        }
+      }, { status: 400 });
     }
 
     // Get user info with role and short_name
@@ -514,9 +699,16 @@ export async function POST(request) {
     const userShortName = userInfoResult.rows[0].short_name;
     const userRole = userInfoResult.rows[0].role_type;
 
+    // Generate fee_com_cal_id
+    const feeComCalId = await generateFeeComCalId();
+    console.log('Generated fee_com_cal_id:', feeComCalId);
+
+    // Generate file hash
+    const fileHash = await generateFileHash(file);
+
     // Parse Excel file
     console.log('Processing Excel file...');
-    const { extractedValues, rawData } = await parseExcelFile(file, billerName);
+    const { extractedValues, rawData, billerName } = await parseExcelFile(file, fileName);
     
     // Perform calculations
     console.log('Performing commission calculations...');
@@ -527,15 +719,35 @@ export async function POST(request) {
       totalRecords: 1,
       calculationTime: new Date().toISOString(),
       billerName,
-      feeCommType
+      feeCommType,
+      fileName,
+      trackBy: userShortName
     };
 
     // Add raw data for details view
     calculationResults.rawData = rawData;
 
+    // Save file to storage
+    console.log('Saving file to storage...');
+    const filePath = await saveFileToStorage(file, feeComCalId);
+
     // Get database connection for transaction
     client = await getDbConnection().connect();
     await client.query('BEGIN');
+
+    // Store calculation results with file details
+    console.log('Storing calculation results in database...');
+    await storeCalculationResults(
+      feeComCalId, 
+      userId, 
+      billerName, 
+      feeCommType, 
+      filePath, 
+      fileName,
+      fileHash,
+      calculationResults,
+      userShortName
+    );
 
     // Log activity
     console.log('Logging user activity...');
@@ -548,7 +760,7 @@ export async function POST(request) {
     await client.query(activityLogQuery, [
       userId,
       'FEE_COMM_CALCULATION',
-      `Calculated fee-commission for ${billerName} (${feeCommType})`,
+      `Calculated fee-commission for ${fileName} (${feeCommType}) - ${feeComCalId}`,
       ipAddress,
       userAgent,
       eid,
@@ -566,7 +778,7 @@ export async function POST(request) {
     `;
     await client.query(adminNotificationQuery, [
       adminNotificationId,
-      `${userShortName} calculated fee-commission for ${billerName} (${feeCommType})`,
+      `${userShortName} calculated fee-commission for ${fileName} (${feeCommType}) - ${feeComCalId}`,
       'Unread'
     ]);
 
@@ -577,7 +789,7 @@ export async function POST(request) {
     `;
     await client.query(userNotificationQuery, [
       userNotificationId,
-      `Fee-Commission calculation completed for ${billerName}`,
+      `Fee-Commission calculation completed for ${fileName} - ${feeComCalId}`,
       'Unread',
       userId
     ]);
@@ -591,8 +803,8 @@ export async function POST(request) {
       'SUCCESS', 
       ipAddress, 
       userAgent,
-      { id: userId, email: userEmail, eid },
-      billerName,
+      { id: userId, email: userEmail, eid, shortName: userShortName },
+      fileName,
       feeCommType
     );
     
@@ -603,9 +815,11 @@ export async function POST(request) {
         eid,
         sid: sessionId,
         taskName: 'FeeCommissionCalculation',
-        details: `User ${userId} completed fee-commission calculation for ${billerName}`,
+        details: `User ${userId} (${userShortName}) completed fee-commission calculation for ${fileName} - ${feeComCalId}`,
         billerName,
         feeCommType,
+        feeComCalId,
+        trackBy: userShortName,
         calculationResults: calculationResults
       }
     });
@@ -615,7 +829,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: 'Fee-Commission calculation completed successfully',
-      data: calculationResults
+      data: calculationResults,
+      feeComCalId
     });
     
   } catch (error) {
@@ -645,7 +860,7 @@ export async function POST(request) {
         ipAddress, 
         userAgent,
         { id: userId, email: userEmail, eid },
-        billerName || 'Unknown',
+        fileName || 'Unknown',
         feeCommType || 'Unknown'
       );
       
@@ -656,6 +871,102 @@ export async function POST(request) {
     
     return NextResponse.json(
       { success: false, message: 'Failed to calculate fee-commission: ' + error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// GET endpoint for fetching history
+export async function GET(request) {
+  console.log('GET /api/user_dashboard/operational_task/fee_com_cal called');
+  
+  // Get cookies from request headers
+  const cookieHeader = request.headers.get('cookie') || '';
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map(cookie => {
+      const [key, ...rest] = cookie.trim().split('=');
+      return [key, rest.join('=')];
+    })
+  );
+  
+  const userId = cookies.socPortalId || 'Unknown';
+  const { searchParams } = new URL(request.url);
+  const searchTerm = searchParams.get('search') || '';
+  const limit = parseInt(searchParams.get('limit')) || 10;
+  
+  console.log('History request details:', { userId, searchTerm, limit });
+  
+  try {
+    const history = await getCalculationHistory(userId, searchTerm, limit);
+    
+    return NextResponse.json({
+      success: true,
+      data: history
+    });
+    
+  } catch (error) {
+    console.error('Failed to fetch history:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to fetch history' },
+      { status: 500 }
+    );
+  }
+}
+
+// New endpoint to get calculation details by ID
+export async function PUT(request) {
+  console.log('PUT /api/user_dashboard/operational_task/fee_com_cal called');
+  
+  // Get cookies from request headers
+  const cookieHeader = request.headers.get('cookie') || '';
+  const cookies = Object.fromEntries(
+    cookieHeader.split(';').map(cookie => {
+      const [key, ...rest] = cookie.trim().split('=');
+      return [key, rest.join('=')];
+    })
+  );
+  
+  const userId = cookies.socPortalId || 'Unknown';
+  
+  try {
+    const { feeComCalId } = await request.json();
+    
+    if (!feeComCalId) {
+      return NextResponse.json(
+        { success: false, message: 'Missing fee_com_cal_id' },
+        { status: 400 }
+      );
+    }
+
+    const calculationDetails = await getCalculationDetails(userId, feeComCalId);
+    
+    if (!calculationDetails) {
+      return NextResponse.json(
+        { success: false, message: 'Calculation not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...calculationDetails.calculation_results,
+        summary: {
+          ...calculationDetails.calculation_results.summary,
+          feeComCalId: calculationDetails.fee_com_cal_id,
+          fileName: calculationDetails.file_name,
+          billerName: calculationDetails.biller_name,
+          feeCommType: calculationDetails.fee_comm_type,
+          trackBy: calculationDetails.track_by,
+          created_at: calculationDetails.created_at
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('Failed to fetch calculation details:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to fetch calculation details' },
       { status: 500 }
     );
   }

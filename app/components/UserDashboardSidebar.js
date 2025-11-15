@@ -216,7 +216,7 @@ const UserDashboardSidebar = () => {
           {[0, 1, 2].map((index) => (
             <div
               key={index}
-              className="w-3 h-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full animate-bounce"
+              className="w-3 h-3 bg-gradient-to-br from-red-600 to-orange-600 rounded-full animate-bounce"
               style={{
                 animationDelay: `${index * 0.1}s`,
                 animationDuration: '0.6s'

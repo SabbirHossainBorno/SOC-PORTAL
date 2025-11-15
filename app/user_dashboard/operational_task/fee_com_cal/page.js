@@ -1,14 +1,18 @@
 // app/user_dashboard/operational_task/fee_com_cal/page.js
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   FaCalculator, FaUpload, FaFileExcel, FaDownload, 
   FaArrowLeft, FaInfoCircle, FaUsers, FaChartBar,
   FaMoneyBillWave, FaExchangeAlt,
-  FaEye, FaFileExport, FaCopy
+  FaEye, FaFileExport, FaCopy, FaHistory, FaSearch, FaSync,
+  FaBan, FaCheckCircle, FaFileInvoiceDollar, FaMobileAlt
 } from 'react-icons/fa';
+
+import { FaMobileRetro } from "react-icons/fa6";
+
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -22,6 +26,12 @@ export default function FeeComCalculationPage() {
   const [results, setResults] = useState(null);
   const [billerName, setBillerName] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [existingFile, setExistingFile] = useState(null);
+  const [fileExists, setFileExists] = useState(false);
+  const [viewMode, setViewMode] = useState('new'); // 'new' or 'history'
 
   const feeCommTypes = [
     { value: 'Regular', label: 'Regular', color: 'from-blue-500 to-cyan-500' },
@@ -29,6 +39,69 @@ export default function FeeComCalculationPage() {
     { value: 'EMI Biller', label: 'EMI Biller', color: 'from-indigo-500 to-blue-500' }
   ];
 
+  // Add function to fetch history
+  const fetchHistory = async (search = '') => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(
+        `/api/user_dashboard/operational_task/fee_com_cal?search=${encodeURIComponent(search)}&limit=10`
+      );
+      const result = await response.json();
+      if (result.success) {
+        setHistory(result.data);
+        
+        // Check if current file exists in history
+        if (selectedFile) {
+          const fileExistsInHistory = result.data.some(item => 
+            item.file_name === selectedFile.name
+          );
+          setFileExists(fileExistsInHistory);
+        }
+      } else {
+        toast.error('Failed to load history');
+      }
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      toast.error('Failed to load history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Load history on component mount
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  // Add useEffect for search with debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchHistory(searchTerm);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Check if file exists in history when file is selected
+  useEffect(() => {
+    if (selectedFile && history.length > 0) {
+      const fileExistsInHistory = history.some(item => 
+        item.file_name === selectedFile.name
+      );
+      setFileExists(fileExistsInHistory);
+      
+      if (fileExistsInHistory) {
+        const existing = history.find(item => item.file_name === selectedFile.name);
+        setExistingFile(existing);
+        toast.error(`This file was already processed on ${new Date(existing.created_at).toLocaleString()}`, {
+          duration: 6000,
+        });
+      } else {
+        setExistingFile(null);
+      }
+    }
+  }, [selectedFile, history]);
+  
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -52,6 +125,11 @@ export default function FeeComCalculationPage() {
     
     setSelectedFile(file);
     setBillerName(extractedBillerName);
+    setResults(null);
+    setExistingFile(null);
+    setFileExists(false);
+    setViewMode('new');
+    
     toast.success(`File selected: ${file.name}`);
   };
 
@@ -84,50 +162,103 @@ export default function FeeComCalculationPage() {
   };
 
   const handleCalculate = async () => {
-    // Check if type is supported
-    if (feeCommType !== 'Regular') {
-      toast.error(`${feeCommType} type is coming soon! Currently only Regular type is supported.`);
-      return;
+  // Check if type is supported
+  if (feeCommType !== 'Regular') {
+    toast.error(`${feeCommType} type is coming soon! Currently only Regular type is supported.`);
+    return;
+  }
+
+  if (!selectedFile) {
+    toast.error('Please select an Excel file first');
+    return;
+  }
+
+  if (fileExists) {
+    toast.error('This file has already been processed. Please select a different file.');
+    return;
+  }
+
+  setLoading(true);
+  setResults(null);
+  const toastId = toast.loading('Analyzing fee structure and calculating commissions...');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('feeCommType', feeCommType);
+
+    const response = await fetch('/api/user_dashboard/operational_task/fee_com_cal', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      toast.success('Commission analysis completed successfully!', { id: toastId });
+      setResults(result.data);
+      setViewMode('new');
+      
+      // Clear the file input and reset file states AFTER successful calculation
+      setSelectedFile(null);
+      setBillerName('');
+      setFileExists(false);
+      setExistingFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+      // Refresh history after new calculation
+      fetchHistory(searchTerm);
+    } else if (response.status === 400 && result.existingFile) {
+      // File already exists
+      setExistingFile(result.existingFile);
+      setFileExists(true);
+      toast.error(`This file was already processed on ${new Date(result.existingFile.created_at).toLocaleString()}`, {
+        id: toastId,
+        duration: 6000,
+      });
+      
+      // Auto-filter history to show this file
+      setSearchTerm(selectedFile.name);
+    } else {
+      throw new Error(result.message || 'Calculation failed');
     }
+  } catch (error) {
+    console.error('Calculation failed:', error);
+    toast.error(error.message || 'Analysis failed. Please try again.', { id: toastId });
+  } finally {
+    setLoading(false);
+  }
+};
 
-    if (!selectedFile) {
-      toast.error('Please select an Excel file first');
-      return;
-    }
-
-    if (!billerName) {
-      toast.error('Could not extract biller name from file. Please check file name format.');
-      return;
-    }
-
-    setLoading(true);
-    setResults(null); // Clear previous results when starting new calculation
-    const toastId = toast.loading('Analyzing fee structure and calculating commissions...');
-
+  // Function to load calculation details from history
+  const loadCalculationDetails = async (feeComCalId, fileName, billerNameFromHistory) => {
+    setHistoryLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('feeCommType', feeCommType);
-      formData.append('billerName', billerName);
-
       const response = await fetch('/api/user_dashboard/operational_task/fee_com_cal', {
-        method: 'POST',
-        body: formData,
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ feeComCalId }),
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        toast.success('Commission analysis completed successfully!', { id: toastId });
         setResults(result.data);
+        setBillerName(billerNameFromHistory);
+        setViewMode('history');
+        toast.success('Calculation details loaded from history');
       } else {
-        throw new Error(result.message || 'Calculation failed');
+        throw new Error(result.message || 'Failed to load calculation details');
       }
     } catch (error) {
-      console.error('Calculation failed:', error);
-      toast.error(error.message || 'Analysis failed. Please try again.', { id: toastId });
+      console.error('Error loading calculation details:', error);
+      toast.error('Failed to load calculation details');
     } finally {
-      setLoading(false);
+      setHistoryLoading(false);
     }
   };
 
@@ -154,6 +285,9 @@ Example Biller,Customer Initiated,USSD,1.50`;
   const downloadResults = () => {
     if (!results) return;
     
+    const currentBillerName = results.summary?.billerName || billerName;
+    const currentFileName = results.summary?.fileName || selectedFile?.name || 'results';
+    
     // Create CSV content
     let csvContent = 'Category,Channel,Fee Rate,Sender Agent,Parent Distributor,Master Distributor,TWTL/SP,BPO/PP,Advance Commission\n';
     
@@ -171,7 +305,7 @@ Example Biller,Customer Initiated,USSD,1.50`;
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Fee-Commission_Results_${billerName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().getTime()}.csv`;
+    link.download = `Fee-Commission_Results_${currentBillerName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().getTime()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -217,12 +351,18 @@ Example Biller,Customer Initiated,USSD,1.50`;
     </button>
   );
 
-  const CommissionSection = ({ title, data, type }) => (
-    <div className="mb-4">
-      <div className={`rounded p-2 mb-2 bg-gradient-to-r ${
-        type === 'uddokta' ? 'from-blue-600 to-indigo-600' : 'from-green-600 to-emerald-600'
-      } text-white shadow-md`}>
-        <div className="flex items-center justify-between">
+const CommissionSection = ({ title, data, type, index }) => (
+  <div className="mb-4">
+    <div className={`rounded p-2 mb-2 bg-gradient-to-r ${
+      type === 'uddokta' ? 'from-blue-600 to-indigo-600' : 'from-green-600 to-emerald-600'
+    } text-white shadow-md`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <div className={`w-5 h-5 rounded flex items-center justify-center text-white font-bold text-xs mr-2 ${
+            type === 'uddokta' ? 'bg-blue-500' : 'bg-green-500'
+          }`}>
+            {index}
+          </div>
           <h3 className="text-sm font-bold flex items-center">
             <div className={`p-1 rounded mr-2 ${
               type === 'uddokta' ? 'bg-blue-500' : 'bg-green-500'
@@ -231,99 +371,403 @@ Example Biller,Customer Initiated,USSD,1.50`;
             </div>
             {title}
           </h3>
-          <div className={`px-2 py-1 rounded-full text-xs font-semibold ${
-            type === 'uddokta' ? 'bg-blue-500' : 'bg-green-500'
-          }`}>
-            {type.toUpperCase()}
-          </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* APP Commission */}
-        <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
-          <div className="flex items-center mb-2">
-            <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded mr-2">
-              <FaMoneyBillWave className="text-white text-xs" />
-            </div>
-            <h4 className="font-semibold text-gray-800 text-sm">APP Commission</h4>
-          </div>
-          
-          <div className="space-y-1">
-            <div className="flex justify-between items-center p-1 bg-blue-50 rounded">
-              <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
-              <div className="flex items-center">
-                <span className="font-bold text-gray-900 text-xs">
-                  {formatDisplayValue(data.app.feeRate, 'feeRate')}
-                </span>
-                <CopyButton value={formatDisplayValue(data.app.feeRate, 'feeRate')} />
-              </div>
-            </div>
-
-            {Object.entries(data.app.commissions).map(([key, value]) => (
-              <div key={key} className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
-                <span className="text-gray-600 capitalize">
-                  {key === 'adjustment' ? 'Advance Commission' : 
-                   key === 'senderAgent' ? 'Uddokta' :
-                   key === 'parentDistributor' ? 'Distributor' :
-                   key === 'masterDistributor' ? 'Master Distributor' :
-                   key === 'twltSp' ? 'TWTL' :
-                   key === 'bpoPp' ? 'BPO' : key.replace(/([A-Z])/g, ' $1').trim()}
-                </span>
-                <div className="flex items-center">
-                  <span className="font-semibold text-gray-800">
-                    {formatDisplayValue(value, key)}
-                  </span>
-                  <CopyButton value={formatDisplayValue(value, key)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* USSD Commission */}
-        <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
-          <div className="flex items-center mb-2">
-            <div className="p-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded mr-2">
-              <FaExchangeAlt className="text-white text-xs" />
-            </div>
-            <h4 className="font-semibold text-gray-800 text-sm">USSD Commission</h4>
-          </div>
-          
-          <div className="space-y-1">
-            <div className="flex justify-between items-center p-1 bg-green-50 rounded">
-              <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
-              <div className="flex items-center">
-                <span className="font-bold text-gray-900 text-xs">
-                  {formatDisplayValue(data.ussd.feeRate, 'feeRate')}
-                </span>
-                <CopyButton value={formatDisplayValue(data.ussd.feeRate, 'feeRate')} />
-              </div>
-            </div>
-
-            {Object.entries(data.ussd.commissions).map(([key, value]) => (
-              <div key={key} className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
-                <span className="text-gray-600 capitalize">
-                  {key === 'adjustment' ? 'Advance Commission' : 
-                   key === 'senderAgent' ? 'Uddokta' :
-                   key === 'parentDistributor' ? 'Distributor' :
-                   key === 'masterDistributor' ? 'Master Distributor' :
-                   key === 'twltSp' ? 'TWTL' :
-                   key === 'bpoPp' ? 'BPO' : key.replace(/([A-Z])/g, ' $1').trim()}
-                </span>
-                <div className="flex items-center">
-                  <span className="font-semibold text-gray-800">
-                    {formatDisplayValue(value, key)}
-                  </span>
-                  <CopyButton value={formatDisplayValue(value, key)} />
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className={`px-2 py-1 rounded text-xs font-semibold ${
+          type === 'uddokta' ? 'bg-blue-500' : 'bg-green-500'
+        }`}>
+          {type.toUpperCase()}
         </div>
       </div>
     </div>
-  );
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* APP Commission */}
+      <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
+        <div className="flex items-center mb-2">
+          <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded mr-2">
+            <FaMobileAlt className="text-white text-xs" />
+          </div>
+          <h4 className="font-semibold text-gray-800 text-sm">APP Commission</h4>
+        </div>
+        
+        <div className="space-y-1">
+          {/* Fee Rate - Always First */}
+          <div className="flex justify-between items-center p-1 bg-blue-50 rounded">
+            <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
+            <div className="flex items-center">
+              <span className="font-bold text-gray-900 text-xs">
+                {formatDisplayValue(data.app.feeRate, 'feeRate')}
+              </span>
+              <CopyButton value={formatDisplayValue(data.app.feeRate, 'feeRate')} />
+            </div>
+          </div>
+
+          {/* Uddokta (senderAgent) - Second */}
+          {data.app.commissions.senderAgent !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Uddokta</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.senderAgent, 'senderAgent')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.senderAgent, 'senderAgent')} />
+              </div>
+            </div>
+          )}
+
+          {/* Distributor (parentDistributor) - Third */}
+          {data.app.commissions.parentDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.parentDistributor, 'parentDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.parentDistributor, 'parentDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* Master Distributor - Fourth */}
+          {data.app.commissions.masterDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Master Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.masterDistributor, 'masterDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.masterDistributor, 'masterDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* TWTL (twltSp) - Fifth */}
+          {data.app.commissions.twltSp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">TWTL</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.twltSp, 'twltSp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.twltSp, 'twltSp')} />
+              </div>
+            </div>
+          )}
+
+          {/* BPO (bpoPp) - Sixth */}
+          {data.app.commissions.bpoPp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">BPO</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.bpoPp, 'bpoPp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.bpoPp, 'bpoPp')} />
+              </div>
+            </div>
+          )}
+
+          {/* Advance Commission (adjustment) - Seventh */}
+          {data.app.commissions.adjustment !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Advance Commission</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.adjustment, 'adjustment')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.adjustment, 'adjustment')} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* USSD Commission */}
+      <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
+        <div className="flex items-center mb-2">
+          <div className="p-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded mr-2">
+            <FaMobileRetro className="text-white text-xs" />
+          </div>
+          <h4 className="font-semibold text-gray-800 text-sm">USSD Commission</h4>
+        </div>
+        
+        <div className="space-y-1">
+          {/* Fee Rate - Always First */}
+          <div className="flex justify-between items-center p-1 bg-green-50 rounded">
+            <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
+            <div className="flex items-center">
+              <span className="font-bold text-gray-900 text-xs">
+                {formatDisplayValue(data.ussd.feeRate, 'feeRate')}
+              </span>
+              <CopyButton value={formatDisplayValue(data.ussd.feeRate, 'feeRate')} />
+            </div>
+          </div>
+
+          {/* Uddokta (senderAgent) - Second */}
+          {data.ussd.commissions.senderAgent !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Uddokta</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.senderAgent, 'senderAgent')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.senderAgent, 'senderAgent')} />
+              </div>
+            </div>
+          )}
+
+          {/* Distributor (parentDistributor) - Third */}
+          {data.ussd.commissions.parentDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.parentDistributor, 'parentDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.parentDistributor, 'parentDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* Master Distributor - Fourth */}
+          {data.ussd.commissions.masterDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Master Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.masterDistributor, 'masterDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.masterDistributor, 'masterDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* TWTL (twltSp) - Fifth */}
+          {data.ussd.commissions.twltSp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">TWTL</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.twltSp, 'twltSp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.twltSp, 'twltSp')} />
+              </div>
+            </div>
+          )}
+
+          {/* BPO (bpoPp) - Sixth */}
+          {data.ussd.commissions.bpoPp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">BPO</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.bpoPp, 'bpoPp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.bpoPp, 'bpoPp')} />
+              </div>
+            </div>
+          )}
+
+          {/* Advance Commission (adjustment) - Seventh */}
+          {data.ussd.commissions.adjustment !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Advance Commission</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.adjustment, 'adjustment')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.adjustment, 'adjustment')} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const CustomerCommissionSection = ({ title, data, type, index }) => (
+  <div className="mb-4">
+    <div className={`rounded p-2 mb-2 bg-gradient-to-r ${
+      type === 'customer' ? 'from-green-600 to-emerald-600' : 'from-blue-600 to-indigo-600'
+    } text-white shadow-md`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <div className={`w-5 h-5 rounded flex items-center justify-center text-white font-bold text-xs mr-2 ${
+            type === 'customer' ? 'bg-green-500' : 'bg-blue-500'
+          }`}>
+            {index}
+          </div>
+          <h3 className="text-sm font-bold flex items-center">
+            <div className={`p-1 rounded mr-2 ${
+              type === 'customer' ? 'bg-green-500' : 'bg-blue-500'
+            }`}>
+              <FaUsers className="text-white text-xs" />
+            </div>
+            {title}
+          </h3>
+        </div>
+        <div className={`px-2 py-1 rounded text-xs font-semibold ${
+          type === 'customer' ? 'bg-green-500' : 'bg-blue-500'
+        }`}>
+          {type.toUpperCase()}
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* APP Commission */}
+      <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
+        <div className="flex items-center mb-2">
+          <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded mr-2">
+            <FaMobileAlt className="text-white text-xs" />
+          </div>
+          <h4 className="font-semibold text-gray-800 text-sm">APP Commission</h4>
+        </div>
+        
+        <div className="space-y-1">
+          {/* Fee Rate - Always First */}
+          <div className="flex justify-between items-center p-1 bg-blue-50 rounded">
+            <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
+            <div className="flex items-center">
+              <span className="font-bold text-gray-900 text-xs">
+                {formatDisplayValue(data.app.feeRate, 'feeRate')}
+              </span>
+              <CopyButton value={formatDisplayValue(data.app.feeRate, 'feeRate')} />
+            </div>
+          </div>
+
+          {/* Master Distributor - Second */}
+          {data.app.commissions.masterDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Master Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.masterDistributor, 'masterDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.masterDistributor, 'masterDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* TWTL (twltSp) - Third */}
+          {data.app.commissions.twltSp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">TWTL</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.twltSp, 'twltSp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.twltSp, 'twltSp')} />
+              </div>
+            </div>
+          )}
+
+          {/* BPO (bpoPp) - Fourth */}
+          {data.app.commissions.bpoPp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">BPO</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.bpoPp, 'bpoPp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.bpoPp, 'bpoPp')} />
+              </div>
+            </div>
+          )}
+
+          {/* Advance Commission (adjustment) - Fifth */}
+          {data.app.commissions.adjustment !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Advance Commission</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.app.commissions.adjustment, 'adjustment')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.app.commissions.adjustment, 'adjustment')} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* USSD Commission */}
+      <div className="bg-white rounded p-3 border border-gray-100 shadow-sm">
+        <div className="flex items-center mb-2">
+          <div className="p-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded mr-2">
+            <FaMobileRetro className="text-white text-xs" />
+          </div>
+          <h4 className="font-semibold text-gray-800 text-sm">USSD Commission</h4>
+        </div>
+        
+        <div className="space-y-1">
+          {/* Fee Rate - Always First */}
+          <div className="flex justify-between items-center p-1 bg-green-50 rounded">
+            <span className="text-gray-700 text-xs font-medium">Fee Rate</span>
+            <div className="flex items-center">
+              <span className="font-bold text-gray-900 text-xs">
+                {formatDisplayValue(data.ussd.feeRate, 'feeRate')}
+              </span>
+              <CopyButton value={formatDisplayValue(data.ussd.feeRate, 'feeRate')} />
+            </div>
+          </div>
+
+          {/* Master Distributor - Second */}
+          {data.ussd.commissions.masterDistributor !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Master Distributor</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.masterDistributor, 'masterDistributor')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.masterDistributor, 'masterDistributor')} />
+              </div>
+            </div>
+          )}
+
+          {/* TWTL (twltSp) - Third */}
+          {data.ussd.commissions.twltSp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">TWTL</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.twltSp, 'twltSp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.twltSp, 'twltSp')} />
+              </div>
+            </div>
+          )}
+
+          {/* BPO (bpoPp) - Fourth */}
+          {data.ussd.commissions.bpoPp !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">BPO</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.bpoPp, 'bpoPp')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.bpoPp, 'bpoPp')} />
+              </div>
+            </div>
+          )}
+
+          {/* Advance Commission (adjustment) - Fifth */}
+          {data.ussd.commissions.adjustment !== undefined && (
+            <div className="flex justify-between items-center p-1 hover:bg-gray-50 rounded text-xs">
+              <span className="text-gray-600">Advance Commission</span>
+              <div className="flex items-center">
+                <span className="font-semibold text-gray-800">
+                  {formatDisplayValue(data.ussd.commissions.adjustment, 'adjustment')}
+                </span>
+                <CopyButton value={formatDisplayValue(data.ussd.commissions.adjustment, 'adjustment')} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
   const CalculationSteps = () => {
     if (!results?.rawData) return null;
@@ -411,6 +855,20 @@ Example Biller,Customer Initiated,USSD,1.50`;
 
   const selectedType = feeCommTypes.find(type => type.value === feeCommType);
   const isRegularType = feeCommType === 'Regular';
+  const canCalculate = selectedFile && !fileExists && isRegularType && !loading;
+
+  // Reset to new calculation mode when new file is selected
+  const handleNewCalculation = () => {
+    setResults(null);
+    setViewMode('new');
+    setSelectedFile(null);
+    setBillerName('');
+    setFileExists(false);
+    setExistingFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 py-6 px-4 sm:px-6 lg:px-8">
@@ -452,13 +910,24 @@ Example Biller,Customer Initiated,USSD,1.50`;
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           
           {/* Control Panel - Fixed Height */}
-          <div className="xl:col-span-1">
-            <div className="bg-white rounded shadow-md p-4 border border-gray-200 h-fit">
-              <div className="flex items-center mb-3">
-                <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded mr-2">
-                  <FaCalculator className="text-white text-sm" />
+          <div className="xl:col-span-1 space-y-4">
+            <div className="bg-white rounded shadow-md p-4 border border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded mr-2">
+                    <FaCalculator className="text-white text-sm" />
+                  </div>
+                  <h2 className="text-base font-bold text-gray-800">Analysis Parameters</h2>
                 </div>
-                <h2 className="text-base font-bold text-gray-800">Analysis Parameters</h2>
+                {viewMode === 'history' && (
+                  <button
+                    onClick={handleNewCalculation}
+                    className="px-2 py-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded text-xs hover:shadow transition-all duration-200 flex items-center font-medium"
+                  >
+                    <FaCalculator className="mr-1" />
+                    New Calculation
+                  </button>
+                )}
               </div>
 
               {/* Fee-Comm Type Selection */}
@@ -471,7 +940,7 @@ Example Biller,Customer Initiated,USSD,1.50`;
                     <button
                       key={type.value}
                       onClick={() => setFeeCommType(type.value)}
-                      className={`w-full text-left p-2 rounded transition-all duration-200 text-xs ${
+                      className={`w-full h-10 text-left p-2 rounded transition-all duration-200 text-xs ${
                         feeCommType === type.value 
                           ? `bg-gradient-to-r ${type.color} text-white shadow-md`
                           : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
@@ -529,7 +998,10 @@ Example Biller,Customer Initiated,USSD,1.50`;
                     </p>
                     
                     <button
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
                       className="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors flex items-center font-medium"
                     >
                       <FaUpload className="mr-1" />
@@ -539,27 +1011,51 @@ Example Biller,Customer Initiated,USSD,1.50`;
                 </div>
 
                 {selectedFile && (
-                  <div className="mt-1 p-2 bg-green-50 rounded border border-green-200 flex items-center">
-                    <FaFileExcel className="text-green-600 mr-2 text-xs" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-green-800 truncate">
-                        {selectedFile.name}
-                      </p>
-                      <p className="text-xs text-green-600">
-                        Biller: {billerName}
-                      </p>
-                    </div>
-                  </div>
-                )}
+  <div className={`mt-1 p-2 rounded border ${
+    fileExists 
+      ? 'bg-red-50 border-red-200' 
+      : 'bg-green-50 border-green-200'
+  }`}>
+    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+      {/* File Icon */}
+      <div className={`${
+        fileExists ? 'text-red-600' : 'text-green-600'
+      }`}>
+        {fileExists ? <FaFileExport className="w-4 h-4" /> : <FaFileExcel className="w-4 h-4" />}
+      </div>
+      
+      {/* File Name */}
+      <p className="text-xs font-semibold text-gray-800 break-words whitespace-normal leading-5">
+        {selectedFile.name}
+      </p>
+      
+      {/* Status Icon */}
+      <div className={`${
+        fileExists ? 'text-red-600' : 'text-green-600'
+      }`}>
+        {fileExists ? <FaBan className="w-4 h-4" /> : <FaCheckCircle className="w-4 h-4" />}
+      </div>
+      
+      {/* Status Text */}
+      <p className="text-xs">
+        {fileExists ? (
+          <span className="text-red-600 font-medium">Commission already calculated</span>
+        ) : (
+          <span className="text-green-600 font-medium">Ready for commission calculation</span>
+        )}
+      </p>
+    </div>
+  </div>
+)}
               </div>
 
               {/* Action Buttons */}
               <div className="space-y-2">
                 <button
                   onClick={handleCalculate}
-                  disabled={!selectedFile || loading || !isRegularType}
-                  className={`w-full h-8 px-3 rounded text-xs font-semibold transition-all flex items-center justify-center ${
-                    !selectedFile || loading || !isRegularType
+                  disabled={!canCalculate}
+                  className={`w-full h-10 px-3 rounded text-xs font-semibold transition-all flex items-center justify-center ${
+                    !canCalculate
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow hover:shadow-md'
                   }`}
@@ -568,6 +1064,11 @@ Example Biller,Customer Initiated,USSD,1.50`;
                     <>
                       <div className="border-b-2 border-white mr-1"></div>
                       Calculating...
+                    </>
+                  ) : fileExists ? (
+                    <>
+                      <FaBan className="mr-1" />
+                      File Already Processed
                     </>
                   ) : (
                     <>
@@ -579,14 +1080,121 @@ Example Biller,Customer Initiated,USSD,1.50`;
 
                 <button
                   onClick={downloadTemplate}
-                  className="w-full h-8 px-3 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors flex items-center justify-center text-xs font-medium"
+                  className="w-full h-10 px-3 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors flex items-center justify-center text-xs font-medium"
                 >
                   <FaDownload className="mr-1" />
                   Download Template
                 </button>
               </div>
             </div>
+
+            {/* History Section */}
+<div className="bg-white rounded shadow-md p-4 border border-gray-200">
+  <div className="flex items-center justify-between mb-3">
+    <div className="flex items-center">
+      <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded mr-2">
+        <FaHistory className="text-white text-sm" />
+      </div>
+      <h2 className="text-base font-bold text-gray-800">Calculation History</h2>
+    </div>
+    <button
+      onClick={() => fetchHistory(searchTerm)}
+      disabled={historyLoading}
+      className="p-1 text-gray-500 hover:text-indigo-600 transition-colors duration-200 disabled:opacity-50"
+      title="Refresh history"
+    >
+      <FaSync className={`text-sm ${historyLoading ? 'animate-spin' : ''}`} />
+    </button>
+  </div>
+
+  {/* Search Input */}
+  <div className="mb-3 relative">
+    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+      <FaSearch className="text-gray-400 text-xs" />
+    </div>
+    <input
+      type="text"
+      placeholder="Search biller name..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded text-sm 
+text-gray-800 placeholder-gray-400 
+focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+    />
+
+  </div>
+
+  {/* History List */}
+  <div className="max-h-64 overflow-y-auto">
+    {historyLoading ? (
+      <div className="flex justify-center py-4">
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+      </div>
+    ) : history.length > 0 ? (
+      <div className="space-y-2">
+        {history.map((item, index) => (
+          <div
+            key={item.fee_com_cal_id}
+            onClick={() => loadCalculationDetails(item.fee_com_cal_id, item.file_name, item.biller_name)}
+            className="p-2 bg-gray-50 rounded border border-gray-200 hover:border-indigo-300 transition-colors duration-200 cursor-pointer"
+          >
+            <div className="flex justify-between items-start mb-1">
+              <div className="flex-1 min-w-0 mr-2">
+                <h3 className="font-semibold text-gray-800 text-xs break-words whitespace-normal leading-5">
+                  {item.biller_name}
+                </h3>
+                <p className="text-xs text-gray-500 truncate mt-0.5">
+                  {item.file_name}
+                </p>
+              </div>
+              <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
+                {new Date(item.created_at).toLocaleDateString()}
+              </span>
+            </div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-600 bg-blue-100 px-1 py-0.5 rounded">
+                {item.fee_comm_type}
+              </span>
+              <span className="text-xs text-gray-500 font-mono">
+                {item.fee_com_cal_id}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gray-500">By: {item.track_by}</span>
+              <span className="text-gray-400">
+                {new Date(item.created_at).toLocaleTimeString()}
+              </span>
+            </div>
           </div>
+        ))}
+      </div>
+    ) : (
+      <div className="text-center py-4">
+        <p className="text-gray-500 text-xs">
+          {searchTerm ? 'No matching records found' : 'No calculation history yet'}
+        </p>
+      </div>
+    )}
+  </div>
+
+  {/* History Summary */}
+  {history.length > 0 && (
+    <div className="mt-3 pt-2 border-t border-gray-200">
+      <div className="flex justify-between items-center text-xs text-gray-600">
+        <span>Showing {history.length} records</span>
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm('')}
+            className="text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            Clear search
+          </button>
+        )}
+      </div>
+    </div>
+  )}
+</div>
+</div>
 
           {/* Results Panel */}
           <div className="xl:col-span-2">
@@ -609,8 +1217,12 @@ Example Biller,Customer Initiated,USSD,1.50`;
                       <FaChartBar className="text-white text-sm" />
                     </div>
                     <div>
-                      <h2 className="text-base font-bold text-gray-800">Commission Analysis</h2>
-                      <p className="text-gray-600 text-xs">Detailed breakdown of fee distribution</p>
+                      <h2 className="text-base font-bold text-gray-800">
+                        {viewMode === 'history' ? 'Historical Commission Analysis' : 'Commission Analysis'}
+                      </h2>
+                      <p className="text-gray-600 text-xs">
+                        {viewMode === 'history' ? 'Loaded from calculation history' : 'Detailed breakdown of fee distribution'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex space-x-1">
@@ -635,31 +1247,43 @@ Example Biller,Customer Initiated,USSD,1.50`;
                 <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded p-3 mb-3 text-white shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-bold">{billerName}</h3>
-                      <p className="text-blue-100 text-xs">{feeCommType} Commission Structure</p>
+                      <h3 className="text-sm font-bold">{results.summary?.billerName || billerName}</h3>
+                      <p className="text-blue-100 text-xs">
+                        {results.summary?.fileName || selectedFile?.name} • {feeCommType} Commission Structure
+                        {viewMode === 'history' && ` • ${results.summary?.trackBy || 'Historical'}`}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-semibold">Analysis Complete</div>
-                      <div className="text-blue-100 text-xs">{new Date().toLocaleDateString()}</div>
+                      <div className="text-xs font-semibold">
+                        {viewMode === 'history' ? 'Historical Analysis' : 'Analysis Complete'}
+                      </div>
+                      <div className="text-blue-100 text-xs">
+                        {results.summary?.created_at 
+                          ? new Date(results.summary.created_at).toLocaleDateString()
+                          : new Date().toLocaleDateString()
+                        }
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* UDDOKTA Section */}
+                {/* UDDOKTA Section - Fixed order with proper numbering */}
                 {results.uddokta && (
                   <CommissionSection 
                     title="UDDOKTA COMMISSION" 
                     data={results.uddokta} 
-                    type="uddokta" 
+                    type="uddokta"
+                    index={1}
                   />
                 )}
 
-                {/* CUSTOMER Section */}
+                {/* CUSTOMER Section - Fixed order with proper numbering */}
                 {results.customer && (
-                  <CommissionSection 
+                  <CustomerCommissionSection 
                     title="CUSTOMER COMMISSION" 
                     data={results.customer} 
-                    type="customer" 
+                    type="customer"
+                    index={2}
                   />
                 )}
 
@@ -673,15 +1297,17 @@ Example Biller,Customer Initiated,USSD,1.50`;
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs">
                       <div className="text-center p-1 bg-white rounded">
                         <div className="text-purple-600 font-semibold">Biller</div>
-                        <div className="text-gray-800 font-bold">{billerName}</div>
+                        <div className="text-gray-800 font-bold">{results.summary.billerName}</div>
                       </div>
                       <div className="text-center p-1 bg-white rounded">
                         <div className="text-purple-600 font-semibold">Type</div>
-                        <div className="text-gray-800 font-bold">{feeCommType}</div>
+                        <div className="text-gray-800 font-bold">{results.summary.feeCommType}</div>
                       </div>
                       <div className="text-center p-1 bg-white rounded">
                         <div className="text-purple-600 font-semibold">Status</div>
-                        <div className="text-green-600 font-bold">Completed</div>
+                        <div className="text-green-600 font-bold">
+                          {viewMode === 'history' ? 'Historical' : 'Completed'}
+                        </div>
                       </div>
                       <div className="text-center p-1 bg-white rounded">
                         <div className="text-purple-600 font-semibold">Records</div>
