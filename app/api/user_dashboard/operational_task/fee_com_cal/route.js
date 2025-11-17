@@ -67,6 +67,7 @@ const checkExistingFile = async (userId, fileName) => {
     const checkQuery = `
       SELECT fee_com_cal_id, file_name, biller_name, created_at, track_by, calculation_results
       FROM fee_commission_calculation 
+      WHERE soc_portal_id = $1 AND file_name = $2
       ORDER BY created_at DESC 
       LIMIT 1
     `;
@@ -117,9 +118,15 @@ const saveFileToStorage = async (file, feeComCalId) => {
   }
 };
 
-// Store calculation results in database
+// Update the storeCalculationResults function
 const storeCalculationResults = async (feeComCalId, userId, billerName, feeCommType, filePath, fileName, fileHash, calculationResults, trackBy) => {
   try {
+    // Format the feeCommType for storage
+    let storedFeeCommType = feeCommType;
+    if (feeCommType === 'Drop Point' && calculationResults.summary?.dropPointType) {
+      storedFeeCommType = `Drop Point - ${calculationResults.summary.dropPointType}`;
+    }
+
     const insertQuery = `
       INSERT INTO fee_commission_calculation 
       (fee_com_cal_id, soc_portal_id, biller_name, fee_comm_type, file_path, file_name, file_hash, calculation_results, track_by)
@@ -131,7 +138,7 @@ const storeCalculationResults = async (feeComCalId, userId, billerName, feeCommT
       feeComCalId,
       userId,
       billerName,
-      feeCommType,
+      storedFeeCommType,
       filePath,
       fileName,
       fileHash,
@@ -143,7 +150,8 @@ const storeCalculationResults = async (feeComCalId, userId, billerName, feeCommT
       feeComCalId, 
       trackBy,
       billerName,
-      fileName
+      fileName,
+      storedFeeCommType
     });
     return result.rows[0];
   } catch (error) {
@@ -152,19 +160,19 @@ const storeCalculationResults = async (feeComCalId, userId, billerName, feeCommT
   }
 };
 
-// Get calculation history for user
-const getCalculationHistory = async (userId, searchTerm = '', limit = 10) => {
+// Update the getCalculationHistory function to show all records, not just current user's
+const getCalculationHistory = async (searchTerm = '', limit = 10) => {
   try {
     let historyQuery = `
       SELECT fee_com_cal_id, file_name, biller_name, fee_comm_type, created_at, track_by
       FROM fee_commission_calculation 
-      WHERE soc_portal_id = $1
+      WHERE 1=1
     `;
     
-    const queryParams = [userId];
+    const queryParams = [];
     
     if (searchTerm) {
-      historyQuery += ` AND (file_name ILIKE $2 OR biller_name ILIKE $2)`;
+      historyQuery += ` AND (file_name ILIKE $${queryParams.length + 1} OR biller_name ILIKE $${queryParams.length + 1})`;
       queryParams.push(`%${searchTerm}%`);
     }
     
@@ -172,23 +180,43 @@ const getCalculationHistory = async (userId, searchTerm = '', limit = 10) => {
     queryParams.push(limit);
     
     const result = await query(historyQuery, queryParams);
-    return result.rows;
+    
+    // Parse the fee_comm_type to make it more readable
+    const parsedHistory = result.rows.map(item => {
+      let feeCommType = item.fee_comm_type;
+      
+      // If it's a Drop Point type, make it more readable
+      if (feeCommType && feeCommType.includes('Drop Point')) {
+        if (feeCommType.includes('Mixed')) {
+          feeCommType = 'Drop Point - Mixed';
+        } else if (feeCommType.includes('Fixed')) {
+          feeCommType = 'Drop Point - Fixed';
+        }
+      }
+      
+      return {
+        ...item,
+        fee_comm_type: feeCommType
+      };
+    });
+    
+    return parsedHistory;
   } catch (error) {
     logger.error('Error fetching calculation history', { error: error.message });
     return [];
   }
 };
 
-// Get calculation details by ID
-const getCalculationDetails = async (userId, feeComCalId) => {
+// Get calculation details by ID - updated to show details regardless of user
+const getCalculationDetails = async (feeComCalId) => {
   try {
     const detailsQuery = `
       SELECT fee_com_cal_id, file_name, biller_name, fee_comm_type, created_at, track_by, calculation_results
       FROM fee_commission_calculation 
-      WHERE soc_portal_id = $1 AND fee_com_cal_id = $2
+      WHERE fee_com_cal_id = $1
     `;
     
-    const result = await query(detailsQuery, [userId, feeComCalId]);
+    const result = await query(detailsQuery, [feeComCalId]);
     return result.rows.length > 0 ? result.rows[0] : null;
   } catch (error) {
     logger.error('Error fetching calculation details', { error: error.message });
@@ -342,6 +370,285 @@ const calculateAdjustmentValues = (extractedValues) => {
   }
 };
 
+// Enhanced parsing function with better validation
+const parseExcelFileForDropPointMixed = async (file, fileName) => {
+  try {
+    logger.info('Starting Excel file parsing for Drop Point Mixed fee-commission calculation', {
+      fileName: fileName,
+      fileSize: file.size
+    });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(arrayBuffer);
+
+    // Use the first worksheet (Fee-Commission sheet)
+    const worksheet = workbook.worksheets[0];
+    
+    logger.debug('Excel worksheet loaded for Drop Point Mixed', {
+      sheetName: worksheet.name,
+      rowCount: worksheet.rowCount,
+      columnCount: worksheet.columnCount
+    });
+
+    // Define slab ranges and their base row numbers
+    const slabs = [
+      { range: "0 - 10,000", baseRow: 4, exampleRow: 5 },
+      { range: "10,000 - 20,000", baseRow: 8, exampleRow: 9 },
+      { range: "20,000 - 50,000", baseRow: 12, exampleRow: 13 },
+      { range: "50,000 - 100,001", baseRow: 16, exampleRow: 17 },
+      { range: "100,001 - 200,001", baseRow: 20, exampleRow: 21 },
+      { range: "200,001 - 300,001", baseRow: 24, exampleRow: 25 },
+      { range: "300,001 - 400,001", baseRow: 28, exampleRow: 29 },
+      { range: "400,001 - Rest", baseRow: 32, exampleRow: 33 }
+    ];
+
+    const extractedSlabs = [];
+
+    for (const slab of slabs) {
+      const baseRow = slab.baseRow;
+      const exampleRow = slab.exampleRow;
+
+      try {
+        // Extract values for APP
+        const appData = {
+          feeRate: getCellValue(worksheet, `E${baseRow}`),
+          senderAgentFixed: getCellValue(worksheet, `W${exampleRow}`),
+          parentDistributorFixed: getCellValue(worksheet, `AE${exampleRow}`),
+          masterDistributorRate: getCellValue(worksheet, `AU${baseRow}`),
+          twtlRate: getCellValue(worksheet, `BA${baseRow}`),
+          bpoRate: getCellValue(worksheet, `BC${baseRow}`),
+          advanceCommissionRate: getCellValue(worksheet, `BI${baseRow}`),
+          vatRate: getCellValue(worksheet, `T${baseRow}`),
+          exampleAmount: getCellValue(worksheet, `D${exampleRow}`)
+        };
+
+        // Extract values for USSD
+        const ussdData = {
+          feeRate: getCellValue(worksheet, `E${baseRow + 2}`),
+          senderAgentFixed: getCellValue(worksheet, `W${exampleRow + 2}`),
+          parentDistributorFixed: getCellValue(worksheet, `AE${exampleRow + 2}`),
+          masterDistributorRate: getCellValue(worksheet, `AU${baseRow + 2}`),
+          twtlRate: getCellValue(worksheet, `BA${baseRow + 2}`),
+          bpoRate: getCellValue(worksheet, `BC${baseRow + 2}`),
+          advanceCommissionRate: getCellValue(worksheet, `BI${baseRow + 2}`),
+          vatRate: getCellValue(worksheet, `T${baseRow + 2}`),
+          exampleAmount: getCellValue(worksheet, `D${exampleRow + 2}`)
+        };
+
+        // Log raw extracted values for debugging
+        logger.debug(`Raw extracted values for ${slab.range}`, {
+          appData,
+          ussdData
+        });
+
+        // Calculate Master Distributor rate using the complex formula
+        const appMasterDistributor = calculateMasterDistributorForDropPoint(appData, 'app');
+        const ussdMasterDistributor = calculateMasterDistributorForDropPoint(ussdData, 'ussd');
+
+        extractedSlabs.push({
+          range: slab.range,
+          app: {
+            ...appData,
+            calculatedMasterDistributor: appMasterDistributor
+          },
+          ussd: {
+            ...ussdData,
+            calculatedMasterDistributor: ussdMasterDistributor
+          }
+        });
+
+        logger.debug(`Processed slab ${slab.range}`, {
+          appMasterDistributor,
+          ussdMasterDistributor
+        });
+
+      } catch (slabError) {
+        logger.warn(`Failed to extract slab ${slab.range}`, { error: slabError.message });
+        // Continue with other slabs even if one fails
+        continue;
+      }
+    }
+
+    // Extract biller name from filename
+    let extractedBillerName = '';
+    const cleanFileName = fileName.replace('.xlsx', '');
+    
+    if (cleanFileName.includes('Fee-Commission Scheme for ')) {
+      extractedBillerName = cleanFileName.replace('Fee-Commission Scheme for ', '').split('_')[0];
+    } else if (cleanFileName.includes('Fee-Commission Scheme - ')) {
+      extractedBillerName = cleanFileName.replace('Fee-Commission Scheme - ', '').split(' - ')[0];
+    } else {
+      extractedBillerName = cleanFileName;
+    }
+
+    return {
+      extractedSlabs,
+      billerName: extractedBillerName,
+      rawData: {
+        slabs: extractedSlabs,
+        totalSlabs: extractedSlabs.length
+      }
+    };
+  } catch (error) {
+    logger.error('Excel parsing error for Drop Point Mixed', { error: error.message });
+    throw new Error(`Failed to parse Excel file for Drop Point Mixed: ${error.message}`);
+  }
+};
+
+// Update the Master Distributor calculation to use adjusted fixed values
+const calculateMasterDistributorForDropPoint = (slabData, type) => {
+  try {
+    const {
+      feeRate,
+      senderAgentFixed,
+      parentDistributorFixed,
+      twtlRate,
+      bpoRate,
+      advanceCommissionRate,
+      vatRate,
+      exampleAmount
+    } = slabData;
+
+    // Validate required data
+    if (!feeRate || !vatRate || !exampleAmount) {
+      logger.warn('Missing required data for Master Distributor calculation', { slabData });
+      return null;
+    }
+
+    // Adjust fixed values by 15%
+    const adjustedSenderAgentFixed = senderAgentFixed ? senderAgentFixed * 1.15 : 0;
+    const adjustedParentDistributorFixed = parentDistributorFixed ? parentDistributorFixed * 1.15 : 0;
+
+    // Calculate E5 = D5 * E4 (example amount * fee rate)
+    const E5 = exampleAmount * feeRate;
+
+    // Calculate T5 = (E5 - E5/(1+vatRate)) + (F5 - F5/(1+vatRate))
+    // Assuming F5 is 0 as per the structure
+    const T5 = (E5 - E5/(1+vatRate)) + (0 - 0/(1+vatRate));
+
+    // Calculate V5 = (E5 + F5) / (1+vatRate)
+    const V5 = (E5 + 0) / (1+vatRate);
+
+    // Calculate BA5 = BA4 * V5
+    const BA5 = (twtlRate || 0) * V5;
+
+    // Calculate BC5 = (E5 + F5)/(1+vatRate) * BC4
+    const BC5 = (E5 + 0)/(1+vatRate) * (bpoRate || 0);
+
+    // Calculate BI5 = (E5 + F5)/(1+vatRate) * BI4
+    const BI5 = (E5 + 0)/(1+vatRate) * (advanceCommissionRate || 0);
+
+    // Calculate AU5 = E5 - T5 - W5 - AE5 - BA5 - BC5 - BI5
+    // Use ADJUSTED fixed values here
+    const AU5 = E5 - T5 - adjustedSenderAgentFixed - adjustedParentDistributorFixed - BA5 - BC5 - BI5;
+
+    // Calculate Master Distributor Rate = AU5 / V5
+    const masterDistributorRate = AU5 / V5;
+
+    logger.debug('Master Distributor calculation details with adjusted fixed values', {
+      type,
+      E5,
+      T5,
+      V5,
+      BA5,
+      BC5,
+      BI5,
+      AU5,
+      masterDistributorRate,
+      originalSenderAgentFixed: senderAgentFixed,
+      adjustedSenderAgentFixed,
+      originalParentDistributorFixed: parentDistributorFixed,
+      adjustedParentDistributorFixed
+    });
+
+    return isNaN(masterDistributorRate) ? null : masterDistributorRate;
+  } catch (error) {
+    logger.error('Error calculating Master Distributor for Drop Point', { error: error.message, slabData });
+    return null;
+  }
+};
+
+// Update the calculateCommissionsForDropPointMixed function to handle zero values
+const calculateCommissionsForDropPointMixed = (extractedData) => {
+  try {
+    logger.info('Starting commission calculations for Drop Point Mixed');
+
+    const results = {
+      slabs: []
+    };
+
+    for (const slab of extractedData.extractedSlabs) {
+      const appFeeRate = slab.app.feeRate ? slab.app.feeRate * 100 : null; // Convert to percentage (0.002 -> 0.2)
+      const ussdFeeRate = slab.ussd.feeRate ? slab.ussd.feeRate * 100 : null;
+
+      // Adjust fixed values by adding 15% (multiplying by 1.15)
+      // Handle zero values properly - if value is 0, it should remain 0 after adjustment
+      const adjustedAppSenderAgentFixed = slab.app.senderAgentFixed !== null && slab.app.senderAgentFixed !== undefined 
+        ? slab.app.senderAgentFixed * 1.15 
+        : null;
+      const adjustedAppParentDistributorFixed = slab.app.parentDistributorFixed !== null && slab.app.parentDistributorFixed !== undefined 
+        ? slab.app.parentDistributorFixed * 1.15 
+        : null;
+      const adjustedUssdSenderAgentFixed = slab.ussd.senderAgentFixed !== null && slab.ussd.senderAgentFixed !== undefined 
+        ? slab.ussd.senderAgentFixed * 1.15 
+        : null;
+      const adjustedUssdParentDistributorFixed = slab.ussd.parentDistributorFixed !== null && slab.ussd.parentDistributorFixed !== undefined 
+        ? slab.ussd.parentDistributorFixed * 1.15 
+        : null;
+
+      // Calculate actual commission values (rate * feeRate * 100)
+      const slabResult = {
+        range: slab.range,
+        app: {
+          feeRate: appFeeRate,
+          commissions: {
+            uddokta: adjustedAppSenderAgentFixed, // Fixed value with 15% adjustment
+            distributor: adjustedAppParentDistributorFixed, // Fixed value with 15% adjustment
+            masterDistributor: slab.app.calculatedMasterDistributor ? slab.app.calculatedMasterDistributor * appFeeRate : null,
+            twlt: slab.app.twtlRate ? slab.app.twtlRate * appFeeRate : null,
+            bpo: slab.app.bpoRate ? slab.app.bpoRate * appFeeRate : null,
+            advanceCommission: slab.app.advanceCommissionRate ? slab.app.advanceCommissionRate * appFeeRate : null
+          }
+        },
+        ussd: {
+          feeRate: ussdFeeRate,
+          commissions: {
+            uddokta: adjustedUssdSenderAgentFixed, // Fixed value with 15% adjustment
+            distributor: adjustedUssdParentDistributorFixed, // Fixed value with 15% adjustment
+            masterDistributor: slab.ussd.calculatedMasterDistributor ? slab.ussd.calculatedMasterDistributor * ussdFeeRate : null,
+            twlt: slab.ussd.twtlRate ? slab.ussd.twtlRate * ussdFeeRate : null,
+            bpo: slab.ussd.bpoRate ? slab.ussd.bpoRate * ussdFeeRate : null,
+            advanceCommission: slab.ussd.advanceCommissionRate ? slab.ussd.advanceCommissionRate * ussdFeeRate : null
+          }
+        }
+      };
+
+      // Log calculation details for debugging
+      logger.debug(`Calculated slab ${slab.range}`, {
+        appFeeRate,
+        ussdFeeRate,
+        originalAppSenderAgent: slab.app.senderAgentFixed,
+        adjustedAppSenderAgent: adjustedAppSenderAgentFixed,
+        originalAppDistributor: slab.app.parentDistributorFixed,
+        adjustedAppDistributor: adjustedAppParentDistributorFixed,
+        appCommissions: slabResult.app.commissions,
+        ussdCommissions: slabResult.ussd.commissions
+      });
+
+      results.slabs.push(slabResult);
+    }
+
+    logger.debug('Drop Point Mixed commission calculations completed', { 
+      totalSlabs: results.slabs.length 
+    });
+    
+    return results;
+  } catch (error) {
+    logger.error('Drop Point Mixed commission calculation error', { error: error.message });
+    throw new Error(`Failed to calculate commissions for Drop Point Mixed: ${error.message}`);
+  }
+};
 // Parse Excel file and extract required values
 const parseExcelFile = async (file, fileName) => {
   try {
@@ -598,6 +905,7 @@ const calculateCommissions = (extractedData) => {
   }
 };
 
+// Update the POST route to handle Drop Point Mixed
 export async function POST(request) {
   console.log('POST /api/user_dashboard/operational_task/fee_com_cal called');
   
@@ -644,10 +952,12 @@ export async function POST(request) {
     
     const file = formData.get('file');
     const feeCommType = formData.get('feeCommType');
+    const dropPointType = formData.get('dropPointType') || 'Mixed';
     fileName = file ? file.name : 'Unknown';
     
     console.log('Form data values:', { 
       feeCommType, 
+      dropPointType,
       fileName, 
       file: file ? file.name : 'No file' 
     });
@@ -706,26 +1016,37 @@ export async function POST(request) {
     // Generate file hash
     const fileHash = await generateFileHash(file);
 
-    // Parse Excel file
-    console.log('Processing Excel file...');
-    const { extractedValues, rawData, billerName } = await parseExcelFile(file, fileName);
+    let parsedData;
+    let calculationResults;
+
+    // Parse Excel file based on type
+    console.log('Processing Excel file for type:', feeCommType, dropPointType);
     
-    // Perform calculations
-    console.log('Performing commission calculations...');
-    const calculationResults = calculateCommissions(extractedValues);
+    if (feeCommType === 'Drop Point' && dropPointType === 'Mixed') {
+      // Parse for Drop Point Mixed
+      parsedData = await parseExcelFileForDropPointMixed(file, fileName);
+      calculationResults = calculateCommissionsForDropPointMixed(parsedData);
+    } else if (feeCommType === 'Regular') {
+      // Parse for Regular type (existing code)
+      parsedData = await parseExcelFile(file, fileName);
+      calculationResults = calculateCommissions(parsedData.extractedValues);
+    } else {
+      throw new Error(`Unsupported fee commission type: ${feeCommType} - ${dropPointType}`);
+    }
     
     // Add summary information and raw data
     calculationResults.summary = {
-      totalRecords: 1,
-      calculationTime: new Date().toISOString(),
-      billerName,
-      feeCommType,
-      fileName,
-      trackBy: userShortName
-    };
+  totalRecords: feeCommType === 'Drop Point' ? calculationResults.slabs?.length || 0 : 1,
+  calculationTime: new Date().toISOString(),
+  billerName: parsedData.billerName,
+  feeCommType: feeCommType,
+  dropPointType: feeCommType === 'Drop Point' ? dropPointType : null,
+  fileName: fileName,
+  trackBy: userShortName
+};
 
     // Add raw data for details view
-    calculationResults.rawData = rawData;
+    calculationResults.rawData = parsedData.rawData;
 
     // Save file to storage
     console.log('Saving file to storage...');
@@ -740,8 +1061,8 @@ export async function POST(request) {
     await storeCalculationResults(
       feeComCalId, 
       userId, 
-      billerName, 
-      feeCommType, 
+      parsedData.billerName, 
+      `${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}`, 
       filePath, 
       fileName,
       fileHash,
@@ -760,7 +1081,7 @@ export async function POST(request) {
     await client.query(activityLogQuery, [
       userId,
       'FEE_COMM_CALCULATION',
-      `Calculated fee-commission for ${fileName} (${feeCommType}) - ${feeComCalId}`,
+      `Calculated fee-commission for ${fileName} (${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
       ipAddress,
       userAgent,
       eid,
@@ -778,7 +1099,7 @@ export async function POST(request) {
     `;
     await client.query(adminNotificationQuery, [
       adminNotificationId,
-      `${userShortName} calculated fee-commission for ${fileName} (${feeCommType}) - ${feeComCalId}`,
+      `${userShortName} calculated fee-commission for ${fileName} (${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
       'Unread'
     ]);
 
@@ -805,7 +1126,7 @@ export async function POST(request) {
       userAgent,
       { id: userId, email: userEmail, eid, shortName: userShortName },
       fileName,
-      feeCommType
+      `${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}`
     );
     
     await sendTelegramAlert(alertMessage);
@@ -816,8 +1137,9 @@ export async function POST(request) {
         sid: sessionId,
         taskName: 'FeeCommissionCalculation',
         details: `User ${userId} (${userShortName}) completed fee-commission calculation for ${fileName} - ${feeComCalId}`,
-        billerName,
+        billerName: parsedData.billerName,
         feeCommType,
+        dropPointType,
         feeComCalId,
         trackBy: userShortName,
         calculationResults: calculationResults
@@ -876,28 +1198,18 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint for fetching history
+// GET endpoint for fetching history - updated to show all records
 export async function GET(request) {
   console.log('GET /api/user_dashboard/operational_task/fee_com_cal called');
   
-  // Get cookies from request headers
-  const cookieHeader = request.headers.get('cookie') || '';
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map(cookie => {
-      const [key, ...rest] = cookie.trim().split('=');
-      return [key, rest.join('=')];
-    })
-  );
-  
-  const userId = cookies.socPortalId || 'Unknown';
   const { searchParams } = new URL(request.url);
   const searchTerm = searchParams.get('search') || '';
   const limit = parseInt(searchParams.get('limit')) || 10;
   
-  console.log('History request details:', { userId, searchTerm, limit });
+  console.log('History request details:', { searchTerm, limit });
   
   try {
-    const history = await getCalculationHistory(userId, searchTerm, limit);
+    const history = await getCalculationHistory(searchTerm, limit);
     
     return NextResponse.json({
       success: true,
@@ -913,60 +1225,102 @@ export async function GET(request) {
   }
 }
 
-// New endpoint to get calculation details by ID
 export async function PUT(request) {
-  console.log('PUT /api/user_dashboard/operational_task/fee_com_cal called');
+  console.log('🔍 PUT /api/user_dashboard/operational_task/fee_com_cal called - FULL DEBUG');
+  
+  // Get the full URL for debugging
+  const url = new URL(request.url);
+  console.log('Request URL:', url.toString());
+  console.log('Request method:', request.method);
   
   // Get cookies from request headers
   const cookieHeader = request.headers.get('cookie') || '';
-  const cookies = Object.fromEntries(
-    cookieHeader.split(';').map(cookie => {
-      const [key, ...rest] = cookie.trim().split('=');
-      return [key, rest.join('=')];
-    })
-  );
-  
-  const userId = cookies.socPortalId || 'Unknown';
+  console.log('Cookies received:', cookieHeader);
   
   try {
-    const { feeComCalId } = await request.json();
+    // Parse the request body
+    const body = await request.json();
+    console.log('Request body:', body);
+    
+    const { feeComCalId } = body;
     
     if (!feeComCalId) {
+      console.error('❌ Missing feeComCalId in request body');
       return NextResponse.json(
         { success: false, message: 'Missing fee_com_cal_id' },
         { status: 400 }
       );
     }
 
-    const calculationDetails = await getCalculationDetails(userId, feeComCalId);
+    console.log('🔍 Looking for calculation with ID:', feeComCalId);
+    
+    const calculationDetails = await getCalculationDetails(feeComCalId);
     
     if (!calculationDetails) {
+      console.error('❌ Calculation not found for ID:', feeComCalId);
       return NextResponse.json(
         { success: false, message: 'Calculation not found' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Calculation found:', calculationDetails.fee_com_cal_id);
+    
+    // Parse the calculation results
+    let calculationResults;
+    try {
+      calculationResults = typeof calculationDetails.calculation_results === 'string' 
+        ? JSON.parse(calculationDetails.calculation_results)
+        : calculationDetails.calculation_results;
+    } catch (parseError) {
+      console.error('Error parsing calculation results:', parseError);
+      calculationResults = calculationDetails.calculation_results;
+    }
+
+    // Extract feeCommType and dropPointType from the stored data
+    let feeCommType = calculationDetails.fee_comm_type;
+    let dropPointType = null;
+
+    if (feeCommType && feeCommType.includes('Drop Point')) {
+      if (feeCommType.includes('Mixed')) {
+        feeCommType = 'Drop Point';
+        dropPointType = 'Mixed';
+      } else if (feeCommType.includes('Fixed')) {
+        feeCommType = 'Drop Point';
+        dropPointType = 'Fixed';
+      } else {
+        feeCommType = 'Drop Point';
+        dropPointType = calculationResults.summary?.dropPointType || 'Mixed';
+      }
+    }
+
+    // Ensure the summary contains the correct type information
+    if (calculationResults.summary) {
+      calculationResults.summary.feeCommType = feeCommType;
+      if (feeCommType === 'Drop Point') {
+        calculationResults.summary.dropPointType = dropPointType;
+      }
+      
+      // Add database fields to summary
+      calculationResults.summary.feeComCalId = calculationDetails.fee_com_cal_id;
+      calculationResults.summary.fileName = calculationDetails.file_name;
+      calculationResults.summary.billerName = calculationDetails.biller_name;
+      calculationResults.summary.trackBy = calculationDetails.track_by;
+      calculationResults.summary.created_at = calculationDetails.created_at;
+    }
+
+    console.log('✅ Successfully returning calculation results');
+    
     return NextResponse.json({
       success: true,
-      data: {
-        ...calculationDetails.calculation_results,
-        summary: {
-          ...calculationDetails.calculation_results.summary,
-          feeComCalId: calculationDetails.fee_com_cal_id,
-          fileName: calculationDetails.file_name,
-          billerName: calculationDetails.biller_name,
-          feeCommType: calculationDetails.fee_comm_type,
-          trackBy: calculationDetails.track_by,
-          created_at: calculationDetails.created_at
-        }
-      }
+      data: calculationResults
     });
     
   } catch (error) {
-    console.error('Failed to fetch calculation details:', error);
+    console.error('❌ Failed to fetch calculation details:', error);
+    console.error('Error stack:', error.stack);
     return NextResponse.json(
-      { success: false, message: 'Failed to fetch calculation details' },
+      { success: false, message: 'Failed to fetch calculation details: ' + error.message },
       { status: 500 }
     );
   }
