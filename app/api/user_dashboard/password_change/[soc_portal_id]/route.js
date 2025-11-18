@@ -1,3 +1,4 @@
+//app/api/user_dashboard/password_change/[soc_portal_id]/route.js
 import { query } from '../../../../../lib/db';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';

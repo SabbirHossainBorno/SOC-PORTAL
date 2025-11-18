@@ -44,7 +44,7 @@ const UserDashboardSidebar = () => {
       children: [
         { label: 'Assign Task', path: '/user_dashboard/task_management/assign_task' },
         { label: 'My Tasks', path: '/user_dashboard/task_management/my_task' },
-        { label: 'Task Archive', path: '/user_dashboard/task_management/task_history' }
+        { label: 'Task Log', path: '/user_dashboard/task_management/task_log' }
       ]
     },
     { 

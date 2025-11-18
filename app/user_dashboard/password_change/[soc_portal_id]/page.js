@@ -258,7 +258,7 @@ export default function PasswordChangePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200"
+          className="bg-white rounded shadow-lg overflow-hidden border border-gray-200"
         >
           <div className="p-6 sm:p-8">
             <div className="flex items-center mb-6">
@@ -306,7 +306,7 @@ export default function PasswordChangePage() {
                       name="newPassword"
                       value={formData.newPassword}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800"
+                      className="w-full px-4 py-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800"
                       required
                       autoComplete="new-password"
                     />

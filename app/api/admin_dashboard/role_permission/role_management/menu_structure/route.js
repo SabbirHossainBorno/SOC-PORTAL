@@ -28,8 +28,8 @@ export async function GET() {
         icon: 'FaTasks',
         children: [
           { path: '/user_dashboard/task_management/assign_task', label: 'Assign Task' },
-          { path: '/user_dashboard/task_management/my_task', label: 'My Tasks' },
-          { path: '/user_dashboard/task_management/task_history', label: 'Task Archive' }
+          { path: '/user_dashboard/task_management/my_task', label: 'My Task' },
+          { path: '/user_dashboard/task_management/task_log', label: 'Task Log' }
         ]
       },
       {
@@ -43,46 +43,46 @@ export async function GET() {
         ]
       },
       {
-      path: '/user_dashboard/documents',
-      label: 'Document Hub',
-      icon: 'FaFileAlt',
-      children: [
-        { path: '/user_dashboard/document_hub/access_form_tracker', label: 'Access Form Tracker' },
-        { path: '/user_dashboard/document_hub/access_form_log', label: 'Access Form Log' },
-        // Hidden edit routes - only for permission management (ALL BASE PATHS)
-        { 
-          path: '/user_dashboard/document_hub/access_form_edit', 
-          label: 'Edit Access Form', 
-          isHidden: true 
-        },
-        { path: '/user_dashboard/document_hub/other_document_tracker', label: 'Document Tracker' },
-        { path: '/user_dashboard/document_hub/other_document_log', label: 'Document Log' },
-        // Hidden edit routes - only for permission management (ALL BASE PATHS)
-        { 
-          path: '/user_dashboard/document_hub/other_document_tracker/device_tracker/edit', // CHANGED: removed [dt_id]
-          label: 'Edit Device Tracker', 
-          isHidden: true 
-        },
-        { 
-          path: '/user_dashboard/document_hub/other_document_tracker/sim_tracker/edit', 
-          label: 'Edit SIM Tracker', 
-          isHidden: true 
-        },
-        { 
-          path: '/user_dashboard/document_hub/other_document_tracker/portal_tracker/edit', 
-          label: 'Edit Portal Tracker', 
-          isHidden: true 
-        }
-      ]
-    },
-    { 
-      path: '/user_dashboard/operational_task',
-      label: 'Operational Task', 
-      icon: 'BsMotherboardFill', 
-      children: [
-        { path: '/user_dashboard/operational_task/fee_com_cal', label: 'Fee-Com Calculation' },
-      ]
-    },
+        path: '/user_dashboard/documents',
+        label: 'Document Hub',
+        icon: 'FaFileAlt',
+        children: [
+          { path: '/user_dashboard/document_hub/access_form_tracker', label: 'Access Form Tracker' },
+          { path: '/user_dashboard/document_hub/access_form_log', label: 'Access Form Log' },
+          // Hidden edit routes - only for permission management (ALL BASE PATHS)
+          { 
+            path: '/user_dashboard/document_hub/access_form_edit', 
+            label: 'Edit Access Form', 
+            isHidden: true 
+          },
+          { path: '/user_dashboard/document_hub/other_document_tracker', label: 'Document Tracker' },
+          { path: '/user_dashboard/document_hub/other_document_log', label: 'Document Log' },
+          // Hidden edit routes - only for permission management (ALL BASE PATHS)
+          { 
+            path: '/user_dashboard/document_hub/other_document_tracker/device_tracker/edit',
+            label: 'Edit Device Tracker', 
+            isHidden: true 
+          },
+          { 
+            path: '/user_dashboard/document_hub/other_document_tracker/sim_tracker/edit', 
+            label: 'Edit SIM Tracker', 
+            isHidden: true 
+          },
+          { 
+            path: '/user_dashboard/document_hub/other_document_tracker/portal_tracker/edit', 
+            label: 'Edit Portal Tracker', 
+            isHidden: true 
+          }
+        ]
+      },
+      { 
+        path: '/user_dashboard/operational_task',
+        label: 'Operational Task', 
+        icon: 'BsMotherboardFill', 
+        children: [
+          { path: '/user_dashboard/operational_task/fee_com_cal', label: 'Fee-Com Calculation' },
+        ]
+      },
       {
         path: '/user_dashboard/reports',
         label: 'Performance Reports',
@@ -113,6 +113,21 @@ export async function GET() {
         path: '/user_dashboard/activity_log',
         label: 'Activity Log',
         icon: 'FaHistory',
+        children: []
+      },
+      // ADD THESE NEW ROUTES FOR SETTINGS AND PASSWORD CHANGE
+      {
+        path: '/user_dashboard/settings',
+        label: 'Settings',
+        icon: 'FaCog',
+        isHidden: true, // Hidden from sidebar but available for permissions
+        children: []
+      },
+      {
+        path: '/user_dashboard/password_change',
+        label: 'Password Change',
+        icon: 'FaLock',
+        isHidden: true, // Hidden from sidebar but available for permissions
         children: []
       }
     ];

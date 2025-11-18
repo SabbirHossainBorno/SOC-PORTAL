@@ -20,13 +20,15 @@ export default function AssignTaskPage() {
   const [internUsers, setInternUsers] = useState([]);
   const [socUsers, setSocUsers] = useState([]);
   const [selectedAssignees, setSelectedAssignees] = useState([]);
+  const [blockedAssignees, setBlockedAssignees] = useState([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tasks, setTasks] = useState([{ 
     taskTitle: '', 
     taskType: '', 
     remark: '', 
     individualAssignees: [],
-    showIndividualDropdown: false 
+    showIndividualDropdown: false,
+    isImportant: false
   }]);
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,9 +45,8 @@ export default function AssignTaskPage() {
         if (userResponse.ok) {
           setCurrentUser(userData);
           
-          // Fetch today's roster
-          const today = new Date().toISOString().split('T')[0];
-          const rosterResponse = await fetch(`/api/user_dashboard/task_management/assign_task?date=${today}`);
+          // Fetch today's roster - REMOVE the date parameter to let backend handle timezone
+          const rosterResponse = await fetch('/api/user_dashboard/task_management/assign_task');
           const rosterResult = await rosterResponse.json();
           
           if (rosterResponse.ok && rosterResult.success) {
@@ -54,6 +55,10 @@ export default function AssignTaskPage() {
             // Auto-select next shift persons
             const nextShiftPersons = getNextShiftPersons(rosterResult.data, userData.shortName);
             setSelectedAssignees(nextShiftPersons);
+
+            // Calculate blocked assignees (previous shifts)
+            const blockedPersons = getBlockedAssignees(rosterResult.data, userData.shortName);
+            setBlockedAssignees(blockedPersons);
           } else {
             throw new Error(rosterResult.message || 'Failed to fetch roster data');
           }
@@ -121,6 +126,38 @@ export default function AssignTaskPage() {
     return nextShiftPersons;
   };
 
+  // Get blocked assignees (previous shifts)
+  const getBlockedAssignees = (roster, currentUserShortName) => {
+    if (!roster || !currentUserShortName) return [];
+    
+    const shiftOrder = ['MORNING', 'REGULAR', 'NOON', 'EVENING', 'NIGHT'];
+    
+    // Find current user's shift
+    const currentUserShift = Object.entries(roster).find(([key, value]) => 
+      key.toLowerCase() === currentUserShortName.toLowerCase()
+    )?.[1];
+
+    if (!currentUserShift) return [];
+
+    const currentShiftIndex = shiftOrder.indexOf(currentUserShift.toUpperCase());
+    if (currentShiftIndex === -1) return [];
+
+    // Get previous shifts (blocked shifts)
+    const previousShifts = shiftOrder.slice(0, currentShiftIndex);
+    
+    // Find persons in previous shifts (exclude OFFDAY and empty shifts)
+    const blockedPersons = Object.entries(roster)
+      .filter(([person, shift]) => 
+        previousShifts.includes(shift.toUpperCase()) && 
+        shift !== 'OFFDAY' && 
+        shift !== '' &&
+        person.toLowerCase() !== currentUserShortName.toLowerCase()
+      )
+      .map(([person]) => person);
+
+    return blockedPersons;
+  };
+
   // Add new task field
   const addTask = () => {
     setTasks([...tasks, { 
@@ -128,7 +165,8 @@ export default function AssignTaskPage() {
       taskType: '', 
       remark: '', 
       individualAssignees: [],
-      showIndividualDropdown: false 
+      showIndividualDropdown: false,
+      isImportant: false
     }]);
   };
 
@@ -150,6 +188,12 @@ export default function AssignTaskPage() {
 
   // Toggle global assignee selection
   const toggleAssignee = (personName) => {
+    // Check if person is blocked
+    if (blockedAssignees.includes(personName)) {
+      toast.error(`Cannot assign to ${formatName(personName)} - Previous shift member`);
+      return;
+    }
+    
     setSelectedAssignees(prev => 
       prev.includes(personName)
         ? prev.filter(name => name !== personName)
@@ -168,6 +212,12 @@ export default function AssignTaskPage() {
 
   // Add individual assignee to task
   const addIndividualAssignee = (taskIndex, personName) => {
+    // Check if person is blocked
+    if (blockedAssignees.includes(personName)) {
+      toast.error(`Cannot assign to ${formatName(personName)} - Previous shift member`);
+      return;
+    }
+
     const newTasks = tasks.map((task, index) => {
       if (index === taskIndex) {
         const updatedAssignees = task.individualAssignees.includes(personName)
@@ -293,29 +343,29 @@ export default function AssignTaskPage() {
   };
   
   // Helper function to get user's shift with case-insensitive matching
-const getUserShift = (user) => {
-  if (!user || !rosterData) return null;
-  
-  const userName = user.shortName;
-  
-  // Try exact match first
-  if (rosterData[userName]) {
-    return rosterData[userName];
-  }
-  
-  // Try case-insensitive match
-  const rosterKey = Object.keys(rosterData).find(key => 
-    key.toLowerCase() === userName.toLowerCase()
-  );
-  
-  return rosterKey ? rosterData[rosterKey] : null;
-};
+  const getUserShift = (user) => {
+    if (!user || !rosterData) return null;
+    
+    const userName = user.shortName;
+    
+    // Try exact match first
+    if (rosterData[userName]) {
+      return rosterData[userName];
+    }
+    
+    // Try case-insensitive match
+    const rosterKey = Object.keys(rosterData).find(key => 
+      key.toLowerCase() === userName.toLowerCase()
+    );
+    
+    return rosterKey ? rosterData[rosterKey] : null;
+  };
 
-// Helper function to get shift badge with user object
-const getUserShiftBadge = (user) => {
-  const shift = getUserShift(user);
-  return getShiftBadge(shift);
-};
+  // Helper function to get shift badge with user object
+  const getUserShiftBadge = (user) => {
+    const shift = getUserShift(user);
+    return getShiftBadge(shift);
+  };
 
   // Handle assignment
   const handleAssign = async () => {
@@ -330,6 +380,7 @@ const getUserShiftBadge = (user) => {
           taskTitle: task.taskTitle,
           taskType: task.taskType,
           remark: task.remark,
+          isImportant: task.isImportant,
           assignedTo: getFinalAssignees(task)
         }))
         .filter(task => task.assignedTo.length > 0);
@@ -357,7 +408,8 @@ const getUserShiftBadge = (user) => {
           taskType: '', 
           remark: '', 
           individualAssignees: [],
-          showIndividualDropdown: false 
+          showIndividualDropdown: false,
+          isImportant: false
         }]);
         setSelectedAssignees(getNextShiftPersons(rosterData, currentUser.shortName));
       } else {
@@ -423,12 +475,11 @@ const getUserShiftBadge = (user) => {
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-medium text-gray-700">Current Shift</div>
-<div
-  className={`px-0.5 py-0.5 rounded text-xs font-semibold text-center flex items-center justify-center ${getUserShiftBadge(currentUser)}`}
->
-  {getUserShift(currentUser) || 'Not Assigned'}
-</div>
-
+                      <div
+                        className={`px-0.5 py-0.5 rounded text-xs font-semibold text-center flex items-center justify-center ${getUserShiftBadge(currentUser)}`}
+                      >
+                        {getUserShift(currentUser) || 'Not Assigned'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -518,14 +569,28 @@ const getUserShiftBadge = (user) => {
                     key={index}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-br from-gray-50 to-white rounded p-4 border border-gray-300 shadow-sm"
+                    className={`rounded p-4 border shadow-sm ${
+                      task.isImportant 
+                        ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-300' 
+                        : 'bg-gradient-to-br from-gray-50 to-white border-gray-300'
+                    }`}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-bold text-gray-900 flex items-center">
-                        <span className="w-6 h-6 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full text-white text-xs flex items-center justify-center mr-2 shadow-md">
+                        <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center mr-2 shadow-md ${
+                          task.isImportant
+                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                            : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                        }`}>
                           {index + 1}
                         </span>
                         Task {index + 1}
+                        {task.isImportant && (
+                          <span className="ml-2 px-2 py-1 bg-yellow-500 text-white rounded-full text-xs font-bold flex items-center">
+                            <FaExclamationTriangle className="mr-1" />
+                            IMPORTANT
+                          </span>
+                        )}
                       </h3>
                       
                       {tasks.length > 1 && (
@@ -586,6 +651,34 @@ const getUserShiftBadge = (user) => {
                       </div>
                     </div>
 
+                    {/* Important Flag */}
+                    <div className="flex items-center justify-between mt-3 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded border border-yellow-200">
+                      <div>
+                        <label className="block text-sm font-semibold text-yellow-800 mb-1">
+                          <FaExclamationTriangle className="inline mr-1 text-yellow-600" />
+                          Important Task
+                        </label>
+                        <p className="text-xs text-yellow-600">
+                          {task.isImportant 
+                            ? 'This task is marked as important and will be highlighted'
+                            : 'Mark this task as important for priority attention'
+                          }
+                        </p>
+                      </div>
+                      
+                      <button
+                        onClick={() => updateTask(index, 'isImportant', !task.isImportant)}
+                        className={`flex items-center px-3 py-2 rounded font-semibold text-sm transition-all duration-200 ${
+                          task.isImportant
+                            ? 'bg-yellow-500 text-white hover:bg-yellow-600 shadow-md'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        <FaExclamationTriangle className="mr-1" />
+                        {task.isImportant ? 'Important' : 'Mark Important'}
+                      </button>
+                    </div>
+
                     {/* Individual Assignment Section */}
                     <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded border border-blue-200">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
@@ -643,25 +736,43 @@ const getUserShiftBadge = (user) => {
                           >
                             <div className="max-h-40 overflow-y-auto p-1">
                               {socUsers
-                                .filter(user => user.short_name !== currentUser?.shortName)
-                                .map(user => (
-                                  <div
-                                    key={user.short_name}
-                                    onClick={() => addIndividualAssignee(index, user.short_name)}
-                                    className={`p-2 rounded cursor-pointer transition-colors text-sm ${
-                                      task.individualAssignees.includes(user.short_name)
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : 'hover:bg-gray-100 text-gray-800'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-medium">{formatName(user.short_name)}</span>
-                                      {task.individualAssignees.includes(user.short_name) && (
-                                        <FaCheckCircle className="text-blue-500 text-sm" />
-                                      )}
+                                .filter(user => {
+                                  const isBlocked = blockedAssignees.includes(user.short_name);
+                                  const isCurrentUser = user.short_name === currentUser?.shortName;
+                                  return !isCurrentUser && !isBlocked;
+                                })
+                                .map(user => {
+                                  const isBlocked = blockedAssignees.includes(user.short_name);
+                                  return (
+                                    <div
+                                      key={user.short_name}
+                                      onClick={() => !isBlocked && addIndividualAssignee(index, user.short_name)}
+                                      className={`p-2 rounded cursor-pointer transition-colors text-sm ${
+                                        isBlocked
+                                          ? 'bg-red-50 text-red-700 cursor-not-allowed opacity-60'
+                                          : task.individualAssignees.includes(user.short_name)
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'hover:bg-gray-100 text-gray-800'
+                                      }`}
+                                      title={isBlocked ? 'Cannot assign to previous shift member' : ''}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium">
+                                          {formatName(user.short_name)}
+                                          {isBlocked && (
+                                            <span className="ml-1 text-red-500 text-xs">(Previous Shift)</span>
+                                          )}
+                                        </span>
+                                        {task.individualAssignees.includes(user.short_name) && !isBlocked && (
+                                          <FaCheckCircle className="text-blue-500 text-sm" />
+                                        )}
+                                        {isBlocked && (
+                                          <FaExclamationTriangle className="text-red-500 text-sm" />
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                ))
+                                  );
+                                })
                               }
                             </div>
                           </motion.div>
@@ -764,30 +875,43 @@ const getUserShiftBadge = (user) => {
                       .map(intern => {
                         const formattedName = formatName(intern.name);
                         const isGloballySelected = selectedAssignees.includes(intern.name);
+                        const isBlocked = blockedAssignees.includes(intern.name);
                         const shift = intern.shift || 'INTERN';
                         
                         return (
                           <motion.div
                             key={intern.name}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() => toggleAssignee(intern.name)}
+                            whileHover={{ scale: isBlocked ? 1 : 1.02 }}
+                            whileTap={{ scale: isBlocked ? 1 : 0.98 }}
+                            onClick={() => !isBlocked && toggleAssignee(intern.name)}
                             className={`p-2 rounded border cursor-pointer transition-all duration-200 relative overflow-hidden ${
-                              isGloballySelected
-                                ? 'border-purple-500 bg-purple-50 shadow-sm'
-                                : 'border-gray-200 bg-white hover:border-gray-300'
+                              isBlocked
+                                ? 'border-red-300 bg-red-50 cursor-not-allowed opacity-60'
+                                : isGloballySelected
+                                  ? 'border-purple-500 bg-purple-50 shadow-sm'
+                                  : 'border-gray-200 bg-white hover:border-gray-300'
                             } ring-1 ring-purple-200`}
+                            title={isBlocked ? 'Cannot assign to previous shift member' : ''}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2 flex-1 min-w-0">
                                 <div className={`w-3 h-3 rounded-full border flex-shrink-0 ${
-                                  isGloballySelected 
-                                    ? 'bg-purple-500 border-purple-500' 
-                                    : 'bg-white border-gray-300'
+                                  isBlocked
+                                    ? 'bg-red-300 border-red-400'
+                                    : isGloballySelected 
+                                      ? 'bg-purple-500 border-purple-500' 
+                                      : 'bg-white border-gray-300'
                                 }`}></div>
                                 <div className="flex items-center space-x-1 min-w-0 flex-1">
                                   <FaUserTie className="text-purple-500 text-xs flex-shrink-0" />
-                                  <span className="font-bold text-gray-900 text-sm truncate">{formattedName}</span>
+                                  <span className={`font-bold text-sm truncate ${
+                                    isBlocked ? 'text-red-700' : 'text-gray-900'
+                                  }`}>
+                                    {formattedName}
+                                    {isBlocked && (
+                                      <span className="ml-1 text-red-500 text-xs">(Previous Shift)</span>
+                                    )}
+                                  </span>
                                 </div>
                               </div>
 
@@ -799,8 +923,10 @@ const getUserShiftBadge = (user) => {
                                 }`}>
                                   {intern.isInRoster ? shift : 'INTERN'}
                                 </span>
-                                {isGloballySelected ? (
+                                {isGloballySelected && !isBlocked ? (
                                   <FaCheckCircle className="text-purple-500 text-sm flex-shrink-0" />
+                                ) : isBlocked ? (
+                                  <FaExclamationTriangle className="text-red-500 text-sm flex-shrink-0" />
                                 ) : (
                                   <div className="w-4 h-4 flex-shrink-0"></div>
                                 )}
@@ -820,35 +946,50 @@ const getUserShiftBadge = (user) => {
                     filteredPersons.map(([personName, shift]) => {
                       const formattedName = formatName(personName);
                       const isGloballySelected = selectedAssignees.includes(personName);
+                      const isBlocked = blockedAssignees.includes(personName);
                       
                       return (
                         <motion.div
                           key={personName}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => toggleAssignee(personName)}
+                          whileHover={{ scale: isBlocked ? 1 : 1.02 }}
+                          whileTap={{ scale: isBlocked ? 1 : 0.98 }}
+                          onClick={() => !isBlocked && toggleAssignee(personName)}
                           className={`p-2 rounded border cursor-pointer transition-all duration-200 ${
-                            isGloballySelected
-                              ? 'border-blue-500 bg-blue-50 shadow-sm'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
+                            isBlocked
+                              ? 'border-red-300 bg-red-50 cursor-not-allowed opacity-60'
+                              : isGloballySelected
+                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
                           }`}
+                          title={isBlocked ? `Cannot assign to previous shift member (${shift})` : ''}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2 flex-1 min-w-0">
                               <div className={`w-3 h-3 rounded-full border flex-shrink-0 ${
-                                isGloballySelected 
-                                  ? 'bg-blue-500 border-blue-500' 
-                                  : 'bg-white border-gray-300'
+                                isBlocked
+                                  ? 'bg-red-300 border-red-400'
+                                  : isGloballySelected 
+                                    ? 'bg-blue-500 border-blue-500' 
+                                    : 'bg-white border-gray-300'
                               }`}></div>
-                              <span className="font-bold text-gray-900 text-sm truncate">{formattedName}</span>
+                              <span className={`font-bold text-sm truncate ${
+                                isBlocked ? 'text-red-700' : 'text-gray-900'
+                              }`}>
+                                {formattedName}
+                                {isBlocked && (
+                                  <span className="ml-1 text-red-500 text-xs">(Previous Shift)</span>
+                                )}
+                              </span>
                             </div>
 
                             <div className="flex items-center space-x-1 flex-shrink-0">
                               <span className={`px-1 py-1 rounded text-xs font-bold ${getShiftBadge(shift)}`}>
                                 {shift}
                               </span>
-                              {isGloballySelected ? (
+                              {isGloballySelected && !isBlocked ? (
                                 <FaCheckCircle className="text-blue-500 text-sm flex-shrink-0" />
+                              ) : isBlocked ? (
+                                <FaExclamationTriangle className="text-red-500 text-sm flex-shrink-0" />
                               ) : (
                                 <div className="w-4 h-4 flex-shrink-0"></div>
                               )}
@@ -892,6 +1033,23 @@ const getUserShiftBadge = (user) => {
                   </div>
                 </div>
               )}
+
+              {/* Blocked Assignees Warning */}
+              {blockedAssignees.length > 0 && (
+                <div className="mt-3 p-3 bg-gradient-to-r from-red-50 to-pink-50 rounded border border-red-200">
+                  <div className="flex items-center">
+                    <FaExclamationTriangle className="text-red-600 mr-2" />
+                    <div>
+                      <span className="font-semibold text-red-800 text-sm">
+                        {blockedAssignees.length} previous shift member(s) blocked from assignment
+                      </span>
+                      <p className="text-red-600 text-xs">
+                        You cannot assign tasks to team members from previous shifts
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Action Button */}
@@ -928,12 +1086,20 @@ const getUserShiftBadge = (user) => {
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Today&apos;s Roster</h2>
                   <p className="text-gray-600 text-sm">
-                    {new Date().toLocaleDateString('en-US', { 
-                      weekday: 'short', 
-                      year: 'numeric', 
-                      month: 'short', 
-                      day: 'numeric' 
-                    })}
+                    {rosterData && rosterData.date ? 
+                      new Date(rosterData.date).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      }) : 
+                      new Date().toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })
+                    }
                   </p>
                 </div>
               </div>
@@ -1032,26 +1198,30 @@ const getUserShiftBadge = (user) => {
                 
                 <button
                   onClick={() => {
-                    const allAvailable = availablePersons.map(([name]) => name);
+                    const allAvailable = availablePersons
+                      .filter(([name]) => !blockedAssignees.includes(name))
+                      .map(([name]) => name);
                     setSelectedAssignees(allAvailable);
                     toast.success('Selected all available team members');
                   }}
                   className="w-full text-left p-2 bg-green-50 hover:bg-green-100 rounded border border-green-200 transition-all duration-200 hover:shadow-sm text-sm"
                 >
                   <div className="font-semibold text-green-800">Select All Available</div>
-                  <div className="text-xs text-green-600 mt-0.5">Select all except Off Day</div>
+                  <div className="text-xs text-green-600 mt-0.5">Select all except Off Day & Previous Shifts</div>
                 </button>
 
                 <button
                   onClick={() => {
-                    const internNames = allInterns.map(intern => intern.name);
+                    const internNames = allInterns
+                      .filter(intern => !blockedAssignees.includes(intern.name))
+                      .map(intern => intern.name);
                     setSelectedAssignees(internNames);
-                    toast.success('Selected all interns');
+                    toast.success('Selected all available interns');
                   }}
                   className="w-full text-left p-2 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-all duration-200 hover:shadow-sm text-sm"
                 >
                   <div className="font-semibold text-purple-800">Select All Interns</div>
-                  <div className="text-xs text-purple-600 mt-0.5">Select all intern members</div>
+                  <div className="text-xs text-purple-600 mt-0.5">Select all available intern members</div>
                 </button>
                 
                 <button
@@ -1082,6 +1252,14 @@ const getUserShiftBadge = (user) => {
                 <div className="flex items-start">
                   <div className="w-4 h-4 bg-indigo-500 text-white rounded-full flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">3</div>
                   <p><strong>Priority:</strong> Individual assignees override global assignees</p>
+                </div>
+                <div className="flex items-start">
+                  <div className="w-4 h-4 bg-indigo-500 text-white rounded-full flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">4</div>
+                  <p><strong>Shift Rules:</strong> Cannot assign to previous shift members</p>
+                </div>
+                <div className="flex items-start">
+                  <div className="w-4 h-4 bg-indigo-500 text-white rounded-full flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">5</div>
+                  <p><strong>Important Tasks:</strong> Mark critical tasks for priority attention</p>
                 </div>
               </div>
             </div>
@@ -1116,70 +1294,82 @@ const getUserShiftBadge = (user) => {
               <div className="p-4 max-h-[50vh] overflow-y-auto">
                 {/* Tasks Summary */}
                 <div className="mb-4">
-  <h4 className="font-bold text-gray-900 text-base mb-2 flex items-center">
-    <FaTasks className="mr-2 text-blue-500" />
-    Tasks to Assign ({tasks.filter(t => t.taskTitle.trim() && getFinalAssignees(t).length > 0).length})
-  </h4>
-  <div className="space-y-2">
-    {tasks
-      .filter(task => task.taskTitle.trim() && getFinalAssignees(task).length > 0)
-      .map((task, index) => {
-        const finalAssignees = getFinalAssignees(task);
-        const assignmentType = task.individualAssignees.length > 0 ? 'Individual' : 'Global';
-        const isIndividualAssignment = task.individualAssignees.length > 0;
-        
-        return (
-          <div key={index} className="bg-gray-50 rounded p-2 border border-gray-300">
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-semibold text-gray-900 text-sm">
-                {index + 1}. {task.taskTitle}
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                isIndividualAssignment 
-                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                  : 'bg-green-100 text-green-800 border border-green-300'
-              }`}>
-                {assignmentType}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700 mb-1">
-              <div>
-                <strong className="text-gray-800">Type:</strong> {task.taskType || 'Not specified'}
-              </div>
-              <div>
-                <strong className="text-gray-800">Remark:</strong> {task.remark || 'None'}
-              </div>
-            </div>
-            <div>
-              <strong className="text-gray-800 text-xs">
-                Assigned to ({finalAssignees.length}) - {isIndividualAssignment ? 'Individual' : 'Global'}:
-              </strong>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {finalAssignees.map(assignee => (
-                  <span 
-                    key={assignee}
-                    className={`px-1 py-0.5 rounded text-xs font-medium border ${
-                      isIndividualAssignment
-                        ? 'bg-blue-100 text-blue-800 border-blue-200'
-                        : 'bg-green-100 text-green-800 border-green-200'
-                    }`}
-                  >
-                    {formatName(assignee)}
-                  </span>
-                ))}
-              </div>
-            </div>
-            {isIndividualAssignment && (
-              <div className="mt-1 text-xs text-blue-600">
-                <FaExclamationTriangle className="inline mr-1" />
-                Individual assignment overrides global assignees
-              </div>
-            )}
-          </div>
-        );
-      })}
-  </div>
-</div>
+                  <h4 className="font-bold text-gray-900 text-base mb-2 flex items-center">
+                    <FaTasks className="mr-2 text-blue-500" />
+                    Tasks to Assign ({tasks.filter(t => t.taskTitle.trim() && getFinalAssignees(t).length > 0).length})
+                  </h4>
+                  <div className="space-y-2">
+                    {tasks
+                      .filter(task => task.taskTitle.trim() && getFinalAssignees(task).length > 0)
+                      .map((task, index) => {
+                        const finalAssignees = getFinalAssignees(task);
+                        const assignmentType = task.individualAssignees.length > 0 ? 'Individual' : 'Global';
+                        const isIndividualAssignment = task.individualAssignees.length > 0;
+                        
+                        return (
+                          <div key={index} className={`rounded p-2 border ${
+                            task.isImportant 
+                              ? 'bg-yellow-50 border-yellow-300' 
+                              : 'bg-gray-50 border-gray-300'
+                          }`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center">
+                                <span className="font-semibold text-gray-900 text-sm">
+                                  {index + 1}. {task.taskTitle}
+                                </span>
+                                {task.isImportant && (
+                                  <span className="ml-2 px-2 py-0.5 bg-yellow-500 text-white rounded-full text-xs font-bold flex items-center">
+                                    <FaExclamationTriangle className="mr-1" />
+                                    IMPORTANT
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                isIndividualAssignment 
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                  : 'bg-green-100 text-green-800 border border-green-300'
+                              }`}>
+                                {assignmentType}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700 mb-1">
+                              <div>
+                                <strong className="text-gray-800">Type:</strong> {task.taskType || 'Not specified'}
+                              </div>
+                              <div>
+                                <strong className="text-gray-800">Remark:</strong> {task.remark || 'None'}
+                              </div>
+                            </div>
+                            <div>
+                              <strong className="text-gray-800 text-xs">
+                                Assigned to ({finalAssignees.length}) - {isIndividualAssignment ? 'Individual' : 'Global'}:
+                              </strong>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {finalAssignees.map(assignee => (
+                                  <span 
+                                    key={assignee}
+                                    className={`px-1 py-0.5 rounded text-xs font-medium border ${
+                                      isIndividualAssignment
+                                        ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                        : 'bg-green-100 text-green-800 border-green-200'
+                                    }`}
+                                  >
+                                    {formatName(assignee)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            {isIndividualAssignment && (
+                              <div className="mt-1 text-xs text-blue-600">
+                                <FaExclamationTriangle className="inline mr-1" />
+                                Individual assignment overrides global assignees
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
 
                 {/* Assignment Summary */}
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded p-3 border border-blue-200">
@@ -1211,6 +1401,18 @@ const getUserShiftBadge = (user) => {
                           ? `${selectedAssignees.length} persons` 
                           : 'None'
                         }
+                      </div>
+                    </div>
+                    <div>
+                      <strong className="text-gray-800">Important Tasks:</strong>
+                      <div className="text-gray-700">
+                        {tasks.filter(t => t.isImportant).length}
+                      </div>
+                    </div>
+                    <div>
+                      <strong className="text-gray-800">Blocked Assignees:</strong>
+                      <div className="text-gray-700">
+                        {blockedAssignees.length} previous shift members
                       </div>
                     </div>
                   </div>

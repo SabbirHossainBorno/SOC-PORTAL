@@ -6,6 +6,11 @@ import sendTelegramAlert from '../../../../../lib/telegramAlert';
 import getClientIP from '../../../../../lib/utils/ipUtils';
 import { DateTime } from 'luxon';
 
+// Get current date in Asia/Dhaka timezone
+const getCurrentDateInDhaka = () => {
+  return DateTime.now().setZone('Asia/Dhaka').toISODate(); // Returns '2025-11-19'
+};
+
 // Get current time in Asia/Dhaka
 const getCurrentDateTime = () => {
   const now = DateTime.now().setZone('Asia/Dhaka');
@@ -19,8 +24,10 @@ const formatAssignmentAlert = (action, ipAddress, userAgent, userData, tasks, as
   const statusText = action.includes('SUCCESS') ? 'Successful' : 'Failed';
   
   const tasksSummary = tasks.map((task, index) => 
-    `${index + 1}. ${task.taskTitle} → ${task.assignedTo.join(', ')}`
+    `${task.isImportant ? '🚨 ' : ''}${task.taskTitle} → ${task.assignedTo.join(', ')}`
   ).join('\n');
+  
+  const importantTasksCount = tasks.filter(task => task.isImportant).length;
   
   return `📋 *SOC Portal Task Assignment ${statusText}*
 
@@ -30,6 +37,7 @@ const formatAssignmentAlert = (action, ipAddress, userAgent, userData, tasks, as
 🔖 *EID:* ${userData.eid}
 🆔 *Assignment ID:* ${assignmentId}
 📊 *Tasks Count:* ${tasks.length}
+🚨 *Important Tasks:* ${importantTasksCount}
 🕒 *Time:* ${time}
 📱 *Device:* ${userAgent.split(' ')[0]}
 
@@ -137,20 +145,23 @@ const generateAssignmentId = async (eid, sid) => {
   }
 };
 
-// Get today's roster
+// Get today's roster - FIXED: Use Asia/Dhaka timezone
 const getTodaysRoster = async (date, eid, sid) => {
   try {
-    console.log('Fetching roster for date:', date);
+    // If no date provided, use today's date in Asia/Dhaka
+    const queryDate = date || getCurrentDateInDhaka();
+    
+    console.log('Fetching roster for date:', queryDate);
     const rosterQuery = `
       SELECT * FROM roster_schedule 
       WHERE date = $1
     `;
     
-    const result = await query(rosterQuery, [date]);
+    const result = await query(rosterQuery, [queryDate]);
     console.log('Roster query result row count:', result.rows.length);
     
     if (result.rows.length === 0) {
-      console.log('No roster data found for date:', date);
+      console.log('No roster data found for date:', queryDate);
       return null;
     }
 
@@ -166,10 +177,15 @@ const getTodaysRoster = async (date, eid, sid) => {
 
     console.log('Processed roster data:', {
       totalFields: Object.keys(roster).length,
-      sampleData: Object.entries(roster).slice(0, 5)
+      sampleData: Object.entries(roster).slice(0, 5),
+      date: queryDate
     });
 
-    return roster;
+    return {
+      data: roster,
+      date: queryDate,
+      day: rosterRow.day // Include the day from database
+    };
   } catch (error) {
     console.error('Error fetching roster data:', error);
     
@@ -200,8 +216,8 @@ const storeAssignedTasks = async (assignmentId, tasks, assignedBy, eid, sid) => 
 
     const insertQuery = `
       INSERT INTO assigned_tasks 
-      (assign_task_id, task_title, task_type, assigned_by, assigned_to, remark, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      (assign_task_id, task_title, task_type, assigned_by, assigned_to, remark, is_important, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING assign_task_id, created_at
     `;
 
@@ -218,6 +234,7 @@ const storeAssignedTasks = async (assignmentId, tasks, assignedBy, eid, sid) => 
           taskTitle: task.taskTitle,
           taskType: task.taskType,
           remark: task.remark,
+          isImportant: task.isImportant,
           assignedBy,
           assignedTo: assignedToStr
         });
@@ -229,6 +246,7 @@ const storeAssignedTasks = async (assignmentId, tasks, assignedBy, eid, sid) => 
           assignedBy,
           assignedToStr,
           task.remark || null,
+          task.isImportant || false,
           currentTime,
           currentTime
         ]);
@@ -245,6 +263,7 @@ const storeAssignedTasks = async (assignmentId, tasks, assignedBy, eid, sid) => 
             taskTitle: task.taskTitle,
             taskType: task.taskType,
             remark: task.remark,
+            isImportant: task.isImportant,
             assignedBy: assignedBy,
             assignedTo: assignedToStr,
             assignedToCount: task.assignedTo.length,
@@ -331,14 +350,13 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
       VALUES ($1, $2, $3)
     `;
     
-    const taskSummary = tasks.map((task, index) => 
-      `${task.taskTitle} → ${task.assignedTo.join(', ')}`
-    ).join('; ');
+    const importantTasksCount = tasks.filter(task => task.isImportant).length;
+    const importantIndicator = importantTasksCount > 0 ? ` (including ${importantTasksCount} important tasks)` : '';
     
     console.log('Creating admin notification:', adminNotificationId);
     await client.query(adminNotificationQuery, [
       adminNotificationId,
-      `${assignedBy} assigned ${tasks.length} task(s) - ${assignmentId}`,
+      `${assignedBy} assigned ${tasks.length} task(s)${importantIndicator} - ${assignmentId}`,
       'Unread'
     ]);
 
@@ -352,6 +370,7 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
         notificationId: adminNotificationId,
         assignedBy: assignedBy,
         tasksCount: tasks.length,
+        importantTasksCount: importantTasksCount,
         databaseTable: 'admin_notification_details',
         operation: 'INSERT',
         timestamp: new Date().toISOString()
@@ -367,7 +386,7 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
     console.log('Creating user notification for assigner:', userNotificationIds[0]);
     await client.query(userNotificationQuery, [
       userNotificationIds[0],
-      `You assigned ${tasks.length} task(s) - ${assignmentId}`,
+      `You assigned ${tasks.length} task(s)${importantIndicator} - ${assignmentId}`,
       'Unread',
       socPortalId
     ]);
@@ -383,6 +402,7 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
         socPortalId: socPortalId,
         assignedBy: assignedBy,
         tasksCount: tasks.length,
+        importantTasksCount: importantTasksCount,
         databaseTable: 'user_notification_details',
         operation: 'INSERT',
         timestamp: new Date().toISOString()
@@ -416,17 +436,20 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
           // Find tasks assigned to this person
           const assignedTasks = tasks.filter(task => task.assignedTo.includes(assignee));
           const taskTitles = assignedTasks.map(task => task.taskTitle).join(', ');
+          const hasImportantTasks = assignedTasks.some(task => task.isImportant);
+          const importantIndicator = hasImportantTasks ? '🚨 IMPORTANT: ' : '';
           
           console.log(`Creating notification for ${assigneeShortName}:`, {
             notificationId: assigneeNotificationId,
             assignedTasksCount: assignedTasks.length,
+            hasImportantTasks: hasImportantTasks,
             taskTitles: taskTitles,
             socPortalId: assigneeSocPortalId
           });
 
           await client.query(userNotificationQuery, [
             assigneeNotificationId,
-            `New ${assignedTasks.length} task(s) assigned by ${assignedBy}: ${taskTitles} - ${assignmentId}`,
+            `${importantIndicator}New ${assignedTasks.length} task(s) assigned by ${assignedBy}: ${taskTitles} - ${assignmentId}`,
             'Unread',
             assigneeSocPortalId
           ]);
@@ -445,6 +468,7 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
               assigneeSocPortalId: assigneeSocPortalId,
               assigneeRole: assigneeRole,
               assignedTasksCount: assignedTasks.length,
+              hasImportantTasks: hasImportantTasks,
               databaseTable: 'user_notification_details',
               operation: 'INSERT',
               timestamp: new Date().toISOString()
@@ -496,6 +520,7 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
         uniqueAssignees: allAssignees.size,
         assigneeNotificationsCount: assigneeNotificationsCount,
         totalNotifications: totalNotifications,
+        importantTasksCount: importantTasksCount,
         timestamp: new Date().toISOString()
       }
     });
@@ -526,14 +551,17 @@ const createNotifications = async (tasks, assignedBy, assignmentId, socPortalId,
   }
 };
 
-// GET endpoint - Fetch today's roster
+// GET endpoint - Fetch today's roster - FIXED: Use Asia/Dhaka timezone
 export async function GET(request) {
   console.log('GET /api/user_dashboard/task_management/assign_task called');
   
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const dateParam = searchParams.get('date');
   
-  console.log('Fetching roster for date:', date);
+  // Use provided date or current date in Asia/Dhaka
+  const date = dateParam || getCurrentDateInDhaka();
+  
+  console.log('Fetching roster for date:', date, 'Timezone: Asia/Dhaka');
   
   // Get cookies from request headers
   const cookieHeader = request.headers.get('cookie') || '';
@@ -555,11 +583,12 @@ export async function GET(request) {
       eid: eid,
       sid: sessionId,
       taskName: 'FetchRosterData',
-      details: `User ${userId} initiated roster data fetch`,
+      details: `User ${userId} initiated roster data fetch for date: ${date}`,
       userId: userId,
       ipAddress: ipAddress,
       userAgent: userAgent,
       requestedDate: date,
+      timezone: 'Asia/Dhaka',
       apiEndpoint: '/api/user_dashboard/task_management/assign_task',
       httpMethod: 'GET',
       timestamp: new Date().toISOString()
@@ -567,9 +596,9 @@ export async function GET(request) {
   });
 
   try {
-    const rosterData = await getTodaysRoster(date, eid, sessionId);
+    const rosterResult = await getTodaysRoster(date, eid, sessionId);
     
-    if (!rosterData) {
+    if (!rosterResult || !rosterResult.data) {
       console.log('No roster data found for date:', date);
       
       logger.warn('No roster data found for the specified date', {
@@ -591,8 +620,10 @@ export async function GET(request) {
     }
 
     console.log('Roster data fetched successfully:', {
-      totalMembers: Object.keys(rosterData).length,
-      sampleData: Object.entries(rosterData).slice(0, 3)
+      totalMembers: Object.keys(rosterResult.data).length,
+      date: rosterResult.date,
+      day: rosterResult.day,
+      sampleData: Object.entries(rosterResult.data).slice(0, 3)
     });
 
     logger.info('Roster data fetched successfully', {
@@ -601,20 +632,22 @@ export async function GET(request) {
         sid: sessionId,
         taskName: 'FetchRosterData',
         details: `Roster data retrieved successfully for ${date}`,
-        date: date,
-        teamMembersCount: Object.keys(rosterData).length,
+        date: rosterResult.date,
+        day: rosterResult.day,
+        teamMembersCount: Object.keys(rosterResult.data).length,
         userId: userId,
         ipAddress: ipAddress,
         userAgent: userAgent,
-        rosterData: rosterData,
+        rosterData: rosterResult.data,
         timestamp: new Date().toISOString()
       }
     });
 
     return NextResponse.json({
       success: true,
-      data: rosterData,
-      date: date
+      data: rosterResult.data,
+      date: rosterResult.date,
+      day: rosterResult.day
     });
     
   } catch (error) {
@@ -744,8 +777,10 @@ export async function POST(request) {
     console.log('Task validation results:', {
       totalTasks: tasks.length,
       validTasks: validTasks.length,
+      importantTasks: validTasks.filter(task => task.isImportant).length,
       validTasksDetails: validTasks.map(task => ({
         title: task.taskTitle,
+        isImportant: task.isImportant,
         assignees: task.assignedTo,
         assigneesCount: task.assignedTo.length
       }))
@@ -781,6 +816,7 @@ export async function POST(request) {
         taskName: 'TaskAssignmentValidation',
         details: `Task assignment validation successful`,
         tasksCount: validTasks.length,
+        importantTasksCount: validTasks.filter(task => task.isImportant).length,
         assignees: validTasks.flatMap(task => task.assignedTo),
         assignedBy: assignedBy,
         userId: userId,
@@ -863,10 +899,13 @@ export async function POST(request) {
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `;
     
+    const importantTasksCount = validTasks.filter(task => task.isImportant).length;
+    const importantIndicator = importantTasksCount > 0 ? ` (${importantTasksCount} important tasks)` : '';
+    
     await client.query(activityLogQuery, [
       userId,
       'TASK_ASSIGNMENT',
-      `Assigned ${validTasks.length} task(s) with individual assignees - ${assignmentId}`,
+      `Assigned ${validTasks.length} task(s)${importantIndicator} with individual assignees - ${assignmentId}`,
       ipAddress,
       userAgent,
       eid,
@@ -882,6 +921,7 @@ export async function POST(request) {
         userId: userId,
         assignmentId: assignmentId,
         tasksCount: validTasks.length,
+        importantTasksCount: importantTasksCount,
         action: 'TASK_ASSIGNMENT',
         databaseTable: 'user_activity_log',
         operation: 'INSERT',
@@ -913,12 +953,14 @@ export async function POST(request) {
         details: `Task assignment process completed successfully`,
         assignmentId: assignmentId,
         tasksCount: validTasks.length,
+        importantTasksCount: importantTasksCount,
         assignedBy: userShortName,
         userId: userId,
         totalAssignees: validTasks.flatMap(task => task.assignedTo).length,
         uniqueAssignees: [...new Set(validTasks.flatMap(task => task.assignedTo))].length,
         tasks: validTasks.map(task => ({
           title: task.taskTitle,
+          isImportant: task.isImportant,
           assignees: task.assignedTo,
           type: task.taskType,
           remark: task.remark
@@ -937,6 +979,7 @@ export async function POST(request) {
       message: 'Tasks assigned successfully',
       assignmentId: assignmentId,
       tasksCount: validTasks.length,
+      importantTasksCount: validTasks.filter(task => task.isImportant).length,
       assignedBy: assignedBy
     });
     
