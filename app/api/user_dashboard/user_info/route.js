@@ -18,22 +18,74 @@ export async function GET(request) {
     const ipAddress = getClientIP(request);
     const userAgent = request.headers.get('user-agent') || 'Unknown User-Agent';
     
-    // Format details as string
-    const requestDetails = `GET /user_info | ` +
-                           `Email: ${email} | ` +
-                           `SOC ID: ${socPortalId || 'N/A'} | ` +
-                           `IP: ${ipAddress} | ` +
-                           `UA: ${userAgent.substring(0, 30)}...`;
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const roleType = searchParams.get('role_type');
     
-    logger.info('User info request started', {
-      meta: {
-        eid,
-        sid,
-        taskName: 'UserInfoRequest',
-        details: requestDetails
-      }
+    console.log('User Info API Called:', {
+      socPortalId,
+      roleType,
+      email
     });
 
+    // If role_type is provided, return users by role
+    if (roleType) {
+      const roleDetails = `Fetching users with role_type: ${roleType} | ` +
+                         `Requested by: ${email} | ` +
+                         `SOC ID: ${socPortalId || 'N/A'}`;
+      
+      logger.info('Fetching users by role type', {
+        meta: {
+          eid,
+          sid,
+          taskName: 'FetchUsersByRole',
+          details: roleDetails
+        }
+      });
+
+      // Query for users by role type
+      const result = await query(
+        `SELECT 
+           soc_portal_id,
+           short_name,
+           email,
+           role_type,
+           status
+         FROM user_info 
+         WHERE role_type = $1 AND status = 'Active'
+         ORDER BY short_name`,
+        [roleType]
+      );
+
+      console.log('Users by role query result:', {
+        roleType,
+        count: result.rows.length,
+        users: result.rows.map(row => ({
+          short_name: row.short_name,
+          email: row.email,
+          role_type: row.role_type
+        }))
+      });
+
+      const userListDetails = `Found ${result.rows.length} users with role: ${roleType}`;
+      
+      logger.info('Users by role retrieved successfully', {
+        meta: {
+          eid,
+          sid,
+          taskName: 'FetchUsersByRole',
+          details: userListDetails,
+          usersCount: result.rows.length
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: result.rows
+      });
+    }
+
+    // Original logic for current user info
     // Validate input - use cookie instead of query param
     if (!socPortalId) {
       const validationDetails = `Missing SOC Portal ID in cookies`;
@@ -53,7 +105,7 @@ export async function GET(request) {
       );
     }
 
-    // Execute database query
+    // Execute database query for current user
     const queryDetails = `Query: SELECT * FROM user_info WHERE soc_portal_id = $1 | ` +
                          `Params: [${socPortalId}]`;
     
@@ -123,7 +175,6 @@ export async function GET(request) {
     if (!profilePhotoUrl.includes('?')) {
       profilePhotoUrl = `${profilePhotoUrl}?t=${Date.now()}`;
     }
-    // If it already has parameters, don't add another one
 
     const userDetails = `User ID: ${user.id} | ` +
                          `Email: ${user.email} | ` +

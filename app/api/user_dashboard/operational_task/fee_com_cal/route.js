@@ -370,6 +370,61 @@ const calculateAdjustmentValues = (extractedValues) => {
   }
 };
 
+
+
+
+// Ultra-simple file structure validation based only on B4 cell pattern
+const validateFileStructure = async (file, feeCommType) => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(arrayBuffer);
+    const worksheet = workbook.worksheets[0];
+
+    // Get the value from cell B4
+    const b4Value = getCellValue(worksheet, 'B4');
+    
+    console.log('B4 cell analysis:', {
+      value: b4Value,
+      selectedType: feeCommType
+    });
+
+    // Simple check: if B4 looks like "9,999.99" (has comma and decimal), it's Drop Point
+    const isDropPointFile = b4Value && b4Value.toString().includes(',') && b4Value.toString().includes('.');
+
+    console.log('Type detection result:', {
+      isDropPointFile,
+      shouldBeDropPoint: feeCommType === 'Drop Point',
+      validationPassed: isDropPointFile === (feeCommType === 'Drop Point')
+    });
+
+    // Validate that file structure matches selected type
+    if (feeCommType === 'Regular' && isDropPointFile) {
+      return { 
+        isValid: false, 
+        message: 'This is a Drop Point file (B4 contains amount with comma). Please select "Drop Point" type.' 
+      };
+    }
+    
+    if (feeCommType === 'Drop Point' && !isDropPointFile) {
+      return { 
+        isValid: false, 
+        message: 'This is a Regular file (B4 does not contain amount with comma). Please select "Regular" type.' 
+      };
+    }
+
+    return { isValid: true, detectedType: feeCommType };
+    
+  } catch (error) {
+    logger.error('File structure validation error', { error: error.message });
+    // If validation fails, proceed with calculation but log the error
+    console.error('Validation error:', error.message);
+    return { 
+      isValid: true, 
+      message: 'File validation completed. Proceeding with calculation.' 
+    };
+  }
+};
 // Enhanced parsing function with better validation
 const parseExcelFileForDropPointMixed = async (file, fileName) => {
   try {
@@ -952,12 +1007,12 @@ export async function POST(request) {
     
     const file = formData.get('file');
     const feeCommType = formData.get('feeCommType');
-    const dropPointType = formData.get('dropPointType') || 'Mixed';
+    const dropPointType = formData.get('dropPointType'); // This will be null for Regular files
     fileName = file ? file.name : 'Unknown';
     
     console.log('Form data values:', { 
       feeCommType, 
-      dropPointType,
+      dropPointType, // This will show null for Regular files
       fileName, 
       file: file ? file.name : 'No file' 
     });
@@ -994,6 +1049,25 @@ export async function POST(request) {
         }
       }, { status: 400 });
     }
+
+// In your POST function, add this logging:
+console.log('Starting file structure validation...');
+
+const structureValidation = await validateFileStructure(file, feeCommType);
+console.log('Validation result:', JSON.stringify(structureValidation, null, 2));
+
+if (!structureValidation.isValid) {
+  console.log('VALIDATION FAILED:', structureValidation.message);
+  return NextResponse.json(
+    { 
+      success: false, 
+      message: structureValidation.message
+    },
+    { status: 400 }
+  );
+}
+
+console.log('File structure validation passed');
 
     // Get user info with role and short_name
     const userInfoQuery = 'SELECT short_name, role_type FROM user_info WHERE soc_portal_id = $1';
@@ -1033,17 +1107,19 @@ export async function POST(request) {
     } else {
       throw new Error(`Unsupported fee commission type: ${feeCommType} - ${dropPointType}`);
     }
+
+    
     
     // Add summary information and raw data
     calculationResults.summary = {
-  totalRecords: feeCommType === 'Drop Point' ? calculationResults.slabs?.length || 0 : 1,
-  calculationTime: new Date().toISOString(),
-  billerName: parsedData.billerName,
-  feeCommType: feeCommType,
-  dropPointType: feeCommType === 'Drop Point' ? dropPointType : null,
-  fileName: fileName,
-  trackBy: userShortName
-};
+      totalRecords: feeCommType === 'Drop Point' ? calculationResults.slabs?.length || 0 : 1,
+      calculationTime: new Date().toISOString(),
+      billerName: parsedData.billerName,
+      feeCommType: feeCommType,
+      dropPointType: feeCommType === 'Drop Point' ? dropPointType : null, // Only set for Drop Point
+      fileName: fileName,
+      trackBy: userShortName
+    };
 
     // Add raw data for details view
     calculationResults.rawData = parsedData.rawData;
@@ -1062,7 +1138,8 @@ export async function POST(request) {
       feeComCalId, 
       userId, 
       parsedData.billerName, 
-      `${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}`, 
+      // Only include dropPointType for Drop Point files
+      feeCommType === 'Drop Point' ? `${feeCommType} - ${dropPointType}` : feeCommType, 
       filePath, 
       fileName,
       fileHash,
@@ -1081,7 +1158,7 @@ export async function POST(request) {
     await client.query(activityLogQuery, [
       userId,
       'FEE_COMM_CALCULATION',
-      `Calculated fee-commission for ${fileName} (${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
+      `Calculated fee-commission for ${fileName} (${feeCommType}${feeCommType === 'Drop Point' ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
       ipAddress,
       userAgent,
       eid,
@@ -1099,7 +1176,7 @@ export async function POST(request) {
     `;
     await client.query(adminNotificationQuery, [
       adminNotificationId,
-      `${userShortName} calculated fee-commission for ${fileName} (${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
+      `${userShortName} calculated fee-commission for ${fileName} (${feeCommType}${feeCommType === 'Drop Point' ? ` - ${dropPointType}` : ''}) - ${feeComCalId}`,
       'Unread'
     ]);
 
@@ -1126,7 +1203,7 @@ export async function POST(request) {
       userAgent,
       { id: userId, email: userEmail, eid, shortName: userShortName },
       fileName,
-      `${feeCommType}${dropPointType ? ` - ${dropPointType}` : ''}`
+      `${feeCommType}${feeCommType === 'Drop Point' ? ` - ${dropPointType}` : ''}`
     );
     
     await sendTelegramAlert(alertMessage);
@@ -1197,7 +1274,6 @@ export async function POST(request) {
     );
   }
 }
-
 // GET endpoint for fetching history - updated to show all records
 export async function GET(request) {
   console.log('GET /api/user_dashboard/operational_task/fee_com_cal called');
@@ -1281,17 +1357,20 @@ export async function PUT(request) {
     let feeCommType = calculationDetails.fee_comm_type;
     let dropPointType = null;
 
+    // Handle both formats: "Regular" and "Drop Point - Mixed"
     if (feeCommType && feeCommType.includes('Drop Point')) {
+      feeCommType = 'Drop Point';
       if (feeCommType.includes('Mixed')) {
-        feeCommType = 'Drop Point';
         dropPointType = 'Mixed';
       } else if (feeCommType.includes('Fixed')) {
-        feeCommType = 'Drop Point';
         dropPointType = 'Fixed';
       } else {
-        feeCommType = 'Drop Point';
         dropPointType = calculationResults.summary?.dropPointType || 'Mixed';
       }
+    } else {
+      // For Regular files, ensure dropPointType is null
+      feeCommType = 'Regular';
+      dropPointType = null;
     }
 
     // Ensure the summary contains the correct type information
@@ -1299,6 +1378,8 @@ export async function PUT(request) {
       calculationResults.summary.feeCommType = feeCommType;
       if (feeCommType === 'Drop Point') {
         calculationResults.summary.dropPointType = dropPointType;
+      } else {
+        calculationResults.summary.dropPointType = null; // Ensure it's null for Regular
       }
       
       // Add database fields to summary

@@ -27,9 +27,9 @@ export async function GET() {
         label: 'Task Management',
         icon: 'FaTasks',
         children: [
-          { path: '/user_dashboard/assign_task', label: 'Assign Task' },
-          { path: '/user_dashboard/my_task', label: 'My Tasks' },
-          { path: '/user_dashboard/task_history', label: 'Task Archive' }
+          { path: '/user_dashboard/task_management/assign_task', label: 'Assign Task' },
+          { path: '/user_dashboard/task_management/my_task', label: 'My Tasks' },
+          { path: '/user_dashboard/task_management/task_history', label: 'Task Archive' }
         ]
       },
       {

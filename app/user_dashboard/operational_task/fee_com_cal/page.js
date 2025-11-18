@@ -11,6 +11,10 @@ import {
   FaBan, FaCheckCircle, FaFileInvoiceDollar, FaMobileAlt
 } from 'react-icons/fa';
 
+import { RxDropdownMenu } from "react-icons/rx";
+import { MdMoney } from "react-icons/md";
+
+
 import { FaMobileRetro } from "react-icons/fa6";
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -166,63 +170,71 @@ export default function FeeComCalculationPage() {
     }
   };
 
-  const handleCalculate = async () => {
-    // Check if type is supported
-    if (feeCommType !== 'Regular' && feeCommType !== 'Drop Point') {
-      toast.error(`${feeCommType} type is coming soon! Currently only Regular and Drop Point types are supported.`);
-      return;
+const handleCalculate = async () => {
+  // Check if type is supported
+  if (feeCommType !== 'Regular' && feeCommType !== 'Drop Point') {
+    toast.error(`${feeCommType} type is coming soon! Currently only Regular and Drop Point types are supported.`);
+    return;
+  }
+
+  if (feeCommType === 'Drop Point' && dropPointType !== 'Mixed') {
+    toast.error(`Drop Point ${dropPointType} type is coming soon! Currently only Mixed type is supported.`);
+    return;
+  }
+
+  if (!selectedFile) {
+    toast.error('Please select an Excel file first');
+    return;
+  }
+
+  if (fileExists) {
+    return;
+  }
+
+  setLoading(true);
+  setResults(null);
+  const toastId = toast.loading('Analyzing fee structure and calculating commissions...');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('feeCommType', feeCommType);
+    // ONLY append dropPointType for Drop Point files
+    if (feeCommType === 'Drop Point') {
+      formData.append('dropPointType', dropPointType);
     }
 
-    if (feeCommType === 'Drop Point' && dropPointType !== 'Mixed') {
-      toast.error(`Drop Point ${dropPointType} type is coming soon! Currently only Mixed type is supported.`);
-      return;
-    }
+    console.log('Sending form data:', {
+      feeCommType,
+      dropPointType: feeCommType === 'Drop Point' ? dropPointType : 'Not included'
+    });
 
-    if (!selectedFile) {
-      toast.error('Please select an Excel file first');
-      return;
-    }
+    const response = await fetch('/api/user_dashboard/operational_task/fee_com_cal', {
+      method: 'POST',
+      body: formData,
+    });
 
-    if (fileExists) {
-      return;
-    }
+    const result = await response.json();
 
-    setLoading(true);
-    setResults(null);
-    const toastId = toast.loading('Analyzing fee structure and calculating commissions...');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('feeCommType', feeCommType);
-      if (feeCommType === 'Drop Point') {
-        formData.append('dropPointType', dropPointType);
+    if (response.ok && result.success) {
+      toast.success('Commission analysis completed successfully!', { id: toastId });
+      setResults(result.data);
+      setViewMode('new');
+      
+      // Clear the file input and reset file states AFTER successful calculation
+      setSelectedFile(null);
+      setBillerName('');
+      setFileExists(false);
+      setExistingFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-
-      const response = await fetch('/api/user_dashboard/operational_task/fee_com_cal', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        toast.success('Commission analysis completed successfully!', { id: toastId });
-        setResults(result.data);
-        setViewMode('new');
-        
-        // Clear the file input and reset file states AFTER successful calculation
-        setSelectedFile(null);
-        setBillerName('');
-        setFileExists(false);
-        setExistingFile(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        
-        // Refresh history after new calculation
-        fetchHistory(searchTerm);
-      } else if (response.status === 400 && result.existingFile) {
+      
+      // Refresh history after new calculation
+      fetchHistory(searchTerm);
+    } else if (response.status === 400) {
+      // Handle all 400 errors gracefully
+      if (result.existingFile) {
         // File already exists
         setExistingFile(result.existingFile);
         setFileExists(true);
@@ -234,15 +246,29 @@ export default function FeeComCalculationPage() {
         // Auto-filter history to show this file
         setSearchTerm(selectedFile.name);
       } else {
-        throw new Error(result.message || 'Calculation failed');
+        // File type validation failed or other 400 errors
+        toast.error(result.message || 'File validation failed. Please check your file and try again.', {
+          id: toastId,
+          duration: 6000,
+        });
       }
-    } catch (error) {
-      console.error('Calculation failed:', error);
-      toast.error(error.message || 'Analysis failed. Please try again.', { id: toastId });
-    } finally {
-      setLoading(false);
+    } else {
+      // For other errors (500, etc.), show the error message
+      toast.error(result.message || 'Calculation failed. Please try again.', {
+        id: toastId,
+        duration: 6000,
+      });
     }
-  };
+  } catch (error) {
+    console.error('Calculation failed:', error);
+    toast.error('Network error. Please check your connection and try again.', { 
+      id: toastId,
+      duration: 6000,
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Function to load calculation details from history
   const loadCalculationDetails = async (feeComCalId, fileName, billerNameFromHistory, feeCommTypeFromHistory) => {
@@ -435,9 +461,19 @@ const formatDisplayValue = (num, key = '') => {
     return '0';
   }
   
-  // Format based on the key and value magnitude
+  // Format based on the key
   if (key === 'feeRate') {
     return number.toFixed(2);
+  }
+  
+  // For Regular type commissions - 9 decimal places
+  if (['senderAgent', 'parentDistributor', 'masterDistributor', 'adjustment'].includes(key)) {
+    return number.toFixed(9);
+  }
+  
+  // For Regular type - TWTL and BPO - 5 decimal places
+  if (['twltSp', 'bpoPp', 'twlt', 'bpo'].includes(key)) {
+    return number.toFixed(5);
   }
   
   // For large values like Uddokta (10.222222222) and Distributor (3.920454545)
@@ -446,16 +482,7 @@ const formatDisplayValue = (num, key = '') => {
     return number.toFixed(4);
   }
   
-  // For smaller commission values, use appropriate decimal places
-  if (key === 'twlt' || key === 'bpo') {
-    return number.toFixed(5);
-  }
-  
-  if (key === 'advanceCommission' || key === 'masterDistributor') {
-    return number.toFixed(6);
-  }
-  
-  // Default for other values
+  // Default for other values - 6 decimal places
   return number.toFixed(6);
 };
 
@@ -1123,31 +1150,34 @@ const DropPointMixedSection = ({ slabs, rawData }) => {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Fee-Comm Type
                 </label>
-                <div className="space-y-1">
-                  {feeCommTypes.map(type => (
-                    <button
-                      key={type.value}
-                      onClick={() => {
-                        setFeeCommType(type.value);
-                        if (type.value !== 'Drop Point') {
-                          setDropPointType('Mixed');
-                        }
-                      }}
-                      className={`w-full h-10 text-left p-2 rounded transition-all duration-200 text-xs ${
-                        feeCommType === type.value 
-                          ? `bg-gradient-to-r ${type.color} text-white shadow-md`
-                          : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
-                      } ${type.value !== 'Regular' && type.value !== 'Drop Point' ? 'opacity-70' : ''}`}
-                    >
-                      <div className="font-medium flex items-center justify-between">
-                        <span>{type.label}</span>
-                        {type.value !== 'Regular' && type.value !== 'Drop Point' && (
-                          <span className="text-xs bg-black/20 px-1 py-0.5 rounded">Soon</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <div className="grid grid-cols-2 gap-3">
+                {feeCommTypes.map((type) => (
+                  <button
+                    key={type.value}
+                    onClick={() => {
+                      setFeeCommType(type.value);
+                      if (type.value === 'Drop Point') {
+                        setDropPointType('Mixed');
+                      }
+                    }}
+                    className={`
+                      p-3 rounded border transition-all duration-200
+                      font-semibold text-sm flex items-center justify-center gap-2
+                      ${feeCommType === type.value
+                        ? `border-transparent bg-gradient-to-r ${type.color} text-white shadow-lg`
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      }
+                    `}
+                  >
+                    {type.value === 'Regular' ? (
+                      <MdMoney className="text-lg" />
+                    ) : (
+                      <RxDropdownMenu className="text-lg" />
+                    )}
+                    {type.label}
+                  </button>
+                ))}
+              </div>
               </div>
 
               {/* Drop Point Type Selection */}
@@ -1274,6 +1304,25 @@ const DropPointMixedSection = ({ slabs, rawData }) => {
                   </div>
                 )}
               </div>
+              {/* File Type Validation Info */}
+<div className="mb-3 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded border border-blue-200">
+  <div className="flex items-start">
+    <FaInfoCircle className="text-blue-500 mr-2 text-xs mt-0.5" />
+    <div>
+      <p className="text-blue-800 font-semibold text-xs">Automatic File Type Detection</p>
+      <p className="text-blue-600 text-xs">
+        The system automatically detects if your file contains multiple amount ranges (slabs) 
+        and validates it matches your selected type.
+      </p>
+      {selectedFile && (
+        <div className="mt-1 text-blue-700 text-xs">
+          <strong>Current selection:</strong> {feeCommType}
+          {feeCommType === 'Drop Point' && ` - ${dropPointType}`}
+        </div>
+      )}
+    </div>
+  </div>
+</div>
 
               {/* Action Buttons */}
               <div className="space-y-2">
