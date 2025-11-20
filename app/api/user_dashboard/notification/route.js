@@ -29,7 +29,7 @@ export async function GET(request) {
       return NextResponse.json([], { status: 200 });
     }
 
-    // Update query to filter by soc_portal_id
+    // REMOVED LIMIT 20 - Now fetching all notifications
     const result = await query(`
       SELECT 
         notification_id AS id,
@@ -39,7 +39,6 @@ export async function GET(request) {
       FROM user_notification_details
       WHERE soc_portal_id = $1
       ORDER BY created_at DESC
-      LIMIT 20
     `, [socPortalId]);
 
     const notifications = result.rows || [];
@@ -96,7 +95,6 @@ export async function GET(request) {
     return NextResponse.json([], { status: 200 });
   }
 }
-
 
 function getNotificationIcon(title) {
   if (!title) return 'user';

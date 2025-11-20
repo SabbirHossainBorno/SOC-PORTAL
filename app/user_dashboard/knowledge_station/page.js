@@ -1,6 +1,6 @@
 // app/user_dashboard/knowledge_station/page.js
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { 
   FaPlus, FaThumbsUp, FaThumbsDown, FaRegThumbsUp, FaRegThumbsDown, 
   FaComments, FaFileAlt, FaFilePdf, FaFileExcel, FaFileWord, 
@@ -8,14 +8,103 @@ import {
   FaLink, FaExternalLinkAlt, FaRegBookmark, FaBookmark, FaShare, 
   FaPaperclip, FaBell, FaStar, FaRegStar, FaSpinner, FaRocket,
   FaUsers, FaChartLine, FaBook, FaLightbulb, FaGlobe, FaShieldAlt,
-  FaUpload, FaEye, FaDownload, FaClock, FaUserCircle
+  FaUpload, FaEye, FaDownload, FaClock, FaUserCircle, FaFire,
+  FaCrown, FaAward, FaMedal, FaGem, FaBolt, FaMagic
 } from 'react-icons/fa';
+import { Lightbulb, Sparkles, Zap, BookOpen, Brain, Rocket, Layers, Compass, Hexagon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
+import { useDebounce } from 'use-debounce';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
+
+// Add this helper function near your other utility functions
+const getFileTypeFromName = (fileName) => {
+  if (!fileName) return 'other';
+  const extension = fileName.split('.').pop().toLowerCase();
+  
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(extension)) return 'image';
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv'].includes(extension)) return 'video';
+  if (['pdf'].includes(extension)) return 'pdf';
+  if (['xls', 'xlsx', 'csv'].includes(extension)) return 'excel';
+  if (['doc', 'docx'].includes(extension)) return 'word';
+  if (['ppt', 'pptx'].includes(extension)) return 'powerpoint';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) return 'archive';
+  if (['txt', 'log'].includes(extension)) return 'text';
+  return 'other';
+};
+
+// Also update your existing renderFileIcon function to use this:
+const renderFileIcon = (type) => {
+  switch(type) {
+    case 'image': return <FaFileImage className="text-blue-400 text-xl" />;
+    case 'video': return <FaFileVideo className="text-blue-500 text-xl" />;
+    case 'pdf': return <FaFilePdf className="text-red-500 text-xl" />;
+    case 'excel': return <FaFileExcel className="text-green-600 text-xl" />;
+    case 'word': return <FaFileWord className="text-blue-600 text-xl" />;
+    case 'powerpoint': return <FaFileAlt className="text-orange-500 text-xl" />;
+    case 'archive': return <FaFileAlt className="text-amber-500 text-xl" />;
+    case 'text': return <FaFileAlt className="text-gray-500 text-xl" />;
+    default: return <FaFileAlt className="text-gray-500 text-xl" />;
+  }
+};
+
+// Memoized Profile Photo Component
+// Update the ProfilePhoto component with better error handling:
+
+const ProfilePhoto = memo(({ userId, photoUrl, userName, size = 10, className = "" }) => {
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const handleError = useCallback(() => {
+    setHasError(true);
+    setIsLoading(false);
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
+  const getUserInitials = useCallback((name) => {
+    if (!name) return 'UU';
+    const nameParts = name.split(' ');
+    return `${nameParts[0]?.charAt(0) || ''}${nameParts[1]?.charAt(0) || ''}`.toUpperCase() || 'UU';
+  }, []);
+
+  const sizeClass = `w-${size} h-${size}`;
+
+  return (
+    <div className={`relative ${sizeClass} rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex-shrink-0 ${className}`}>
+      {photoUrl && !hasError ? (
+        <>
+          {isLoading && (
+            <div className="absolute inset-0 bg-gray-200 animate-pulse flex items-center justify-center">
+              <FaSpinner className="animate-spin text-gray-400" />
+            </div>
+          )}
+          <Image 
+            src={photoUrl}
+            alt={userName || 'User'}
+            fill
+            sizes={`${size * 4}px`}
+            className="object-cover"
+            onError={handleError}
+            onLoad={handleLoad}
+            priority={false}
+          />
+        </>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">
+          {getUserInitials(userName)}
+        </div>
+      )}
+    </div>
+  );
+});
+
+ProfilePhoto.displayName = 'ProfilePhoto';
 
 export default function KnowledgeStationPage() {
   const [contents, setContents] = useState([]);
@@ -28,6 +117,7 @@ export default function KnowledgeStationPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState('newest');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [selectedImage, setSelectedImage] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -47,6 +137,9 @@ export default function KnowledgeStationPage() {
 
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
+
+
+const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
 
   // Get cookies with proper decoding
   const getCookie = (name) => {
@@ -106,13 +199,6 @@ export default function KnowledgeStationPage() {
     fetchUserData();
   }, []);
 
-  // Handle profile photo error
-  const handleProfilePhotoError = (userId) => {
-    setProfilePhotoErrors(prev => ({
-      ...prev,
-      [userId]: true
-    }));
-  };
 
   // Get user initials
   const getUserInitials = (name) => {
@@ -121,29 +207,6 @@ export default function KnowledgeStationPage() {
     return `${nameParts[0]?.charAt(0) || ''}${nameParts[1]?.charAt(0) || ''}` || 'UU';
   };
 
-  // Profile Photo Component
-  const ProfilePhoto = ({ userId, photoUrl, userName, size = 10, className = "" }) => {
-    const hasError = profilePhotoErrors[userId];
-    
-    return (
-      <div className={`relative w-${size} h-${size} rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex-shrink-0 ${className}`}>
-        {photoUrl && !hasError ? (
-          <Image 
-            src={photoUrl}
-            alt={userName}
-            fill
-            sizes={`${size * 4}px`}
-            className="object-cover"
-            onError={() => handleProfilePhotoError(userId)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-white font-bold">
-            {getUserInitials(userName)}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // Fetch knowledge content
   const fetchContents = async () => {
@@ -170,20 +233,29 @@ export default function KnowledgeStationPage() {
     fetchContents();
   }, []);
 
+  // Cleanup object URLs
+useEffect(() => {
+  return () => {
+    if (selectedImage && selectedImage.startsWith('blob:')) {
+      URL.revokeObjectURL(selectedImage);
+    }
+  };
+}, [selectedImage]);
+
   // Apply search, sort, and filter
   useEffect(() => {
     let result = [...contents];
     
-    // Apply search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(content => 
-        content.title.toLowerCase().includes(term) || 
-        content.description.toLowerCase().includes(term) ||
-        content.content_text?.toLowerCase().includes(term) ||
-        (content.external_link && content.external_link.toLowerCase().includes(term))
-      );
-    }
+    // Apply search filter using debouncedSearchTerm
+  if (debouncedSearchTerm) {
+    const term = debouncedSearchTerm.toLowerCase();
+    result = result.filter(content => 
+      content.title.toLowerCase().includes(term) || 
+      content.description.toLowerCase().includes(term) ||
+      content.content_text?.toLowerCase().includes(term) ||
+      (content.external_link && content.external_link.toLowerCase().includes(term))
+    );
+  }
 
     // Apply content type filter
     if (activeFilter !== 'all') {
@@ -220,11 +292,38 @@ export default function KnowledgeStationPage() {
   }, [contents, searchTerm, sortOrder, activeFilter]);
 
   // Handle file selections
-  const handleMediaChange = (e) => {
+  // Update the file upload handlers with better error handling:
+
+const handleMediaChange = (e) => {
+  try {
     if (e.target.files.length > 0) {
-      setFormData(prev => ({ ...prev, mediaFile: e.target.files[0] }));
+      const file = e.target.files[0];
+      
+      // Validate file size (50MB limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+      if (file.size > maxSize) {
+        toast.error('File size too large. Maximum size is 50MB.');
+        e.target.value = ''; // Reset input
+        return;
+      }
+      
+      // Validate file type
+      const allowedTypes = ['image/', 'video/'];
+      const isValidType = allowedTypes.some(type => file.type.startsWith(type));
+      
+      if (!isValidType) {
+        toast.error('Please select an image or video file.');
+        e.target.value = ''; // Reset input
+        return;
+      }
+      
+      setFormData(prev => ({ ...prev, mediaFile: file }));
     }
-  };
+  } catch (error) {
+    console.error('Error handling media file:', error);
+    toast.error('Error selecting file. Please try again.');
+  }
+};
 
   const handleDocChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
@@ -416,12 +515,58 @@ export default function KnowledgeStationPage() {
     }
   };
 
-  // Copy content URL
-  const copyContentUrl = (contentId) => {
-    const url = `${window.location.origin}/user_dashboard/knowledge_station#${contentId}`;
-    navigator.clipboard.writeText(url);
-    toast.success('Content URL copied to clipboard! 📋');
-  };
+// Copy content URL with fallback
+const copyContentUrl = async (contentId) => {
+  const url = `${window.location.origin}/user_dashboard/knowledge_station#${contentId}`;
+  
+  try {
+    // Modern clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+      toast.success('Content URL copied to clipboard! 📋');
+    } 
+    // Fallback for older browsers
+    else {
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      
+      // Make the textarea out of viewport
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      
+      // Select and copy
+      textArea.focus();
+      textArea.select();
+      
+      try {
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+          toast.success('Content URL copied to clipboard! 📋');
+        } else {
+          throw new Error('execCommand failed');
+        }
+      } catch (err) {
+        document.body.removeChild(textArea);
+        throw err;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to copy URL: ', err);
+    
+    // Final fallback - show URL to user
+    const confirmed = window.confirm(
+      `Could not copy automatically. Please copy this URL manually:\n\n${url}\n\nClick OK to continue.`
+    );
+    
+    if (confirmed) {
+      toast.success('Please paste the URL manually');
+    }
+  }
+};
 
   // Render file icon
   const renderFileIcon = (type) => {
@@ -471,47 +616,63 @@ export default function KnowledgeStationPage() {
     { key: 'saved', label: 'Saved', icon: FaBookmark, color: 'orange' }
   ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"
-          />
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Loading Knowledge Station</h3>
-          <p className="text-gray-600">Preparing your collaborative workspace...</p>
-        </div>
+  // Enhance the loading state with more user feedback
+if (loading) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="text-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"
+        />
+        <h3 className="text-xl font-bold text-gray-800 mb-2">Loading Knowledge Station</h3>
+        <p className="text-gray-600">Preparing your collaborative workspace...</p>
+        <motion.div 
+          className="mt-4 flex justify-center gap-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              className="w-2 h-2 bg-blue-500 rounded-full"
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+            />
+          ))}
+        </motion.div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Background Decoration */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-pulse delay-1000"></div>
-      </div>
-
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded shadow-lg mb-6">
-            <FaLightbulb className="text-white text-3xl" />
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-gray-800 to-blue-600 bg-clip-text text-transparent mb-4">
-            Knowledge Station
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Share, discover, and collaborate on any knowledge with your team in real-time
-          </p>
-        </motion.div>
+        <div className="text-center mb-8">
+  <div className="inline-flex items-center gap-4 mb-4">
+    <div className="relative w-14 h-14">
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 rounded-full shadow-xl flex items-center justify-center">
+        <Brain className="text-white w-7 h-7" strokeWidth={2.5} />
+      </div>
+    </div>
+
+    <h1 className="text-5xl font-bold">
+      <span className="text-gray-900">Knowledge</span>
+      <span className="ml-2 bg-gradient-to-r from-orange-600 via-pink-600 to-purple-600 bg-clip-text text-transparent">
+        Station
+      </span>
+    </h1>
+  </div>
+
+  <p className="text-gray-600 max-w-xl mx-auto">
+    Share, discover, and collaborate on knowledge with your team in real-time
+  </p>
+</div>
+
 
         {/* Stats Cards - Top Section */}
         <motion.div 
@@ -728,7 +889,11 @@ export default function KnowledgeStationPage() {
                       </div>
                       
                       {/* Title & Description */}
-                      <h2 className="text-2xl font-bold text-gray-900 mb-4 leading-tight">
+                      <h2 className={`text-2xl font-bold mb-4 leading-tight ${
+                        content.is_important 
+                          ? 'bg-gradient-to-r from-amber-700 to-yellow-600 bg-clip-text text-transparent' 
+                          : 'text-gray-900'
+                      }`}>
                         {content.title}
                       </h2>
                       <p className="text-gray-700 text-lg leading-relaxed mb-6">
@@ -770,30 +935,41 @@ export default function KnowledgeStationPage() {
                       )}
                       
                       {/* Media Preview */}
-                      {content.media_url && (
-                        <div className="mb-6 rounded overflow-hidden shadow-lg">
-                          {getFileTypeFromUrl(content.media_url) === 'video' ? (
-                            <div className="relative pt-[56.25%] bg-gray-900">
-                              <video 
-                                src={content.media_url}
-                                className="absolute inset-0 w-full h-full"
-                                controls
-                                title={content.title}
-                              />
-                            </div>
-                          ) : (
-                            <div className="relative w-full h-80">
-                              <Image 
-                                src={content.media_url} 
-                                alt={content.title}
-                                fill
-                                sizes="(max-width: 768px) 100vw, 50vw"
-                                className="object-cover"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
+{content.media_url && (
+  <div className="mb-6 rounded overflow-hidden shadow-lg">
+    {getFileTypeFromUrl(content.media_url) === 'video' ? (
+      <div className="relative pt-[56.25%] bg-gray-900">
+        <video 
+          src={content.media_url}
+          className="absolute inset-0 w-full h-full"
+          controls
+          title={content.title}
+        />
+      </div>
+    ) : (
+      <div 
+        className="relative w-full h-80 cursor-pointer group"
+        onClick={() => {
+          console.log('Image clicked:', content.media_url);
+          setSelectedImage(content.media_url);
+        }}
+      >
+        {/* Use img tag instead of Next.js Image for clickable preview */}
+        <img 
+          src={content.media_url} 
+          alt={content.title}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+        {/* Overlay with zoom icon */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center pointer-events-none">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/90 rounded-full p-3 shadow-lg">
+            <FaEye className="text-gray-700 text-xl" />
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
                       
                       {/* Documents */}
                       {content.document_urls && content.document_urls.length > 0 && (
@@ -877,7 +1053,7 @@ export default function KnowledgeStationPage() {
                         
                         <div className="flex gap-3">
                           <button 
-                            onClick={() => copyContentUrl(content.ks_content_id)}
+                            onClick={async () => await copyContentUrl(content.ks_content_id)}
                             className="flex items-center gap-2 px-4 py-2 rounded text-gray-600 hover:bg-gray-50 hover:text-green-600 transition-all duration-200"
                           >
                             <FaShare />
@@ -1163,34 +1339,34 @@ export default function KnowledgeStationPage() {
                 Community Impact
               </h3>
               <div className="space-y-3">
-    <div className="flex justify-between items-center">
-      <span className="text-blue-100">Knowledge Shared</span>
-      <span className="font-bold">{contents.length}</span>
-    </div>
-    <div className="flex justify-between items-center">
-      <span className="text-blue-100">Total Engagement</span>
-      <span className="font-bold">
-        {contents.reduce((acc, content) => 
-          acc + (parseInt(content.like_count) || 0) + (parseInt(content.dislike_count) || 0) + (parseInt(content.feedback_count) || 0), 0
-        )}
-      </span>
-    </div>
-    <div className="flex justify-between items-center">
-      <span className="text-blue-100">Total Contributors</span>
-      <span className="font-bold">
-        {new Set(contents.map(c => c.upload_by)).size}
-      </span>
-    </div>
-    <div className="flex justify-between items-center">
-      <span className="text-blue-100">Avg. Feedback</span>
-      <span className="font-bold">
-        {contents.length > 0 
-          ? (contents.reduce((acc, content) => acc + (parseInt(content.feedback_count) || 0), 0) / contents.length).toFixed(1)
-          : '0.0'
-        }
-      </span>
-    </div>
-  </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-100">Knowledge Shared</span>
+                  <span className="font-bold">{contents.length}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-100">Total Engagement</span>
+                  <span className="font-bold">
+                    {contents.reduce((acc, content) => 
+                      acc + (parseInt(content.like_count) || 0) + (parseInt(content.dislike_count) || 0) + (parseInt(content.feedback_count) || 0), 0
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-100">Total Contributors</span>
+                  <span className="font-bold">
+                    {new Set(contents.map(c => c.upload_by)).size}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-100">Avg. Feedback</span>
+                  <span className="font-bold">
+                    {contents.length > 0 
+                      ? (contents.reduce((acc, content) => acc + (parseInt(content.feedback_count) || 0), 0) / contents.length).toFixed(1)
+                      : '0.0'
+                    }
+                  </span>
+                </div>
+              </div>
             </motion.div>
           </div>
         </div>
@@ -1309,9 +1485,10 @@ export default function KnowledgeStationPage() {
                         id="isImportant"
                         checked={formData.isImportant}
                         onChange={(e) => setFormData(prev => ({ ...prev, isImportant: e.target.checked }))}
-                        className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+                        className="w-5 h-5 text-yellow-600 bg-white border-gray-300 rounded focus:ring-yellow-500"
                       />
-                      <label htmlFor="isImportant" className="ml-3 text-sm font-semibold text-gray-700">
+                      <label htmlFor="isImportant" className="ml-3 text-sm font-semibold text-gray-700 flex items-center gap-2">
+                        <FaStar className={`text-sm ${formData.isImportant ? 'text-yellow-500' : 'text-gray-400'}`} />
                         Mark as Important
                       </label>
                     </div>
@@ -1324,158 +1501,242 @@ export default function KnowledgeStationPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, notifyAll: e.target.checked }))}
                         className="w-5 h-5 text-green-600 bg-white border-gray-300 rounded focus:ring-green-500"
                       />
-                      <label htmlFor="notifyAll" className="ml-3 text-sm font-semibold text-gray-700">
+                      <label htmlFor="notifyAll" className="ml-3 text-sm font-semibold text-gray-700 flex items-center gap-2">
+                        <FaBell className={`text-sm ${formData.notifyAll ? 'text-green-500' : 'text-gray-400'}`} />
                         Notify All Users
                       </label>
                     </div>
                   </div>
                   
                   {/* File Uploads */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Media Upload */}
-                    <div>
-                      <div className="flex justify-between items-center mb-3">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          Main Media (Image/Video)
-                        </label>
-                        <span className="text-xs text-gray-500">Max 1 file</span>
-                      </div>
-                      
-                      <div 
-                        className={`border-2 border-dashed rounded p-6 text-center cursor-pointer transition-all duration-200 ${
-                          formData.mediaFile 
-                            ? 'border-green-500 bg-green-50' 
-                            : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
-                        }`}
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <input 
-                          type="file" 
-                          ref={fileInputRef}
-                          className="hidden" 
-                          onChange={handleMediaChange}
-                          accept="image/*,video/*"
-                        />
-                        
-                        {formData.mediaFile ? (
-                          <div className="flex flex-col items-center">
-                            <div className="text-green-500 mb-3">
-                              <FaFileImage className="text-3xl" />
-                            </div>
-                            <p className="font-semibold text-gray-700 truncate max-w-full">
-                              {formData.mediaFile.name}
-                            </p>
-                            <p className="text-sm text-gray-500 mt-1">
-                              {(formData.mediaFile.size / (1024 * 1024)).toFixed(2)} MB
-                            </p>
-                            <button 
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeMediaFile();
-                              }}
-                              className="mt-3 text-red-500 hover:text-red-700 text-sm font-medium"
-                            >
-                              Remove File
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="text-blue-500 mb-4">
-                              <FaFileVideo className="text-4xl mx-auto" />
-                            </div>
-                            <p className="font-semibold text-gray-700">Upload Media</p>
-                            <p className="text-sm text-gray-500 mt-2">
-                              Click to upload an image or video
-                            </p>
-                            <p className="text-xs text-gray-400 mt-3">
-                              Supports JPG, PNG, GIF, MP4, MOV • Max 50MB
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Documents Upload */}
-                    <div>
-                      <div className="flex justify-between items-center mb-3">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          Supporting Documents
-                        </label>
-                        <span className="text-xs text-gray-500">Multiple files</span>
-                      </div>
-                      
-                      <div 
-                        className={`border-2 border-dashed rounded p-6 text-center cursor-pointer transition-all duration-200 ${
-                          formData.documentFiles.length > 0
-                            ? 'border-purple-500 bg-purple-50' 
-                            : 'border-gray-300 hover:border-purple-500 hover:bg-purple-50'
-                        }`}
-                        onClick={() => docInputRef.current?.click()}
-                      >
-                        <input 
-                          type="file" 
-                          ref={docInputRef}
-                          className="hidden" 
-                          onChange={handleDocChange}
-                          multiple
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"
-                        />
-                        
-                        {formData.documentFiles.length > 0 ? (
-                          <div className="space-y-3">
-                            {formData.documentFiles.map((file, index) => (
-                              <div key={index} className="flex items-center justify-between bg-white p-3 rounded border border-gray-200">
-                                <div className="flex items-center">
-                                  <div className="text-purple-500 mr-3">
-                                    {renderFileIcon(file.type.split('/')[1])}
-                                  </div>
-                                  <div>
-                                    <span className="text-sm font-medium truncate max-w-xs block">
-                                      {file.name}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {(file.size / (1024 * 1024)).toFixed(2)} MB
-                                    </span>
-                                  </div>
-                                </div>
-                                <button 
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeDocFile(index);
-                                  }}
-                                  className="text-gray-400 hover:text-red-500 transition-colors"
-                                >
-                                  <FaTimes size={14} />
-                                </button>
-                              </div>
-                            ))}
-                            <button 
-                              type="button"
-                              onClick={() => docInputRef.current?.click()}
-                              className="text-purple-600 hover:text-purple-800 text-sm font-medium mt-2"
-                            >
-                              + Add more files
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="text-purple-500 mb-4">
-                              <FaFileAlt className="text-4xl mx-auto" />
-                            </div>
-                            <p className="font-semibold text-gray-700">Upload Documents</p>
-                            <p className="text-sm text-gray-500 mt-2">
-                              Click to upload supporting files
-                            </p>
-                            <p className="text-xs text-gray-400 mt-3">
-                              Supports PDF, DOCX, XLSX, ZIP, TXT • Max 20MB each
-                            </p>
-                          </>
-                        )}
-                      </div>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  {/* Media Upload */}
+  <div>
+    <div className="flex justify-between items-center mb-3">
+      <label className="block text-sm font-semibold text-gray-800">
+        Main Media (Image/Video)
+      </label>
+      <span className="text-xs text-gray-600">Max 1 file • 50MB</span>
+    </div>
+    
+    <div 
+      className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-300 group ${
+        formData.mediaFile 
+          ? 'border-green-500 bg-green-50/50 shadow-lg' 
+          : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/30 hover:shadow-md'
+      }`}
+      onClick={() => fileInputRef.current?.click()}
+    >
+      <input 
+        type="file" 
+        ref={fileInputRef}
+        className="hidden" 
+        onChange={handleMediaChange}
+        accept="image/*,video/*"
+      />
+      
+      {formData.mediaFile ? (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center w-full"
+        >
+          <div className="text-green-500 mb-3">
+            <FaFileImage className="text-3xl" />
+          </div>
+          <div className="w-full max-w-full text-left">
+            <p 
+              className="font-semibold text-gray-800 text-sm break-words whitespace-normal max-w-full px-2 leading-relaxed"
+            >
+              {formData.mediaFile.name}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-gray-600 mt-2 text-left">
+              <span>{(formData.mediaFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+              <span>•</span>
+              <span className="capitalize">{getFileTypeFromName(formData.mediaFile.name)}</span>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeMediaFile();
+            }}
+            className="mt-4 px-4 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 border border-red-200"
+          >
+            <FaTimes className="text-xs" />
+            Remove File
+          </button>
+        </motion.div>
+      ) : (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center"
+        >
+          <div className="text-blue-500 mb-4 group-hover:scale-110 transition-transform duration-300">
+            <div className="relative">
+              <FaFileVideo className="text-4xl mx-auto" />
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"
+              />
+            </div>
+          </div>
+          <p className="font-semibold text-gray-800 mb-1">Upload Media</p>
+          <p className="text-sm text-gray-600 mb-2">
+            Drag & drop or click to browse
+          </p>
+          <div className="flex flex-wrap justify-center gap-1 text-xs text-gray-500">
+            <span>JPG</span>
+            <span>•</span>
+            <span>PNG</span>
+            <span>•</span>
+            <span>GIF</span>
+            <span>•</span>
+            <span>MP4</span>
+            <span>•</span>
+            <span>MOV</span>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  </div>
+  
+  {/* Documents Upload */}
+  <div>
+    <div className="flex justify-between items-center mb-3">
+      <label className="block text-sm font-semibold text-gray-800">
+        Supporting Documents
+      </label>
+      <span className="text-xs text-gray-600">Multiple • 20MB each</span>
+    </div>
+    
+    <div 
+      className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-300 group min-h-[200px] ${
+        formData.documentFiles.length > 0
+          ? 'border-purple-500 bg-purple-50/50 shadow-lg' 
+          : 'border-gray-300 hover:border-purple-500 hover:bg-purple-50/30 hover:shadow-md'
+      }`}
+      onClick={() => docInputRef.current?.click()}
+    >
+      <input 
+        type="file" 
+        ref={docInputRef}
+        className="hidden" 
+        onChange={handleDocChange}
+        multiple
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.pptx,.ppt"
+      />
+      
+      {formData.documentFiles.length > 0 ? (
+        <div className="w-full">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-3 max-h-60 overflow-y-auto pr-2"
+          >
+            {formData.documentFiles.map((file, index) => (
+              <motion.div 
+                key={index}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-start justify-between bg-white p-4 rounded-lg border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all duration-200 group/item"
+              >
+                <div className="flex items-start min-w-0 flex-1 gap-3">
+                  <div className="text-purple-500 flex-shrink-0 mt-0.5">
+                    {renderFileIcon(getFileTypeFromName(file.name))}
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <p 
+                      className="text-sm font-medium text-gray-800 break-words whitespace-normal leading-relaxed"
+                    >
+                      {file.name}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 text-left">
+                      <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
+                      <span>•</span>
+                      <span className="capitalize">{getFileTypeFromName(file.name)}</span>
                     </div>
                   </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeDocFile(index);
+                  }}
+                  className="text-gray-500 hover:text-red-500 transition-colors flex-shrink-0 ml-2 group-hover/item:opacity-100 opacity-70 mt-0.5"
+                  title="Remove file"
+                >
+                  <FaTimes size={16} />
+                </button>
+              </motion.div>
+            ))}
+          </motion.div>
+          
+          {formData.documentFiles.length > 0 && (
+            <motion.button 
+              type="button"
+              onClick={() => docInputRef.current?.click()}
+              className="w-full py-3 text-purple-700 hover:text-purple-900 hover:bg-purple-50 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mt-4 border border-purple-200"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <FaPlus className="text-sm" />
+              Add More Files
+            </motion.button>
+          )}
+        </div>
+      ) : (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center h-full"
+        >
+          <div className="text-purple-500 mb-4 group-hover:scale-110 transition-transform duration-300">
+            <div className="relative">
+              <FaFileAlt className="text-4xl mx-auto" />
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full border-2 border-white"
+              />
+            </div>
+          </div>
+          <p className="font-semibold text-gray-800 mb-1">Upload Documents</p>
+          <p className="text-sm text-gray-600 mb-2 text-center">
+            Multiple files supported
+          </p>
+          <div className="flex flex-wrap justify-center gap-1 text-xs text-gray-500">
+            <span>PDF</span>
+            <span>•</span>
+            <span>DOCX</span>
+            <span>•</span>
+            <span>XLSX</span>
+            <span>•</span>
+            <span>PPTX</span>
+            <span>•</span>
+            <span>ZIP</span>
+          </div>
+        </motion.div>
+      )}
+    </div>
+    
+    {/* File Count Badge */}
+    {formData.documentFiles.length > 0 && (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="absolute -top-2 -right-2 bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-medium z-10 shadow-lg"
+      >
+        {formData.documentFiles.length} file{formData.documentFiles.length !== 1 ? 's' : ''}
+      </motion.div>
+    )}
+  </div>
+</div>
                   
                   {/* Action Buttons */}
                   <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
@@ -1510,6 +1771,69 @@ export default function KnowledgeStationPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Enhanced Image Preview Modal with Zoom */}
+{/* Image Preview Modal */}
+<AnimatePresence>
+  {selectedImage && (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+      onClick={() => setSelectedImage(null)}
+    >
+      <motion.div 
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.8, opacity: 0 }}
+        className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button 
+          onClick={() => setSelectedImage(null)}
+          className="absolute top-4 right-4 z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full p-3 transition-all duration-200 hover:scale-110"
+        >
+          <FaTimes className="text-xl" />
+        </button>
+        
+        {/* Download Button */}
+        <button 
+          onClick={() => {
+            const link = document.createElement('a');
+            link.href = selectedImage;
+            link.download = `knowledge-image-${Date.now()}.jpg`;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast.success('Image download started');
+          }}
+          className="absolute top-4 right-16 z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full p-3 transition-all duration-200 hover:scale-110"
+          title="Download image"
+        >
+          <FaDownload className="text-xl" />
+        </button>
+        
+        {/* Image - Use img tag for better compatibility */}
+        <div className="relative w-full h-full flex items-center justify-center">
+          <img 
+            src={selectedImage}
+            alt="Preview"
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+        
+        {/* Instructions */}
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2">
+          <div className="bg-black/60 backdrop-blur-sm text-white px-6 py-3 rounded-full text-sm">
+            Click anywhere to close
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
     </div>
   );
 }
