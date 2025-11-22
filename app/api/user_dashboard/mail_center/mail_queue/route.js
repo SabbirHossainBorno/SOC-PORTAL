@@ -1,8 +1,8 @@
-//app/api/user_dashboard/mail_queue/route.js
+//app/api/user_dashboard/mail_center/mail_queue/route.js
 import { NextResponse } from 'next/server';
-import { query, getDbConnection } from '../../../../lib/db';
-import logger from '../../../../lib/logger';
-import sendTelegramAlert from '../../../../lib/telegramAlert';
+import { query, getDbConnection } from '../../../../../lib/db';
+import logger from '../../../../../lib/logger';
+import sendTelegramAlert from '../../../../../lib/telegramAlert';
 import { DateTime } from 'luxon';
 
 // Helper function to format date

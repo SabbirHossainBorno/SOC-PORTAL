@@ -37,9 +37,9 @@ export async function GET() {
         label: 'Mail Center',
         icon: 'FaEnvelope',
         children: [
-          { path: '/user_dashboard/track_todays_mail', label: "Track Today's Mail" },
-          { path: '/user_dashboard/mail_log', label: 'Mail Log' },
-          { path: '/user_dashboard/mail_queue', label: 'Mail Queue' }
+          { path: '/user_dashboard/mail_center/track_todays_mail', label: "Track Today's Mail" },
+          { path: '/user_dashboard/mail_center/mail_log', label: 'Mail Log' },
+          { path: '/user_dashboard/mail_center/mail_queue', label: 'Mail Queue' }
         ]
       },
       {

@@ -269,7 +269,7 @@ const modalContent = {
             <div className="flex items-center">
               <div className="flex items-center mr-4">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
-                <span className="font-medium">Production</span>
+                <span className="font-medium">Development</span>
               </div>
               
               <div className="flex items-center text-gray-400">
@@ -362,7 +362,7 @@ const modalContent = {
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                      <span className="text-xs font-medium">Production</span>
+                      <span className="text-xs font-medium">Development</span>
                     </div>
                     
                     {randomSystemId && (

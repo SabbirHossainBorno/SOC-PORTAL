@@ -53,9 +53,9 @@ const UserDashboardSidebar = () => {
       path: '/user_dashboard/mail',
       color: 'text-yellow-500',
       children: [
-        { label: "Track Today's Mail", path: '/user_dashboard/track_todays_mail' },
-        { label: 'Mail Log', path: '/user_dashboard/mail_log' },
-        { label: 'Mail Queue', path: '/user_dashboard/mail_queue' }
+        { label: "Track Today's Mail", path: '/user_dashboard/mail_center/track_todays_mail' },
+        { label: 'Mail Log', path: '/user_dashboard/mail_center/mail_log' },
+        { label: 'Mail Queue', path: '/user_dashboard/mail_center/mail_queue' }
       ]
     },
     { 

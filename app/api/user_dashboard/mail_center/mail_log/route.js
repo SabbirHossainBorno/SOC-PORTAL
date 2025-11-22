@@ -1,7 +1,7 @@
-//app/api/user_dashboard/mail_log/route.js
+//app/api/user_dashboard/mail_center/mail_log/route.js
 import { NextResponse } from 'next/server';
-import { query } from '../../../../lib/db';
-import logger from '../../../../lib/logger';
+import { query } from '../../../../../lib/db';
+import logger from '../../../../../lib/logger';
 
 export async function GET(request) {
   const sessionId = request.cookies.get('sessionId')?.value || 'Unknown';
