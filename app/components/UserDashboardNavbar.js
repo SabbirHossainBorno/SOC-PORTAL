@@ -3,26 +3,44 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaBell, FaSignOutAlt, FaUser, FaBars, FaRegCommentDots, FaUserCircle, FaLock, FaIdCard, FaClock, FaCheck, FaCheckCircle } from 'react-icons/fa';
+import { 
+  FaBell, FaSignOutAlt, FaUser, FaBars, FaRegCommentDots, 
+  FaUserCircle, FaLock, FaIdCard, FaClock, FaCheck, 
+  FaCheckCircle, FaBullhorn, FaFilePdf, FaImage, 
+  FaCalendarAlt, FaUserTie, FaEye, FaExternalLinkAlt,
+  FaTimes, FaThumbtack, FaPaperclip
+} from 'react-icons/fa';
+import { MdOutlineAnnouncement } from "react-icons/md";
 import { DateTime } from 'luxon';
 import toast from 'react-hot-toast';
+import LoadingSpinner from './LoadingSpinner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [noticesOpen, setNoticesOpen] = useState(false);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [profilePhotoError, setProfilePhotoError] = useState(false);
   
-  // New notification states
+  const [notices, setNotices] = useState([]);
+  const [unreadNoticesCount, setUnreadNoticesCount] = useState(0);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedNotice, setSelectedNotice] = useState(null);
+  const [expandedNotice, setExpandedNotice] = useState(null);
+  
+  const [profilePhotoError, setProfilePhotoError] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  
   const [notificationFilter, setNotificationFilter] = useState('all');
   const [showAllNotifications, setShowAllNotifications] = useState(false);
   const [displayedNotifications, setDisplayedNotifications] = useState([]);
 
   const dropdownRef = useRef(null);
   const notificationsRef = useRef(null);
+  const noticesRef = useRef(null);
   const router = useRouter();
 
   // Get cookies with proper decoding
@@ -42,6 +60,118 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
       return null;
     }
   };
+
+  // Fetch notices function
+  const fetchNotices = async () => {
+    try {
+      const socPortalId = getCookie('socPortalId');
+      if (!socPortalId) {
+        setNotices([]);
+        setUnreadNoticesCount(0);
+        return;
+      }
+
+      const response = await fetch('/api/user_dashboard/notice_board');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch notices');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setNotices(data.data || []);
+        
+        // Check for new notices - simple logic: if any notice created today
+        const today = DateTime.now().setZone('Asia/Dhaka').toISODate();
+        const newNoticesCount = data.data.filter(notice => 
+          DateTime.fromISO(notice.created_at).setZone('Asia/Dhaka').toISODate() === today
+        ).length;
+        
+        setUnreadNoticesCount(newNoticesCount);
+      }
+    } catch (error) {
+      console.error('Error fetching notices:', error);
+      setNotices([]);
+      setUnreadNoticesCount(0);
+    }
+  };
+
+  // Handle notice click
+  const handleNoticeClick = (notice) => {
+    if (notice.image_url) {
+      setSelectedNotice(notice);
+      setShowImageModal(true);
+    } else if (notice.pdf_url) {
+      window.open(notice.pdf_url, '_blank');
+    }
+  };
+
+  // Toggle notice expansion
+  const toggleNoticeExpansion = (noticeId, e) => {
+    e.stopPropagation();
+    setExpandedNotice(expandedNotice === noticeId ? null : noticeId);
+  };
+
+  // Format notice date
+  const formatNoticeDate = (dateString) => {
+    return DateTime.fromISO(dateString).setZone('Asia/Dhaka').toFormat('MMM dd, yyyy • HH:mm');
+  };
+
+  // Format date range
+  const formatDateRange = (fromDate, toDate) => {
+    const from = DateTime.fromISO(fromDate).setZone('Asia/Dhaka');
+    const to = DateTime.fromISO(toDate).setZone('Asia/Dhaka');
+    
+    if (from.hasSame(to, 'day')) {
+      return `${from.toFormat('MMM dd, yyyy')} • ${from.toFormat('HH:mm')} - ${to.toFormat('HH:mm')}`;
+    } else {
+      return `${from.toFormat('MMM dd, HH:mm')} - ${to.toFormat('MMM dd, HH:mm')}`;
+    }
+  };
+
+  // Check if notice is active
+  const isNoticeActive = (notice) => {
+    const now = DateTime.now().setZone('Asia/Dhaka');
+    const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
+    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+    return now >= from && now <= to;
+  };
+
+  // Get notice status
+  const getNoticeStatus = (notice) => {
+    const now = DateTime.now().setZone('Asia/Dhaka');
+    const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
+    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+    
+    if (now < from) return { status: 'upcoming', color: 'blue', text: 'Upcoming' };
+    if (now > to) return { status: 'expired', color: 'gray', text: 'Expired' };
+    return { status: 'active', color: 'green', text: 'Active' };
+  };
+
+  // Get time remaining
+  const getTimeRemaining = (notice) => {
+    const now = DateTime.now().setZone('Asia/Dhaka');
+    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+    const diff = to.diff(now, ['days', 'hours', 'minutes']);
+    
+    if (diff.days > 0) {
+      return `${diff.days}d ${diff.hours}h remaining`;
+    } else if (diff.hours > 0) {
+      return `${diff.hours}h ${Math.round(diff.minutes)}m remaining`;
+    } else {
+      return `${Math.round(diff.minutes)}m remaining`;
+    }
+  };
+
+  // Auto-refresh notices every 5 minutes
+  useEffect(() => {
+    fetchNotices(); // Initial fetch
+    
+    const backgroundRefresh = setInterval(fetchNotices, 300000); // 5 minutes
+    return () => clearInterval(backgroundRefresh);
+  }, []);
+
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -112,55 +242,51 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
   const hasMoreNotifications = notifications.length > 20;
 
   // Mark notification as read
-  // Mark notification as read
-const markAsRead = async (id, e) => {
-  e.stopPropagation();
-  try {
-    const response = await fetch(`/api/user_dashboard/notification/${id}`, {
-      method: 'PUT'
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to mark as read');
+  const markAsRead = async (id, e) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch(`/api/user_dashboard/notification/${id}`, {
+        method: 'PUT'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to mark as read');
+      }
+      
+      // Update local state
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      toast.error('Failed to mark notification as read');
     }
-    
-    // Update local state
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  } catch (error) {
-    console.error('Failed to mark notification as read:', error);
-    toast.error('Failed to mark notification as read');
-  }
-};
+  };
 
   // Mark all notifications as read
-  // In your UserDashboardNavbar component, update the markAllAsRead function:
-
-// Mark all notifications as read
-const markAllAsRead = async (e) => {
-  e.stopPropagation();
-  try {
-    const response = await fetch('/api/user_dashboard/notification/bulk_read', {
-      method: 'PUT'
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to mark all as read');
+  const markAllAsRead = async (e) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch('/api/user_dashboard/notification/bulk_read', {
+        method: 'PUT'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to mark all as read');
+      }
+      
+      const result = await response.json();
+      
+      // Update local state
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+      toast.success(result.message || 'All notifications marked as read');
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      toast.error('Failed to mark all as read');
     }
-    
-    const result = await response.json();
-    
-    // Update local state
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
-    toast.success(result.message || 'All notifications marked as read');
-  } catch (error) {
-    console.error('Failed to mark all notifications as read:', error);
-    toast.error('Failed to mark all as read');
-  }
-};
+  };
 
   // Fetch user data
   useEffect(() => {
@@ -234,6 +360,9 @@ const markAllAsRead = async (e) => {
         setNotificationFilter('unread');
         setShowAllNotifications(false);
       }
+      if (noticesRef.current && !noticesRef.current.contains(event.target)) {
+        setNoticesOpen(false);
+      }
     }
     
     document.addEventListener('mousedown', handleClickOutside);
@@ -241,7 +370,17 @@ const markAllAsRead = async (e) => {
   }, []);
 
   const handleLogout = async () => {
-    const toastId = toast.loading('Logging Out...');
+    // Show toast immediately
+    const toastId = toast.loading('Logging out...', {
+      position: 'top-right',
+      duration: 4000
+    });
+
+    // Close profile tray immediately
+    setDropdownOpen(false);
+
+    // Show loading state
+    setIsLoggingOut(true);
     
     try {
       // Clear user data immediately
@@ -285,7 +424,7 @@ const markAllAsRead = async (e) => {
   };
 
   // Check if any tray is open on mobile
-  const isTrayOpen = isMobile && (dropdownOpen || notificationsOpen);
+  const isTrayOpen = isMobile && (dropdownOpen || notificationsOpen || noticesOpen);
 
   // Display loading state
   if (loading) {
@@ -305,13 +444,87 @@ const markAllAsRead = async (e) => {
 
   return (
     <>
+      {/* Full Screen Loading Spinner with White BG */}
+      {isLoggingOut && (
+        <div className="fixed inset-0 bg-white z-[100] flex items-center justify-center">
+          <div className="text-center">
+            <LoadingSpinner />
+            <p className="text-gray-800 text-xl font-semibold mt-4 animate-pulse">
+              Securing your logout...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Image Modal */}
+      <AnimatePresence>
+        {showImageModal && selectedNotice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl"
+            >
+              <div className="flex justify-between items-center p-6 border-b bg-gradient-to-r from-gray-50 to-white">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{selectedNotice.title}</h3>
+                  <p className="text-gray-600 mt-1 flex items-center gap-2">
+                    <FaCalendarAlt className="text-blue-500" />
+                    {formatDateRange(selectedNotice.from_datetime, selectedNotice.to_datetime)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowImageModal(false)}
+                  className="p-3 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <FaTimes className="text-2xl text-gray-500 hover:text-gray-700" />
+                </button>
+              </div>
+              <div className="p-6 max-h-[70vh] overflow-auto">
+                <div className="flex flex-col lg:flex-row gap-8">
+                  <div className="lg:flex-1">
+                    <img 
+                      src={selectedNotice.image_url} 
+                      alt={selectedNotice.title}
+                      className="w-full h-auto rounded shadow-lg"
+                      onError={(e) => {
+                        e.target.src = '/api/placeholder/800/600';
+                        toast.error('Failed to load image');
+                      }}
+                    />
+                  </div>
+                  {selectedNotice.description && (
+                    <div className="lg:w-96 bg-gray-50 rounded p-6">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <FaBullhorn className="text-orange-500" />
+                        Notice Details
+                      </h4>
+                      <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {selectedNotice.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Backdrop Blur for Mobile */}
-      {isTrayOpen && (
+      {(isMobile && (dropdownOpen || notificationsOpen || noticesOpen)) && (
         <div 
           className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 md:hidden"
           onClick={() => {
             setDropdownOpen(false);
             setNotificationsOpen(false);
+            setNoticesOpen(false);
             setNotificationFilter('unread');
             setShowAllNotifications(false);
           }}
@@ -340,6 +553,343 @@ const markAllAsRead = async (e) => {
 
         {/* Right side controls */}
         <div className="flex items-center space-x-4 sm:space-x-5">
+          {/* Enhanced Notice Board Icon */}
+          <div className="relative" ref={noticesRef}>
+            <button
+              onClick={() => setNoticesOpen(!noticesOpen)}
+              className="p-2 rounded-full hover:bg-orange-50 focus:outline-none focus:ring-0 relative transition-all duration-200 group"
+              aria-label="Notices"
+            >
+              <div className="relative">
+                <MdOutlineAnnouncement className="h-7 w-7 text-gray-600 group-hover:text-orange-600 transition-colors" />
+
+                {unreadNoticesCount > 0 && (
+                  <motion.span 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute top-0 right-0 transform -translate-y-1/2 translate-x-1/2 flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-xs text-white font-bold border-2 border-white shadow-sm">
+                    {unreadNoticesCount > 9 ? '9+' : unreadNoticesCount}
+                  </motion.span>
+                )}
+              </div>
+            </button>
+
+
+            {/* Modern Notice Board Tray with Realistic Design */}
+            <AnimatePresence>
+              {noticesOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  className={`
+                    fixed md:absolute 
+                    ${isMobile 
+                      ? 'inset-4 top-20' 
+                      : 'right-0 mt-2.5 w-[48rem] max-h-[85vh]'
+                    } 
+                    bg-amber-50 border-2 border-amber-200 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
+                    notice-board-tray
+                  `}
+                >
+                  {/* Cork Board Header with Pin */}
+                  <div className="relative px-6 py-4 border-b-2 border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200">
+                    <div className="flex justify-between items-center mb-3 pt-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-500 rounded shadow-lg">
+                          <FaBullhorn className="text-white text-lg" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-gray-900 text-xl">Notice Board</h3>
+                          <p className="text-amber-800 text-sm">Important announcements and updates</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right bg-white/80 rounded px-3 py-2 border border-amber-300">
+                          <div className="text-xl font-bold text-orange-600">{notices.length}</div>
+                          <div className="text-xs text-amber-700">Total Notices</div>
+                        </div>
+                        {unreadNoticesCount > 0 && (
+                          <div className="text-right bg-white/80 rounded px-3 py-2 border border-red-300">
+                            <div className="text-xl font-bold text-red-500">{unreadNoticesCount}</div>
+                            <div className="text-xs text-red-700">New Today</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Quick Stats */}
+                    <div className="flex gap-3">
+                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-green-300 shadow-sm">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {notices.filter(n => getNoticeStatus(n).status === 'active').length} Active
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-blue-300 shadow-sm">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} Upcoming
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-amber-300 shadow-sm">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {notices.filter(n => getNoticeStatus(n).status === 'expired').length} Archived
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Enhanced Notices List with Image Preview */}
+                  <div className="flex-1 overflow-y-auto p-4 bg-amber-50/50">
+                    {notices.length > 0 ? (
+                      <div className="space-y-4">
+                        {notices.map((notice) => {
+                          const status = getNoticeStatus(notice);
+                          const isExpanded = expandedNotice === notice.notice_id;
+                          
+                          return (
+                            <motion.div
+                              key={notice.notice_id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={`bg-white rounded shadow-lg border-l-4 hover:shadow-xl transition-all duration-300 cursor-pointer ${
+                                status.status === 'active' 
+                                  ? 'border-green-400 hover:border-green-500' 
+                                  : status.status === 'upcoming'
+                                  ? 'border-blue-400 hover:border-blue-500'
+                                  : 'border-amber-400 hover:border-amber-500'
+                              }`}
+                              onClick={() => handleNoticeClick(notice)}
+                            >
+                              <div className="p-4">
+                                <div className="flex gap-4">
+                                  {/* Main Content - Left Side */}
+                                  <div className="flex-1 min-w-0">
+                                    {/* Header */}
+                                    <div className="flex items-start justify-between mb-3">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
+                                            status.status === 'active' 
+                                              ? 'bg-green-100 text-green-800 border border-green-200' 
+                                              : status.status === 'upcoming'
+                                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                          }`}>
+                                            {status.text}
+                                          </span>
+                                          {status.status === 'active' && (
+                                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                                              {getTimeRemaining(notice)}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <h4 className="font-bold text-gray-900 text-lg leading-tight mb-2">
+                                          {notice.title}
+                                        </h4>
+                                      </div>
+                                      <button
+                                        onClick={(e) => toggleNoticeExpansion(notice.notice_id, e)}
+                                        className="ml-4 p-2 hover:bg-gray-100 rounded transition-colors"
+                                      >
+                                        <FaEye className={`text-gray-400 transition-transform ${
+                                          isExpanded ? 'rotate-180' : ''
+                                        }`} />
+                                      </button>
+                                    </div>
+
+                                    {/* Description Preview */}
+                                    <p className="text-gray-600 text-sm leading-relaxed mb-4 line-clamp-2">
+                                      {notice.description}
+                                    </p>
+
+                                    {/* Metadata */}
+                                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                                      <div className="flex items-center gap-1">
+                                        <FaCalendarAlt className="text-gray-400" />
+                                        <span>{formatDateRange(notice.from_datetime, notice.to_datetime)}</span>
+                                      </div>
+                                      {notice.created_by && (
+                                        <div className="flex items-center gap-1">
+                                          <FaUserTie className="text-gray-400" />
+                                          <span>By {notice.created_by}</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Expanded Content */}
+                                    <AnimatePresence>
+                                      {isExpanded && (
+                                        <motion.div
+                                          initial={{ opacity: 0, height: 0 }}
+                                          animate={{ opacity: 1, height: 'auto' }}
+                                          exit={{ opacity: 0, height: 0 }}
+                                          className="overflow-hidden"
+                                        >
+                                          <div className="border-t pt-4 space-y-4">
+                                            {/* Full Description */}
+                                            <div>
+                                              <h5 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                                                <FaBullhorn className="text-orange-500" />
+                                                Full Description
+                                              </h5>
+                                              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50 p-3 rounded">
+                                                {notice.description}
+                                              </p>
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            <div className="flex gap-3">
+                                              {notice.image_url && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedNotice(notice);
+                                                    setShowImageModal(true);
+                                                  }}
+                                                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors shadow-sm"
+                                                >
+                                                  <FaImage className="text-white" />
+                                                  <span className="text-sm font-medium">View Image</span>
+                                                </button>
+                                              )}
+                                              {notice.pdf_url && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    window.open(notice.pdf_url, '_blank');
+                                                  }}
+                                                  className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded transition-colors shadow-sm"
+                                                >
+                                                  <FaFilePdf className="text-white" />
+                                                  <span className="text-sm font-medium">Open PDF</span>
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </div>
+
+                                  {/* Media Preview - Right Side */}
+                                  {(notice.image_url || notice.pdf_url) && (
+                                    <div className="w-32 flex-shrink-0">
+                                      {notice.image_url ? (
+                                        <div className="relative group">
+                                          <img 
+                                            src={notice.image_url} 
+                                            alt="Notice preview"
+                                            className="w-32 h-24 object-cover rounded shadow-md border border-gray-200 hover:shadow-lg transition-shadow"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedNotice(notice);
+                                              setShowImageModal(true);
+                                            }}
+                                          />
+                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded flex items-center justify-center">
+                                            <FaImage className="text-white/0 group-hover:text-white/80 text-xl transition-all" />
+                                          </div>
+                                          <div className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                                            <FaImage className="inline mr-1" />
+                                            Image
+                                          </div>
+                                        </div>
+                                      ) : notice.pdf_url ? (
+                                        <div 
+                                          className="w-32 h-24 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 rounded shadow-md flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all group"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(notice.pdf_url, '_blank');
+                                          }}
+                                        >
+                                          <div className="text-red-500 group-hover:text-red-600 transition-colors">
+                                            <FaFilePdf className="text-3xl mb-2" />
+                                          </div>
+                                          <div className="text-center">
+                                            <div className="text-xs font-semibold text-red-700">PDF Document</div>
+                                            <div className="text-[10px] text-red-600 mt-1">Click to open</div>
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Footer with Attachments */}
+                                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                                  <div className="flex items-center gap-2">
+                                    {(notice.image_url || notice.pdf_url) && (
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <FaPaperclip className="text-gray-400" />
+                                        <span>Attachments:</span>
+                                        {notice.image_url && (
+                                          <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                            <FaImage className="text-xs" />
+                                            Image
+                                          </span>
+                                        )}
+                                        {notice.pdf_url && (
+                                          <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded">
+                                            <FaFilePdf className="text-xs" />
+                                            PDF
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                                    <span>Click to view details</span>
+                                    <FaExternalLinkAlt className="text-xs" />
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-r from-amber-100 to-amber-200 rounded-full flex items-center justify-center shadow-inner">
+                          <FaBullhorn className="text-amber-500 text-3xl" />
+                        </div>
+                        <h4 className="text-lg font-semibold text-amber-900 mb-2">No Notices Available</h4>
+                        <p className="text-amber-700 text-sm max-w-sm mx-auto">
+                          The notice board is currently empty. Check back later for important announcements and updates.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Enhanced Footer */}
+                  {notices.length > 0 && (
+                    <div className="px-6 py-4 border-t-2 border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200 flex justify-between items-center">
+                      <div className="flex items-center gap-3 text-sm text-amber-800">
+                        <div className="flex items-center gap-2 bg-white/90 px-3 py-1 rounded-full border border-amber-300">
+                          <span className="font-semibold">{notices.length}</span>
+                          <span>notices</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span>{notices.filter(n => getNoticeStatus(n).status === 'active').length} active</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setNoticesOpen(false)}
+                        className="px-4 py-2 text-sm font-medium text-amber-800 hover:text-amber-900 bg-white/90 hover:bg-white border border-amber-300 rounded transition-colors"
+                      >
+                        Close Board
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          
           {/* Notification Icon */}
           <div className="relative" ref={notificationsRef}>
             <button
@@ -359,214 +909,213 @@ const markAllAsRead = async (e) => {
 
             {/* Notification Tray */}
             {notificationsOpen && (
-            <div 
-              className={`
-                fixed md:absolute 
-                ${isMobile 
-                  ? 'left-4 right-4 top-[72px] max-h-[80vh]' 
-                  : 'right-0 mt-2 w-96 max-h-[70vh]'
-                } 
-                bg-white border border-gray-200 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
-              `}
-            >
-              {/* Header with Stats */}
-              <div className="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-bold text-gray-800 text-base">Notifications</h3>
-                  <div className="flex items-center space-x-2">
-                    {unreadCount > 0 && (
-                      <button 
-                        onClick={markAllAsRead}
-                        className="flex items-center text-xs bg-green-500 text-white px-3 py-1.5 rounded hover:bg-green-600 transition-colors font-medium gap-1"
-                      >
-                        <FaCheckCircle className="text-white" />
-                        Mark All Read
-                      </button>
-                    )}
+              <div 
+                className={`
+                  fixed md:absolute 
+                  ${isMobile 
+                    ? 'left-4 right-4 top-[72px] max-h-[80vh]' 
+                    : 'right-0 mt-3 w-96 max-h-[70vh]'
+                  } 
+                  bg-white border border-gray-200 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
+                `}
+              >
+                {/* Header with Stats */}
+                <div className="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-gray-800 text-base">Notifications</h3>
+                    <div className="flex items-center space-x-2">
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={markAllAsRead}
+                          className="flex items-center text-xs bg-green-500 text-white px-3 py-1.5 rounded hover:bg-green-600 transition-colors font-medium gap-1"
+                        >
+                          <FaCheckCircle className="text-white" />
+                          Mark All Read
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Stats Bar */}
+                  <div className="flex gap-2 justify-center text-center">
+                    <div className="bg-white/80 rounded p-2 border border-blue-100 flex-1 flex items-center justify-center gap-2">
+                      <span className="text-xs text-gray-600">Total</span>
+                      <span className="text-sm font-bold text-blue-700">{totalCount}</span>
+                    </div>
+                    <div className="bg-white/80 rounded p-2 border border-red-100 flex-1 flex items-center justify-center gap-2">
+                      <span className="text-xs text-gray-600">Unread</span>
+                      <span className="text-sm font-bold text-red-700">{unreadCount}</span>
+                    </div>
+                    <div className="bg-white/80 rounded p-2 border border-green-100 flex-1 flex items-center justify-center gap-2">
+                      <span className="text-xs text-gray-600">Read</span>
+                      <span className="text-sm font-bold text-green-700">{readCount}</span>
+                    </div>
                   </div>
                 </div>
                 
-                {/* Stats Bar */}
-                <div className="flex gap-2 justify-center text-center">
-                  <div className="bg-white/80 rounded p-2 border border-blue-100 flex-1 flex items-center justify-center gap-2">
-                    <span className="text-xs text-gray-600">Total</span>
-                    <span className="text-sm font-bold text-blue-700">{totalCount}</span>
-                  </div>
-                  <div className="bg-white/80 rounded p-2 border border-red-100 flex-1 flex items-center justify-center gap-2">
-                    <span className="text-xs text-gray-600">Unread</span>
-                    <span className="text-sm font-bold text-red-700">{unreadCount}</span>
-                  </div>
-                  <div className="bg-white/80 rounded p-2 border border-green-100 flex-1 flex items-center justify-center gap-2">
-                    <span className="text-xs text-gray-600">Read</span>
-                    <span className="text-sm font-bold text-green-700">{readCount}</span>
-                  </div>
+                {/* Filter Buttons */}
+                <div className="px-4 py-2 border-b bg-gray-50 flex gap-1">
+                  <button
+                    onClick={() => setNotificationFilter('all')}
+                    className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
+                      notificationFilter === 'all' 
+                        ? 'bg-blue-500 text-white shadow-sm' 
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setNotificationFilter('unread')}
+                    className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
+                      notificationFilter === 'unread' 
+                        ? 'bg-red-500 text-white shadow-sm' 
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    Unread
+                  </button>
+                  <button
+                    onClick={() => setNotificationFilter('read')}
+                    className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
+                      notificationFilter === 'read' 
+                        ? 'bg-green-500 text-white shadow-sm' 
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    Read
+                  </button>
                 </div>
-
-              </div>
-              
-              {/* Filter Buttons */}
-              <div className="px-4 py-2 border-b bg-gray-50 flex gap-1">
-                <button
-                  onClick={() => setNotificationFilter('all')}
-                  className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
-                    notificationFilter === 'all' 
-                      ? 'bg-blue-500 text-white shadow-sm' 
-                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setNotificationFilter('unread')}
-                  className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
-                    notificationFilter === 'unread' 
-                      ? 'bg-red-500 text-white shadow-sm' 
-                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  Unread
-                </button>
-                <button
-                  onClick={() => setNotificationFilter('read')}
-                  className={`flex-1 px-2 py-1 text-xs font-medium rounded transition-all ${
-                    notificationFilter === 'read' 
-                      ? 'bg-green-500 text-white shadow-sm' 
-                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  Read
-                </button>
-              </div>
-              
-              {/* Notifications List */}
-              <div className="flex-1 overflow-y-auto">
-                {displayedNotifications.length > 0 ? (
-                  displayedNotifications.map(notification => (
-                    <div 
-                      key={notification.id} 
-                      className={`px-4 py-3 hover:bg-blue-50 cursor-pointer transition-colors duration-150 border-b border-gray-100 last:border-b-0 ${
-                        !notification.read ? 'bg-blue-50 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
-                      }`}
-                      onClick={(e) => !notification.read && markAsRead(notification.id, e)}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center">
-                            {notification.icon === 'update' && (
-                              <div className="bg-blue-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                </svg>
-                              </div>
-                            )}
-                            {notification.icon === 'user' && (
-                              <div className="bg-green-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <FaUser className="text-white text-xs" />
-                              </div>
-                            )}
-                            {notification.icon === 'alert' && (
-                              <div className="bg-yellow-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                                </svg>
-                              </div>
-                            )}
-                            {notification.icon === 'maintenance' && (
-                              <div className="bg-indigo-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                </svg>
-                              </div>
-                            )}
-                            {notification.icon === 'backup' && (
-                              <div className="bg-teal-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                              </div>
-                            )}
-                            {notification.icon === 'login' && (
-                              <div className="bg-purple-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
-                                </svg>
-                              </div>
-                            )}
-                            {!['update', 'user', 'alert', 'maintenance', 'backup', 'login'].includes(notification.icon) && (
-                              <div className="bg-gray-500 w-5 h-5 rounded-full flex items-center justify-center">
-                                <FaBell className="text-white text-xs" />
-                              </div>
-                            )}
+                
+                {/* Notifications List */}
+                <div className="flex-1 overflow-y-auto">
+                  {displayedNotifications.length > 0 ? (
+                    displayedNotifications.map(notification => (
+                      <div 
+                        key={notification.id} 
+                        className={`px-4 py-3 hover:bg-blue-50 cursor-pointer transition-all duration-200 border-b border-blue-300 last:border-b-0 ${
+                          !notification.read ? 'bg-blue-50 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
+                        }`}
+                        onClick={(e) => !notification.read && markAsRead(notification.id, e)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center">
+                              {notification.icon === 'update' && (
+                                <div className="bg-blue-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                  </svg>
+                                </div>
+                              )}
+                              {notification.icon === 'user' && (
+                                <div className="bg-green-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <FaUser className="text-white text-xs" />
+                                </div>
+                              )}
+                              {notification.icon === 'alert' && (
+                                <div className="bg-yellow-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                  </svg>
+                                </div>
+                              )}
+                              {notification.icon === 'maintenance' && (
+                                <div className="bg-indigo-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                  </svg>
+                                </div>
+                              )}
+                              {notification.icon === 'backup' && (
+                                <div className="bg-teal-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                  </svg>
+                                </div>
+                              )}
+                              {notification.icon === 'login' && (
+                                <div className="bg-purple-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                                  </svg>
+                                </div>
+                              )}
+                              {!['update', 'user', 'alert', 'maintenance', 'backup', 'login'].includes(notification.icon) && (
+                                <div className="bg-gray-500 w-5 h-5 rounded-full flex items-center justify-center">
+                                  <FaBell className="text-white text-xs" />
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-col gap-1">
-                            <h4 className="font-semibold text-gray-800 text-sm break-words leading-relaxed">
-                              {notification.title || 'Untitled Notification'}
-                            </h4>
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center">
-                                {!notification.read ? (
-                                  <>
-                                    <span className="inline-block h-2 w-2 rounded-full bg-blue-500"></span>
-                                    <span className="text-[0.6rem] text-blue-600 ml-1.5 font-medium uppercase tracking-wider">Unread</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FaCheck className="text-xs text-green-500 mr-1" />
-                                    <span className="text-[0.6rem] text-green-600 font-medium uppercase tracking-wider">Read</span>
-                                  </>
-                                )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col gap-1">
+                              <h4 className="font-semibold text-gray-800 text-sm break-words leading-relaxed">
+                                {notification.title || 'Untitled Notification'}
+                              </h4>
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center">
+                                  {!notification.read ? (
+                                    <>
+                                      <span className="inline-block h-2 w-2 rounded-full bg-blue-500"></span>
+                                      <span className="text-[0.6rem] text-blue-600 ml-1.5 font-medium uppercase tracking-wider">Unread</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FaCheck className="text-xs text-green-500 mr-1" />
+                                      <span className="text-[0.6rem] text-green-600 font-medium uppercase tracking-wider">Read</span>
+                                    </>
+                                  )}
+                                </div>
+                                <span className="text-[0.65rem] text-gray-500 whitespace-nowrap flex-shrink-0 ml-2">
+                                  {notification.time || 'Unknown time'}
+                                </span>
                               </div>
-                              <span className="text-[0.65rem] text-gray-500 whitespace-nowrap flex-shrink-0 ml-2">
-                                {notification.time || 'Unknown time'}
-                              </span>
                             </div>
                           </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-8 text-center">
+                      <FaRegCommentDots className="mx-auto text-gray-400 text-2xl mb-2" />
+                      <p className="text-gray-500 text-sm">
+                        {notificationFilter === 'all' 
+                          ? 'No notifications available' 
+                          : `No ${notificationFilter} notifications`}
+                      </p>
                     </div>
-                  ))
-                ) : (
-                  <div className="px-4 py-8 text-center">
-                    <FaRegCommentDots className="mx-auto text-gray-400 text-2xl mb-2" />
-                    <p className="text-gray-500 text-sm">
-                      {notificationFilter === 'all' 
-                        ? 'No notifications available' 
-                        : `No ${notificationFilter} notifications`}
-                    </p>
+                  )}
+                </div>
+                
+                {/* Footer with View All / Show Less */}
+                {hasMoreNotifications && (
+                  <div className="px-4 py-2.5 border-t bg-gray-50 flex justify-between items-center flex-shrink-0">
+                    <span className="text-xs text-gray-600">
+                      Showing {displayedCount} of {notificationFilter === 'all' ? totalCount : 
+                        notificationFilter === 'unread' ? unreadCount : readCount} notifications
+                    </span>
+                    <button 
+                      onClick={() => setShowAllNotifications(!showAllNotifications)}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-200"
+                    >
+                      <FaRegCommentDots className="mr-1.5 text-xs" />
+                      {showAllNotifications ? 'Show Less' : 'View All'}
+                    </button>
+                  </div>
+                )}
+                
+                {/* Show when all notifications are displayed but there's no "more" */}
+                {!hasMoreNotifications && displayedCount > 0 && (
+                  <div className="px-4 py-2.5 border-t bg-gray-50 flex justify-center items-center flex-shrink-0">
+                    <span className="text-xs text-gray-600">
+                      Showing all {displayedCount} notifications
+                    </span>
                   </div>
                 )}
               </div>
-              
-              {/* Footer with View All / Show Less */}
-              {hasMoreNotifications && (
-                <div className="px-4 py-2.5 border-t bg-gray-50 flex justify-between items-center flex-shrink-0">
-                  <span className="text-xs text-gray-600">
-                    Showing {displayedCount} of {notificationFilter === 'all' ? totalCount : 
-                      notificationFilter === 'unread' ? unreadCount : readCount} notifications
-                  </span>
-                  <button 
-                    onClick={() => setShowAllNotifications(!showAllNotifications)}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-200"
-                  >
-                    <FaRegCommentDots className="mr-1.5 text-xs" />
-                    {showAllNotifications ? 'Show Less' : 'View All'}
-                  </button>
-                </div>
-              )}
-              
-              {/* Show when all notifications are displayed but there's no "more" */}
-              {!hasMoreNotifications && displayedCount > 0 && (
-                <div className="px-4 py-2.5 border-t bg-gray-50 flex justify-center items-center flex-shrink-0">
-                  <span className="text-xs text-gray-600">
-                    Showing all {displayedCount} notifications
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+            )}
           </div>
 
           {/* Profile Section */}

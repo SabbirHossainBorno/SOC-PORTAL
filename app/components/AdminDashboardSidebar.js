@@ -1,7 +1,7 @@
 // components/AdminDashboardSidebar.js
 'use client';
 
-import { FaHome, FaUsers, FaCog, FaChartBar, FaDatabase, FaShieldAlt, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaHome, FaUsers, FaCog, FaBullhorn, FaChartBar, FaDatabase, FaShieldAlt, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { RxActivityLog } from "react-icons/rx";
 import { MdOutlineAssignmentLate, MdLogin  } from "react-icons/md";
 import { useState, useEffect } from 'react';
@@ -42,6 +42,16 @@ const navItems = [
     children: [
       { label: 'Role Management', path: '/admin_dashboard/role_permission/role_management' },
       { label: 'Roster Upload', path: '/admin_dashboard/role_permission/roster_upload' },
+    ]
+  },
+  { 
+    label: 'Notice Board', 
+    icon: <FaBullhorn className="text-xl" />, 
+    path: '/admin_dashboard/notice_board',
+    color: 'text-orange-500',
+    children: [
+      { label: 'Create Notice', path: '/admin_dashboard/notice_board/create' },
+      { label: 'Notice Log', path: '/admin_dashboard/notice_board/log' },
     ]
   },
   {

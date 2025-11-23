@@ -1,4 +1,4 @@
-//app/api/admin_dashboard/notification/route.js
+// app/api/admin_dashboard/notification/route.js
 import { query } from '../../../../lib/db';
 import { NextResponse } from 'next/server';
 import logger from '../../../../lib/logger';
@@ -9,11 +9,11 @@ export async function GET(request) {
   let sid = 'N/A';
 
   try {
-    // Await cookies() here
     const cookieStore = await cookies();
     eid = cookieStore.get('eid')?.value || 'N/A';
     sid = cookieStore.get('sessionId')?.value || 'N/A';
 
+    // REMOVED LIMIT 20 - Now fetching all notifications
     const result = await query(`
       SELECT 
         notification_id AS id,
@@ -22,7 +22,6 @@ export async function GET(request) {
         created_at AS time
       FROM admin_notification_details
       ORDER BY created_at DESC
-      LIMIT 20
     `);
 
     const notifications = result.rows || [];
@@ -46,11 +45,11 @@ export async function GET(request) {
       };
     });
 
-    logger.info('Notifications fetched successfully', {
+    logger.info('Admin notifications fetched successfully', {
       meta: {
         eid,
         sid,
-        taskName: 'NotificationFetch',
+        taskName: 'AdminNotificationFetch',
         details: `Fetched ${formattedNotifications.length} notifications`,
         count: formattedNotifications.length
       }
@@ -58,16 +57,15 @@ export async function GET(request) {
 
     return NextResponse.json(formattedNotifications);
   } catch (error) {
-    // Await here as well
     const cookieStore = await cookies();
     const eid = cookieStore.get('eid')?.value || 'N/A';
     const sid = cookieStore.get('sessionId')?.value || 'N/A';
 
-    logger.error('Failed to fetch notifications', {
+    logger.error('Failed to fetch admin notifications', {
       meta: {
         eid,
         sid,
-        taskName: 'NotificationFetch',
+        taskName: 'AdminNotificationFetch',
         details: error.message,
         error: error.message,
         stack: error.stack
@@ -76,7 +74,6 @@ export async function GET(request) {
     return NextResponse.json([], { status: 200 });
   }
 }
-
 
 function getNotificationIcon(title) {
   if (!title) return 'user';

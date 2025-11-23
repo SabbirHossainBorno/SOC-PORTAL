@@ -14,7 +14,7 @@ import AdminDashboardCard from '../components/AdminDashboardCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FaUsers, FaChartLine, FaDatabase, FaShieldAlt, FaCog, FaPlus, 
+  FaUsers, FaChartLine, FaDatabase, FaShieldAltAltAlt, FaCog, FaPlus, 
   FaSignInAlt, FaChartPie, FaSync, FaExclamationTriangle, FaCalendarAlt,
   FaUserFriends, FaClock, FaServer, FaMobile, FaWifi, FaCalendarDay,
   FaCalendarCheck, FaIdCard, FaChartBar, FaNetworkWired, FaBell,
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navigation Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-40">
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
@@ -168,7 +168,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-      </div>
+
 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

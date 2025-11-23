@@ -344,7 +344,7 @@ const handleSubmit = async (e) => {
                 <FaEnvelope className="text-white text-lg" />
               </div>
               <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-800 via-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Track Today's Mail
+                Track Today&apos;s Mail
               </h1>
             </div>
             <p className="text-gray-600 text-sm md:text-base leading-relaxed max-w-2xl">
@@ -362,7 +362,7 @@ const handleSubmit = async (e) => {
                 <FaCalendarAlt className="text-white text-sm" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Today's Date</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Today&apos;s Date</p>
                 <p className="text-lg font-bold text-gray-900">
                   {new Date().toLocaleDateString('en-BD', {
                     timeZone: 'Asia/Dhaka',
