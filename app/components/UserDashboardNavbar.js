@@ -576,318 +576,328 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
 
 
             {/* Modern Notice Board Tray with Realistic Design */}
-            <AnimatePresence>
-              {noticesOpen && (
+<AnimatePresence>
+  {noticesOpen && (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      transition={{ type: "spring", damping: 25, stiffness: 300 }}
+      className={`
+        fixed md:absolute 
+        ${isMobile 
+          ? 'inset-4 top-20' 
+          : 'right-0 mt-2.5 w-[48rem] max-h-[85vh]'
+        } 
+        bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/80 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
+        backdrop-blur-xl
+      `}
+    >
+      {/* Professional Header */}
+      <div className="relative px-6 py-4 bg-gradient-to-r from-slate-800 to-blue-900 border-b border-slate-300/30">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
+        
+        <div className="relative flex justify-between items-center mb-3 pt-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded shadow-lg">
+              <FaBullhorn className="text-white text-lg" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-xl">Notice Board</h3>
+              <p className="text-blue-200 text-sm">Important announcements and updates</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right bg-white/10 backdrop-blur-sm rounded px-3 py-2 border border-white/20">
+              <div className="text-xl font-bold text-white">{notices.length}</div>
+              <div className="text-xs text-blue-200">Total Notices</div>
+            </div>
+            {unreadNoticesCount > 0 && (
+              <div className="text-right bg-red-500/20 backdrop-blur-sm rounded px-3 py-2 border border-red-400/30">
+                <div className="text-xl font-bold text-white">{unreadNoticesCount}</div>
+                <div className="text-xs text-red-200">New Today</div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Professional Status Indicators */}
+        <div className="relative flex gap-2">
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+            <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+            <span className="text-sm font-medium text-white">
+              {notices.filter(n => getNoticeStatus(n).status === 'active').length} Active
+            </span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+            <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+            <span className="text-sm font-medium text-white">
+              {notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} Upcoming
+            </span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+            <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+            <span className="text-sm font-medium text-white">
+              {notices.filter(n => getNoticeStatus(n).status === 'expired').length} Archived
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Professional Notices List */}
+      <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-slate-50/80 to-blue-50/20">
+        {notices.length > 0 ? (
+          <div className="space-y-4">
+            {notices.map((notice) => {
+              const status = getNoticeStatus(notice);
+              const isExpanded = expandedNotice === notice.notice_id;
+              
+              return (
                 <motion.div
-                  initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  className={`
-                    fixed md:absolute 
-                    ${isMobile 
-                      ? 'inset-4 top-20' 
-                      : 'right-0 mt-2.5 w-[48rem] max-h-[85vh]'
-                    } 
-                    bg-amber-50 border-2 border-amber-200 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
-                    notice-board-tray
-                  `}
+                  key={notice.notice_id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`bg-white/90 backdrop-blur-sm rounded border border-slate-200/60 hover:border-slate-300/80 hover:shadow-lg transition-all duration-300 cursor-pointer ${
+                    status.status === 'active' 
+                      ? 'hover:shadow-emerald-100' 
+                      : status.status === 'upcoming'
+                      ? 'hover:shadow-blue-100'
+                      : 'hover:shadow-slate-100'
+                  }`}
+                  onClick={() => handleNoticeClick(notice)}
                 >
-                  {/* Cork Board Header with Pin */}
-                  <div className="relative px-6 py-4 border-b-2 border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200">
-                    <div className="flex justify-between items-center mb-3 pt-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-500 rounded shadow-lg">
-                          <FaBullhorn className="text-white text-lg" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-xl">Notice Board</h3>
-                          <p className="text-amber-800 text-sm">Important announcements and updates</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right bg-white/80 rounded px-3 py-2 border border-amber-300">
-                          <div className="text-xl font-bold text-orange-600">{notices.length}</div>
-                          <div className="text-xs text-amber-700">Total Notices</div>
-                        </div>
-                        {unreadNoticesCount > 0 && (
-                          <div className="text-right bg-white/80 rounded px-3 py-2 border border-red-300">
-                            <div className="text-xl font-bold text-red-500">{unreadNoticesCount}</div>
-                            <div className="text-xs text-red-700">New Today</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Quick Stats */}
-                    <div className="flex gap-3">
-                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-green-300 shadow-sm">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-sm font-medium text-gray-700">
-                          {notices.filter(n => getNoticeStatus(n).status === 'active').length} Active
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-blue-300 shadow-sm">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-sm font-medium text-gray-700">
-                          {notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} Upcoming
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white/90 rounded px-3 py-2 border border-amber-300 shadow-sm">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                        <span className="text-sm font-medium text-gray-700">
-                          {notices.filter(n => getNoticeStatus(n).status === 'expired').length} Archived
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Enhanced Notices List with Image Preview */}
-                  <div className="flex-1 overflow-y-auto p-4 bg-amber-50/50">
-                    {notices.length > 0 ? (
-                      <div className="space-y-4">
-                        {notices.map((notice) => {
-                          const status = getNoticeStatus(notice);
-                          const isExpanded = expandedNotice === notice.notice_id;
-                          
-                          return (
-                            <motion.div
-                              key={notice.notice_id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className={`bg-white rounded shadow-lg border-l-4 hover:shadow-xl transition-all duration-300 cursor-pointer ${
+                  <div className="p-4">
+                    <div className="flex gap-4">
+                      {/* Main Content */}
+                      <div className="flex-1 min-w-0">
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
                                 status.status === 'active' 
-                                  ? 'border-green-400 hover:border-green-500' 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                                   : status.status === 'upcoming'
-                                  ? 'border-blue-400 hover:border-blue-500'
-                                  : 'border-amber-400 hover:border-amber-500'
-                              }`}
-                              onClick={() => handleNoticeClick(notice)}
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-300'
+                              }`}>
+                                {status.text}
+                              </span>
+                              {status.status === 'active' && (
+                                <span className="text-xs text-slate-600 bg-slate-100/80 px-2 py-1 rounded-full border border-slate-200">
+                                  {getTimeRemaining(notice)}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-bold text-slate-900 text-lg leading-tight mb-2">
+                              {notice.title}
+                            </h4>
+                          </div>
+                          <button
+                            onClick={(e) => toggleNoticeExpansion(notice.notice_id, e)}
+                            className="ml-4 p-2 hover:bg-slate-100/50 rounded transition-colors"
+                          >
+                            <FaEye className={`text-slate-400 transition-transform ${
+                              isExpanded ? 'rotate-180 text-slate-600' : ''
+                            }`} />
+                          </button>
+                        </div>
+
+                        {/* Description Preview */}
+                        <p className="text-slate-600 text-sm leading-relaxed mb-4 line-clamp-2">
+                          {notice.description}
+                        </p>
+
+                        {/* Metadata */}
+                        <div className="flex items-center gap-4 text-xs text-slate-500 mb-3">
+                          <div className="flex items-center gap-1">
+                            <FaCalendarAlt className="text-slate-400" />
+                            <span>{formatDateRange(notice.from_datetime, notice.to_datetime)}</span>
+                          </div>
+                          {notice.created_by && (
+                            <div className="flex items-center gap-1">
+                              <FaUserTie className="text-slate-400" />
+                              <span>By {notice.created_by}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Expanded Content */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
                             >
-                              <div className="p-4">
-                                <div className="flex gap-4">
-                                  {/* Main Content - Left Side */}
-                                  <div className="flex-1 min-w-0">
-                                    {/* Header */}
-                                    <div className="flex items-start justify-between mb-3">
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                                            status.status === 'active' 
-                                              ? 'bg-green-100 text-green-800 border border-green-200' 
-                                              : status.status === 'upcoming'
-                                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                              : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                          }`}>
-                                            {status.text}
-                                          </span>
-                                          {status.status === 'active' && (
-                                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                                              {getTimeRemaining(notice)}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <h4 className="font-bold text-gray-900 text-lg leading-tight mb-2">
-                                          {notice.title}
-                                        </h4>
-                                      </div>
-                                      <button
-                                        onClick={(e) => toggleNoticeExpansion(notice.notice_id, e)}
-                                        className="ml-4 p-2 hover:bg-gray-100 rounded transition-colors"
-                                      >
-                                        <FaEye className={`text-gray-400 transition-transform ${
-                                          isExpanded ? 'rotate-180' : ''
-                                        }`} />
-                                      </button>
-                                    </div>
-
-                                    {/* Description Preview */}
-                                    <p className="text-gray-600 text-sm leading-relaxed mb-4 line-clamp-2">
-                                      {notice.description}
-                                    </p>
-
-                                    {/* Metadata */}
-                                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                                      <div className="flex items-center gap-1">
-                                        <FaCalendarAlt className="text-gray-400" />
-                                        <span>{formatDateRange(notice.from_datetime, notice.to_datetime)}</span>
-                                      </div>
-                                      {notice.created_by && (
-                                        <div className="flex items-center gap-1">
-                                          <FaUserTie className="text-gray-400" />
-                                          <span>By {notice.created_by}</span>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Expanded Content */}
-                                    <AnimatePresence>
-                                      {isExpanded && (
-                                        <motion.div
-                                          initial={{ opacity: 0, height: 0 }}
-                                          animate={{ opacity: 1, height: 'auto' }}
-                                          exit={{ opacity: 0, height: 0 }}
-                                          className="overflow-hidden"
-                                        >
-                                          <div className="border-t pt-4 space-y-4">
-                                            {/* Full Description */}
-                                            <div>
-                                              <h5 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                                                <FaBullhorn className="text-orange-500" />
-                                                Full Description
-                                              </h5>
-                                              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50 p-3 rounded">
-                                                {notice.description}
-                                              </p>
-                                            </div>
-
-                                            {/* Action Buttons */}
-                                            <div className="flex gap-3">
-                                              {notice.image_url && (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedNotice(notice);
-                                                    setShowImageModal(true);
-                                                  }}
-                                                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors shadow-sm"
-                                                >
-                                                  <FaImage className="text-white" />
-                                                  <span className="text-sm font-medium">View Image</span>
-                                                </button>
-                                              )}
-                                              {notice.pdf_url && (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    window.open(notice.pdf_url, '_blank');
-                                                  }}
-                                                  className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded transition-colors shadow-sm"
-                                                >
-                                                  <FaFilePdf className="text-white" />
-                                                  <span className="text-sm font-medium">Open PDF</span>
-                                                </button>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </motion.div>
-                                      )}
-                                    </AnimatePresence>
-                                  </div>
-
-                                  {/* Media Preview - Right Side */}
-                                  {(notice.image_url || notice.pdf_url) && (
-                                    <div className="w-32 flex-shrink-0">
-                                      {notice.image_url ? (
-                                        <div className="relative group">
-                                          <img 
-                                            src={notice.image_url} 
-                                            alt="Notice preview"
-                                            className="w-32 h-24 object-cover rounded shadow-md border border-gray-200 hover:shadow-lg transition-shadow"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setSelectedNotice(notice);
-                                              setShowImageModal(true);
-                                            }}
-                                          />
-                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded flex items-center justify-center">
-                                            <FaImage className="text-white/0 group-hover:text-white/80 text-xl transition-all" />
-                                          </div>
-                                          <div className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                                            <FaImage className="inline mr-1" />
-                                            Image
-                                          </div>
-                                        </div>
-                                      ) : notice.pdf_url ? (
-                                        <div 
-                                          className="w-32 h-24 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 rounded shadow-md flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all group"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.open(notice.pdf_url, '_blank');
-                                          }}
-                                        >
-                                          <div className="text-red-500 group-hover:text-red-600 transition-colors">
-                                            <FaFilePdf className="text-3xl mb-2" />
-                                          </div>
-                                          <div className="text-center">
-                                            <div className="text-xs font-semibold text-red-700">PDF Document</div>
-                                            <div className="text-[10px] text-red-600 mt-1">Click to open</div>
-                                          </div>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  )}
+                              <div className="border-t border-slate-200/50 pt-4 space-y-4">
+                                {/* Full Description */}
+                                <div>
+                                  <h5 className="text-sm font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                                    <FaBullhorn className="text-blue-600" />
+                                    Full Description
+                                  </h5>
+                                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap bg-slate-50/50 p-3 rounded border border-slate-200/50">
+                                    {notice.description}
+                                  </p>
                                 </div>
 
-                                {/* Footer with Attachments */}
-                                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                                  <div className="flex items-center gap-2">
-                                    {(notice.image_url || notice.pdf_url) && (
-                                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                                        <FaPaperclip className="text-gray-400" />
-                                        <span>Attachments:</span>
-                                        {notice.image_url && (
-                                          <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                                            <FaImage className="text-xs" />
-                                            Image
-                                          </span>
-                                        )}
-                                        {notice.pdf_url && (
-                                          <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded">
-                                            <FaFilePdf className="text-xs" />
-                                            PDF
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                                    <span>Click to view details</span>
-                                    <FaExternalLinkAlt className="text-xs" />
-                                  </div>
+                                {/* Action Buttons */}
+                                <div className="flex gap-3">
+                                  {notice.image_url && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedNotice(notice);
+                                        setShowImageModal(true);
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded transition-all shadow-sm hover:shadow-md font-medium"
+                                    >
+                                      <FaImage className="text-white" />
+                                      <span className="text-sm">View Image</span>
+                                    </button>
+                                  )}
+                                  {notice.pdf_url && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(notice.pdf_url, '_blank');
+                                      }}
+                                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded transition-all shadow-sm hover:shadow-md font-medium"
+                                    >
+                                      <FaFilePdf className="text-white" />
+                                      <span className="text-sm">Open PDF</span>
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </motion.div>
-                          );
-                        })}
+                          )}
+                        </AnimatePresence>
                       </div>
-                    ) : (
-                      <div className="text-center py-12">
-                        <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-r from-amber-100 to-amber-200 rounded-full flex items-center justify-center shadow-inner">
-                          <FaBullhorn className="text-amber-500 text-3xl" />
+
+                      {/* Media Preview */}
+                      {(notice.image_url || notice.pdf_url) && (
+                        <div className="w-32 flex-shrink-0">
+                          {notice.image_url ? (
+                            <div className="relative group">
+                              <img 
+                                src={notice.image_url} 
+                                alt="Notice preview"
+                                className="w-32 h-24 object-cover rounded shadow-md border border-slate-200 hover:shadow-lg transition-shadow"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedNotice(notice);
+                                  setShowImageModal(true);
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded flex items-center justify-center">
+                                <FaImage className="text-white/0 group-hover:text-white/80 text-xl transition-all" />
+                              </div>
+                              <div className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                                <FaImage className="inline mr-1" />
+                                Image
+                              </div>
+                            </div>
+                          ) : notice.pdf_url ? (
+                            <div 
+                              className="w-32 h-24 bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-300 rounded shadow-md flex flex-col items-center justify-center cursor-pointer hover:shadow-lg transition-all group"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(notice.pdf_url, '_blank');
+                              }}
+                            >
+                              <div className="text-slate-600 group-hover:text-slate-700 transition-colors">
+                                <FaFilePdf className="text-3xl mb-2" />
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-semibold text-slate-700">PDF Document</div>
+                                <div className="text-[10px] text-slate-600 mt-1">Click to open</div>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                        <h4 className="text-lg font-semibold text-amber-900 mb-2">No Notices Available</h4>
-                        <p className="text-amber-700 text-sm max-w-sm mx-auto">
-                          The notice board is currently empty. Check back later for important announcements and updates.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Enhanced Footer */}
-                  {notices.length > 0 && (
-                    <div className="px-6 py-4 border-t-2 border-amber-300 bg-gradient-to-b from-amber-100 to-amber-200 flex justify-between items-center">
-                      <div className="flex items-center gap-3 text-sm text-amber-800">
-                        <div className="flex items-center gap-2 bg-white/90 px-3 py-1 rounded-full border border-amber-300">
-                          <span className="font-semibold">{notices.length}</span>
-                          <span>notices</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span>{notices.filter(n => getNoticeStatus(n).status === 'active').length} active</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setNoticesOpen(false)}
-                        className="px-4 py-2 text-sm font-medium text-amber-800 hover:text-amber-900 bg-white/90 hover:bg-white border border-amber-300 rounded transition-colors"
-                      >
-                        Close Board
-                      </button>
+                      )}
                     </div>
-                  )}
+
+                    {/* Footer */}
+                    <div className="flex justify-between items-center pt-3 border-t border-slate-200/50">
+                      <div className="flex items-center gap-2">
+                        {(notice.image_url || notice.pdf_url) && (
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <FaPaperclip className="text-slate-400" />
+                            <span>Attachments:</span>
+                            {notice.image_url && (
+                              <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200">
+                                <FaImage className="text-xs" />
+                                Image
+                              </span>
+                            )}
+                            {notice.pdf_url && (
+                              <span className="flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-1 rounded border border-slate-300">
+                                <FaFilePdf className="text-xs" />
+                                PDF
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>Click to view details</span>
+                        <FaExternalLinkAlt className="text-xs" />
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
-              )}
-            </AnimatePresence>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-r from-slate-200 to-blue-200 rounded-full flex items-center justify-center shadow-inner">
+              <FaBullhorn className="text-slate-500 text-3xl" />
+            </div>
+            <h4 className="text-lg font-semibold text-slate-700 mb-2">No Notices Available</h4>
+            <p className="text-slate-500 text-sm max-w-sm mx-auto">
+              The notice board is currently empty. Check back later for important announcements and updates.
+            </p>
+          </div>
+        )}
+      </div>
+      
+      {/* Professional Footer */}
+      {notices.length > 0 && (
+        <div className="px-6 py-4 border-t border-slate-300/30 bg-gradient-to-r from-slate-100 to-blue-100/50 flex justify-between items-center">
+          <div className="flex items-center gap-4 text-sm text-slate-600">
+            <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-300/50">
+              <span className="font-semibold text-slate-700">{notices.length}</span>
+              <span>notices</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+              <span>{notices.filter(n => getNoticeStatus(n).status === 'active').length} active</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+              <span>{notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} upcoming</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+              <span>{notices.filter(n => getNoticeStatus(n).status === 'expired').length} archived</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setNoticesOpen(false)}
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 bg-white/80 hover:bg-white border border-slate-300/50 rounded transition-all hover:shadow-md"
+          >
+            Close Board
+          </button>
+        </div>
+      )}
+    </motion.div>
+  )}
+</AnimatePresence>
           </div>
           
           {/* Notification Icon */}

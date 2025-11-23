@@ -647,7 +647,7 @@ export default function CreateNoticePage() {
                         <div>
                           <h4 className="font-semibold text-gray-900">Ready to Broadcast</h4>
                           <p className="text-gray-700 text-sm mt-1">
-                            Click the "Publish Notice" button below to broadcast this notice to all users.
+                            Click the &quot;Publish Notice&quot; button below to broadcast this notice to all users.
                           </p>
                         </div>
                       </div>

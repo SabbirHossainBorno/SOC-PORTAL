@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,10 +11,11 @@ import {
   FaFilePdf, FaEye, FaExternalLinkAlt, FaSearch,
   FaFilter, FaSort, FaClock, FaCheckCircle,
   FaTimesCircle, FaCalendarPlus, FaIdCard,
-  FaTimes, FaDownload, FaExpand
+  FaTimes, FaDownload, FaExpand, FaEdit
 } from 'react-icons/fa';
 
 export default function NoticeBoardLogPage() {
+  const router = useRouter();
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({
@@ -365,6 +367,18 @@ export default function NoticeBoardLogPage() {
                         {notice.title}
                       </h3>
                     </div>
+                    
+                    {/* Edit Button - Only show for active and upcoming notices */}
+                    {(getNoticeStatus(notice).status === 'active' || getNoticeStatus(notice).status === 'upcoming') && (
+                      <button
+                        onClick={() => router.push(`/admin_dashboard/notice_board/edit/${notice.notice_id}`)}
+                        className="ml-4 p-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-2"
+                        title="Edit Notice"
+                      >
+                        <FaEdit className="text-sm" />
+                        <span className="text-sm font-medium">Edit</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Description */}
