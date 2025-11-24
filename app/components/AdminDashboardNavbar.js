@@ -450,12 +450,14 @@ export default function AdminDashboardNavbar({ onMenuToggle, isMobile }) {
                   {displayedNotifications.length > 0 ? (
                     displayedNotifications.map((notification, index) => (
                       <div 
-                        key={notification.id} 
-                        className={`px-4 py-3 hover:bg-blue-50 cursor-pointer transition-all duration-200 border-b border-blue-300 last:border-b-0 ${
-                          !notification.read ? 'bg-blue-50 border-l-4 border-blue-500' : 'border-l-4 border-transparent'
-                        }`}
-                        onClick={(e) => !notification.read && markAsRead(notification.id, e)}
-                      >
+  key={notification.id} 
+  className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-all duration-200 border-b border-gray-100 last:border-b-0 relative ${
+    !notification.read 
+      ? 'bg-gradient-to-r from-blue-50 to-white before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-gradient-to-b before:from-blue-400 before:to-blue-600' 
+      : ''
+  }`}
+  onClick={(e) => !notification.read && markAsRead(notification.id, e)}
+>
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 mt-0.5">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center">

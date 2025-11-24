@@ -23,32 +23,23 @@ export async function GET(request) {
   });
 
   try {
-    // Get the column names from roster_schedule table that represent team members
+    // Get active SOC members only
     const result = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'roster_schedule' 
-      AND column_name NOT IN (
-        'serial', 'roster_id', 'date', 'day', 'upload_by', 
-        'created_at', 'updated_at'
-      )
-      ORDER BY column_name
+      SELECT short_name 
+      FROM user_info 
+      WHERE role_type = 'SOC' 
+      AND status = 'Active'
+      ORDER BY short_name
     `);
     
-    const teamMembers = result.rows.map(row => {
-      // Convert snake_case to Title Case
-      return row.column_name
-        .split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-    });
+    const teamMembers = result.rows.map(row => row.short_name);
     
     logger.info('Team members fetched successfully', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'FetchTeamMembers',
-        details: `Fetched ${teamMembers.length} team members`,
+        details: `Fetched ${teamMembers.length} active SOC members`,
         teamMembers
       }
     });

@@ -61,6 +61,102 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     }
   };
 
+  // Enhanced status checking functions with better timezone handling
+  const isNoticeActive = (notice) => {
+    try {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
+      const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+      
+      return now >= from && now <= to;
+    } catch (error) {
+      console.error('Error in isNoticeActive:', error);
+      return false;
+    }
+  };
+
+  const isNoticeUpcoming = (notice) => {
+    try {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
+      
+      return now < from;
+    } catch (error) {
+      console.error('Error in isNoticeUpcoming:', error);
+      return false;
+    }
+  };
+
+  const isNoticeExpired = (notice) => {
+    try {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+      
+      return now > to;
+    } catch (error) {
+      console.error('Error in isNoticeExpired:', error);
+      return false;
+    }
+  };
+
+  // Get notice status
+  const getNoticeStatus = (notice) => {
+    try {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
+      const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+      
+      if (now < from) return { status: 'upcoming', color: 'blue', text: 'Upcoming', icon: FaClock };
+      if (now > to) return { status: 'expired', color: 'gray', text: 'Expired', icon: FaTimesCircle };
+      return { status: 'active', color: 'emerald', text: 'Active', icon: FaCheckCircle };
+    } catch (error) {
+      console.error('Error in getNoticeStatus:', error, notice);
+      return { status: 'expired', color: 'gray', text: 'Error', icon: FaTimesCircle };
+    }
+  };
+
+  // Get time remaining for active notices
+  const getTimeRemaining = (notice) => {
+    try {
+      const now = DateTime.now().setZone('Asia/Dhaka');
+      const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
+      const diff = to.diff(now, ['days', 'hours', 'minutes']);
+      
+      if (diff.days > 0) {
+        return `${diff.days}d ${diff.hours}h remaining`;
+      } else if (diff.hours > 0) {
+        return `${diff.hours}h ${Math.round(diff.minutes)}m remaining`;
+      } else {
+        return `${Math.round(diff.minutes)}m remaining`;
+      }
+    } catch (error) {
+      console.error('Error in getTimeRemaining:', error);
+      return 'Time calculation error';
+    }
+  };
+
+  // Enhanced count functions
+  const getActiveNoticesCount = () => {
+    return notices.filter(notice => {
+      const status = getNoticeStatus(notice);
+      return status.status === 'active';
+    }).length;
+  };
+
+  const getUpcomingNoticesCount = () => {
+    return notices.filter(notice => {
+      const status = getNoticeStatus(notice);
+      return status.status === 'upcoming';
+    }).length;
+  };
+
+  const getExpiredNoticesCount = () => {
+    return notices.filter(notice => {
+      const status = getNoticeStatus(notice);
+      return status.status === 'expired';
+    }).length;
+  };
+
   // Fetch notices function
   const fetchNotices = async () => {
     try {
@@ -130,40 +226,6 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     }
   };
 
-  // Check if notice is active
-  const isNoticeActive = (notice) => {
-    const now = DateTime.now().setZone('Asia/Dhaka');
-    const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
-    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
-    return now >= from && now <= to;
-  };
-
-  // Get notice status
-  const getNoticeStatus = (notice) => {
-    const now = DateTime.now().setZone('Asia/Dhaka');
-    const from = DateTime.fromISO(notice.from_datetime).setZone('Asia/Dhaka');
-    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
-    
-    if (now < from) return { status: 'upcoming', color: 'blue', text: 'Upcoming' };
-    if (now > to) return { status: 'expired', color: 'gray', text: 'Expired' };
-    return { status: 'active', color: 'green', text: 'Active' };
-  };
-
-  // Get time remaining
-  const getTimeRemaining = (notice) => {
-    const now = DateTime.now().setZone('Asia/Dhaka');
-    const to = DateTime.fromISO(notice.to_datetime).setZone('Asia/Dhaka');
-    const diff = to.diff(now, ['days', 'hours', 'minutes']);
-    
-    if (diff.days > 0) {
-      return `${diff.days}d ${diff.hours}h remaining`;
-    } else if (diff.hours > 0) {
-      return `${diff.hours}h ${Math.round(diff.minutes)}m remaining`;
-    } else {
-      return `${Math.round(diff.minutes)}m remaining`;
-    }
-  };
-
   // Auto-refresh notices every 5 minutes
   useEffect(() => {
     fetchNotices(); // Initial fetch
@@ -171,6 +233,7 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
     const backgroundRefresh = setInterval(fetchNotices, 300000); // 5 minutes
     return () => clearInterval(backgroundRefresh);
   }, []);
+
 
 
   // Fetch notifications
@@ -555,153 +618,154 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
         <div className="flex items-center space-x-4 sm:space-x-5">
           {/* Enhanced Notice Board Icon */}
           <div className="relative" ref={noticesRef}>
-            <button
-              onClick={() => setNoticesOpen(!noticesOpen)}
-              className="p-2 rounded-full hover:bg-orange-50 focus:outline-none focus:ring-0 relative transition-all duration-200 group"
-              aria-label="Notices"
-            >
-              <div className="relative">
-                <MdOutlineAnnouncement className="h-7 w-7 text-gray-600 group-hover:text-orange-600 transition-colors" />
-
-                {unreadNoticesCount > 0 && (
-                  <motion.span 
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute top-0 right-0 transform -translate-y-1/2 translate-x-1/2 flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-xs text-white font-bold border-2 border-white shadow-sm">
-                    {unreadNoticesCount > 9 ? '9+' : unreadNoticesCount}
-                  </motion.span>
-                )}
-              </div>
-            </button>
+        <button
+          onClick={() => setNoticesOpen(!noticesOpen)}
+          className="p-2 rounded-full hover:bg-orange-50 focus:outline-none focus:ring-0 relative transition-all duration-200 group"
+          aria-label="Notices"
+        >
+          <div className="relative">
+            <MdOutlineAnnouncement className="h-7 w-7 text-gray-600 group-hover:text-orange-600 transition-colors" />
+            
+            {/* Show Active Count Badge */}
+            {getActiveNoticesCount() > 0 && (
+              <motion.span 
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute top-0 right-0 transform -translate-y-1/2 translate-x-1/2 flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-gradient-to-r from-emerald-500 to-green-500 text-xs text-white font-bold border-2 border-white shadow-sm"
+              >
+                {getActiveNoticesCount() > 9 ? '9+' : getActiveNoticesCount()}
+              </motion.span>
+            )}
+          </div>
+        </button>
 
 
             {/* Modern Notice Board Tray with Realistic Design */}
 <AnimatePresence>
-  {noticesOpen && (
-    <motion.div
-      initial={{ opacity: 0, y: -20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -20, scale: 0.95 }}
-      transition={{ type: "spring", damping: 25, stiffness: 300 }}
-      className={`
-        fixed md:absolute 
-        ${isMobile 
-          ? 'inset-4 top-20' 
-          : 'right-0 mt-2.5 w-[48rem] max-h-[85vh]'
-        } 
-        bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/80 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
-        backdrop-blur-xl
-      `}
-    >
-      {/* Professional Header */}
-      <div className="relative px-6 py-4 bg-gradient-to-r from-slate-800 to-blue-900 border-b border-slate-300/30">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
-        
-        <div className="relative flex justify-between items-center mb-3 pt-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded shadow-lg">
-              <FaBullhorn className="text-white text-lg" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white text-xl">Notice Board</h3>
-              <p className="text-blue-200 text-sm">Important announcements and updates</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-right bg-white/10 backdrop-blur-sm rounded px-3 py-2 border border-white/20">
-              <div className="text-xl font-bold text-white">{notices.length}</div>
-              <div className="text-xs text-blue-200">Total Notices</div>
-            </div>
-            {unreadNoticesCount > 0 && (
-              <div className="text-right bg-red-500/20 backdrop-blur-sm rounded px-3 py-2 border border-red-400/30">
-                <div className="text-xl font-bold text-white">{unreadNoticesCount}</div>
-                <div className="text-xs text-red-200">New Today</div>
+          {noticesOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className={`
+                fixed md:absolute 
+                ${isMobile 
+                  ? 'inset-4 top-20' 
+                  : 'right-0 mt-2.5 w-[48rem] max-h-[85vh]'
+                } 
+                bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/80 rounded shadow-2xl z-[60] overflow-hidden flex flex-col
+                backdrop-blur-xl
+              `}
+            >
+              {/* Professional Header with Enhanced Count Display */}
+              <div className="relative px-6 py-4 bg-gradient-to-r from-slate-800 to-blue-900 border-b border-slate-300/30">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
+                
+                <div className="relative flex justify-between items-center mb-3 pt-2">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded shadow-lg">
+                      <FaBullhorn className="text-white text-lg" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-xl">Notice Board</h3>
+                      <p className="text-blue-200 text-sm">Important announcements and updates</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    {/* Total Notices Count */}
+                    <div className="text-right bg-white/10 backdrop-blur-sm rounded px-3 py-2 border border-white/20">
+                      <div className="text-xl font-bold text-white">{notices.length}</div>
+                      <div className="text-xs text-blue-200">Total</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Enhanced Status Indicators */}
+                <div className="relative flex gap-2">
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+                    <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+                    <span className="text-sm font-medium text-white">
+                      {getActiveNoticesCount()} Active
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                    <span className="text-sm font-medium text-white">
+                      {getUpcomingNoticesCount()} Upcoming
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
+                    <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                    <span className="text-sm font-medium text-white">
+                      {getExpiredNoticesCount()} Archived
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Professional Status Indicators */}
-        <div className="relative flex gap-2">
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
-            <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-            <span className="text-sm font-medium text-white">
-              {notices.filter(n => getNoticeStatus(n).status === 'active').length} Active
-            </span>
-          </div>
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
-            <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-            <span className="text-sm font-medium text-white">
-              {notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} Upcoming
-            </span>
-          </div>
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
-            <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-            <span className="text-sm font-medium text-white">
-              {notices.filter(n => getNoticeStatus(n).status === 'expired').length} Archived
-            </span>
-          </div>
-        </div>
-      </div>
       
       {/* Professional Notices List */}
       <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-slate-50/80 to-blue-50/20">
-        {notices.length > 0 ? (
-          <div className="space-y-4">
-            {notices.map((notice) => {
-              const status = getNoticeStatus(notice);
-              const isExpanded = expandedNotice === notice.notice_id;
-              
-              return (
-                <motion.div
-                  key={notice.notice_id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`bg-white/90 backdrop-blur-sm rounded border border-slate-200/60 hover:border-slate-300/80 hover:shadow-lg transition-all duration-300 cursor-pointer ${
-                    status.status === 'active' 
-                      ? 'hover:shadow-emerald-100' 
-                      : status.status === 'upcoming'
-                      ? 'hover:shadow-blue-100'
-                      : 'hover:shadow-slate-100'
-                  }`}
-                  onClick={() => handleNoticeClick(notice)}
-                >
-                  <div className="p-4">
-                    <div className="flex gap-4">
-                      {/* Main Content */}
-                      <div className="flex-1 min-w-0">
-                        {/* Header */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                                status.status === 'active' 
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                                  : status.status === 'upcoming'
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                  : 'bg-slate-100 text-slate-600 border border-slate-300'
-                              }`}>
-                                {status.text}
-                              </span>
-                              {status.status === 'active' && (
-                                <span className="text-xs text-slate-600 bg-slate-100/80 px-2 py-1 rounded-full border border-slate-200">
-                                  {getTimeRemaining(notice)}
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="font-bold text-slate-900 text-lg leading-tight mb-2">
-                              {notice.title}
-                            </h4>
-                          </div>
-                          <button
-                            onClick={(e) => toggleNoticeExpansion(notice.notice_id, e)}
-                            className="ml-4 p-2 hover:bg-slate-100/50 rounded transition-colors"
-                          >
-                            <FaEye className={`text-slate-400 transition-transform ${
-                              isExpanded ? 'rotate-180 text-slate-600' : ''
-                            }`} />
-                          </button>
+  {notices.filter(notice => {
+    const status = getNoticeStatus(notice);
+    return status.status !== 'upcoming'; // Hide upcoming notices
+  }).length > 0 ? (
+    <div className="space-y-4">
+      {notices
+        .filter(notice => {
+          const status = getNoticeStatus(notice);
+          return status.status !== 'upcoming'; // Hide upcoming notices
+        })
+        .map((notice) => {
+          const status = getNoticeStatus(notice);
+          const isExpanded = expandedNotice === notice.notice_id;
+          
+          return (
+            <motion.div
+              key={notice.notice_id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`bg-white/90 backdrop-blur-sm rounded border border-slate-200/60 hover:border-slate-300/80 hover:shadow-lg transition-all duration-300 cursor-pointer ${
+                status.status === 'active' 
+                  ? 'hover:shadow-emerald-100' 
+                  : 'hover:shadow-slate-100'
+              }`}
+              onClick={() => handleNoticeClick(notice)}
+            >
+                          <div className="p-4">
+                <div className="flex gap-4">
+                  {/* Main Content */}
+                  <div className="flex-1 min-w-0">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
+                            status.status === 'active' 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-slate-100 text-slate-600 border border-slate-300'
+                          }`}>
+                            {status.text}
+                          </span>
+                          {status.status === 'active' && (
+                            <span className="text-xs text-slate-600 bg-slate-100/80 px-2 py-1 rounded-full border border-slate-200">
+                              {getTimeRemaining(notice)}
+                            </span>
+                          )}
                         </div>
+                        <h4 className="font-bold text-slate-900 text-lg leading-tight mb-2">
+                          {notice.title}
+                        </h4>
+                      </div>
+                      <button
+                        onClick={(e) => toggleNoticeExpansion(notice.notice_id, e)}
+                        className="ml-4 p-2 hover:bg-slate-100/50 rounded transition-colors"
+                      >
+                        <FaEye className={`text-slate-400 transition-transform ${
+                          isExpanded ? 'rotate-180 text-slate-600' : ''
+                        }`} />
+                      </button>
+                    </div>
 
                         {/* Description Preview */}
                         <p className="text-slate-600 text-sm leading-relaxed mb-4 line-clamp-2">
@@ -855,41 +919,25 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
           </div>
         ) : (
           <div className="text-center py-12">
-            <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-r from-slate-200 to-blue-200 rounded-full flex items-center justify-center shadow-inner">
-              <FaBullhorn className="text-slate-500 text-3xl" />
-            </div>
-            <h4 className="text-lg font-semibold text-slate-700 mb-2">No Notices Available</h4>
-            <p className="text-slate-500 text-sm max-w-sm mx-auto">
-              The notice board is currently empty. Check back later for important announcements and updates.
-            </p>
-          </div>
-        )}
+      <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-r from-slate-200 to-blue-200 rounded-full flex items-center justify-center shadow-inner">
+        <FaBullhorn className="text-slate-500 text-3xl" />
       </div>
+      <h4 className="text-lg font-semibold text-slate-700 mb-2">No Notices Available</h4>
+      <p className="text-slate-500 text-sm max-w-sm mx-auto">
+        {getUpcomingNoticesCount() > 0 
+          ? `There are ${getUpcomingNoticesCount()} upcoming notices scheduled for future dates.` 
+          : 'The notice board is currently empty. Check back later for important announcements and updates.'}
+      </p>
+    </div>
+  )}
+</div>
       
       {/* Professional Footer */}
       {notices.length > 0 && (
         <div className="px-6 py-4 border-t border-slate-300/30 bg-gradient-to-r from-slate-100 to-blue-100/50 flex justify-between items-center">
-          <div className="flex items-center gap-4 text-sm text-slate-600">
-            <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-300/50">
-              <span className="font-semibold text-slate-700">{notices.length}</span>
-              <span>notices</span>
-            </div>
-            <div className="flex items-center gap-1 text-xs">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-              <span>{notices.filter(n => getNoticeStatus(n).status === 'active').length} active</span>
-            </div>
-            <div className="flex items-center gap-1 text-xs">
-              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-              <span>{notices.filter(n => getNoticeStatus(n).status === 'upcoming').length} upcoming</span>
-            </div>
-            <div className="flex items-center gap-1 text-xs">
-              <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-              <span>{notices.filter(n => getNoticeStatus(n).status === 'expired').length} archived</span>
-            </div>
-          </div>
           <button
             onClick={() => setNoticesOpen(false)}
-            className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 bg-white/80 hover:bg-white border border-slate-300/50 rounded transition-all hover:shadow-md"
+            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 rounded transition-all duration-200 shadow-sm hover:shadow-md border border-slate-600/50"
           >
             Close Board
           </button>
@@ -1001,13 +1049,15 @@ export default function UserDashboardNavbar({ onMenuToggle, isMobile }) {
                 <div className="flex-1 overflow-y-auto">
                   {displayedNotifications.length > 0 ? (
                     displayedNotifications.map(notification => (
-                      <div 
-                        key={notification.id} 
-                        className={`px-4 py-3 hover:bg-blue-50 cursor-pointer transition-all duration-200 border-b border-blue-300 last:border-b-0 ${
-                          !notification.read ? 'bg-blue-50 border-l-2 border-blue-500' : 'border-l-2 border-transparent'
-                        }`}
-                        onClick={(e) => !notification.read && markAsRead(notification.id, e)}
-                      >
+<div 
+  key={notification.id} 
+  className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-all duration-200 border-b border-gray-100 last:border-b-0 relative ${
+    !notification.read 
+      ? 'bg-gradient-to-r from-blue-50 to-white before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-gradient-to-b before:from-blue-400 before:to-blue-600' 
+      : ''
+  }`}
+  onClick={(e) => !notification.read && markAsRead(notification.id, e)}
+>
                         <div className="flex items-start gap-3">
                           <div className="flex-shrink-0 mt-0.5">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center">

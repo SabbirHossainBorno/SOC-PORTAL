@@ -11,20 +11,18 @@ export async function GET(request) {
   const ipAddress = request.headers.get('x-forwarded-for') || 'Unknown IP';
 
   try {
-    logger.info('Fetching active notices', {
+    logger.info('Fetching ALL notices', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'NoticeBoardFetch',
-        details: `User ${userId} fetching active notices`,
+        details: `User ${userId} fetching ALL notices`,
         userId,
         ipAddress
       }
     });
 
-    // Get current timestamp in Asia/Dhaka timezone
-    const now = DateTime.now().setZone('Asia/Dhaka').toISO();
-
+    // REMOVE the time condition to get ALL notices
     const noticeQuery = `
       SELECT 
         serial,
@@ -40,13 +38,11 @@ export async function GET(request) {
         updated_at
       FROM notice_board 
       WHERE is_active = true 
-        AND from_datetime <= $1 
-        AND to_datetime >= $1
       ORDER BY created_at DESC
     `;
 
-    console.debug('Fetching active notices with current time:', now);
-    const result = await query(noticeQuery, [now]);
+    console.debug('Fetching ALL notices');
+    const result = await query(noticeQuery);
 
     const notices = result.rows.map(notice => ({
       ...notice,
@@ -55,12 +51,12 @@ export async function GET(request) {
       created_at: DateTime.fromJSDate(notice.created_at).setZone('Asia/Dhaka').toISO(),
     }));
 
-    logger.info('Active notices fetched successfully', {
+    logger.info('ALL notices fetched successfully', {
       meta: {
         eid,
         sid: sessionId,
         taskName: 'NoticeBoardFetch',
-        details: `Fetched ${notices.length} active notices for user ${userId}`,
+        details: `Fetched ${notices.length} ALL notices for user ${userId}`,
         userId,
         noticeCount: notices.length
       }

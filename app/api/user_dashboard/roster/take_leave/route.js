@@ -160,6 +160,49 @@ export async function POST(request) {
     const userShortName = userResult.rows[0].short_name.toLowerCase();
     const userName = userResult.rows[0].short_name;
 
+    // Add this validation after getting user info and before checking roster
+if (assignedTo && assignedTo !== 'None') {
+  const assignedUserQuery = 'SELECT short_name, role_type, status FROM user_info WHERE short_name = $1';
+  const assignedUserResult = await query(assignedUserQuery, [assignedTo]);
+
+  if (assignedUserResult.rows.length === 0) {
+    logger.warn('Assigned user not found for leave', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'AssignedUserNotFound',
+        details: `Assigned user ${assignedTo} not found in database for leave request`,
+        userId,
+        assignedTo
+      }
+    });
+    
+    return NextResponse.json(
+      { success: false, message: 'Selected team member not found' },
+      { status: 404 }
+    );
+  }
+
+  const assignedUser = assignedUserResult.rows[0];
+  if (assignedUser.role_type !== 'SOC' || assignedUser.status !== 'Active') {
+    logger.warn('Assigned user is not active SOC member for leave', {
+      meta: {
+        eid,
+        sid: sessionId,
+        taskName: 'InvalidAssignedUser',
+        details: `Assigned user ${assignedTo} is not active SOC member (Role: ${assignedUser.role_type}, Status: ${assignedUser.status})`,
+        userId,
+        assignedTo
+      }
+    });
+    
+    return NextResponse.json(
+      { success: false, message: 'Selected team member is not an active SOC member' },
+      { status: 400 }
+    );
+  }
+}
+
     // Get roster for the selected date
     const rosterQuery = 'SELECT * FROM roster_schedule WHERE date = $1';
     const rosterResult = await query(rosterQuery, [date]);
