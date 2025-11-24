@@ -259,33 +259,35 @@ export default function SettingsPage() {
           {/* Left Column - Navigation & Info */}
           <div className="lg:col-span-1">
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-              className="bg-white rounded shadow-sm border border-gray-200 p-6 mb-6"
-            >
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <FaUserCircle className="mr-2 text-blue-500" />
-                Quick Actions
-              </h3>
-              <div className="space-y-3">
-                <button
-                  onClick={() => router.push('/user_dashboard')}
-                  className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                >
-                  <div className="font-medium text-gray-800">Back to Dashboard</div>
-                  <div className="text-sm text-gray-600">Return to main dashboard</div>
-                </button>
-                
-                <button
-                  onClick={() => router.push('/user_dashboard/profile')}
-                  className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                >
-                  <div className="font-medium text-gray-800">View Profile</div>
-                  <div className="text-sm text-gray-600">See your complete profile</div>
-                </button>
-              </div>
-            </motion.div>
+  initial={{ opacity: 0, x: -20 }}
+  animate={{ opacity: 1, x: 0 }}
+  transition={{ delay: 0.1 }}
+  className="bg-white rounded shadow-sm border border-gray-200 p-6 mb-6"
+>
+  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+    <FaUserCircle className="mr-2 text-blue-500" />
+    Quick Actions
+  </h3>
+  <div className="space-y-3">
+    <button
+      onClick={() => router.push('/user_dashboard')}
+      className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+    >
+      <div className="font-medium text-gray-800">Back to Dashboard</div>
+      <div className="text-sm text-gray-600">Return to main dashboard</div>
+    </button>
+    
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => router.push('/user_dashboard/settings/profile_view')}
+      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded font-semibold shadow-lg shadow-green-500/25 transition-all duration-300"
+    >
+      <FaUser className="text-white" />
+      View Profile
+    </motion.button>
+  </div>
+</motion.div>
 
             {/* Security Info */}
             <motion.div
