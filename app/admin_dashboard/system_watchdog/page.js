@@ -504,7 +504,7 @@ export default function SystemWatchdog() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-green-300 font-mono bg-gray-900 px-3 py-1 rounded">
-                      grep "{searchKeyword}" *.log
+                      grep &quot;{searchKeyword}&quot; *.log
                     </span>
                     <button
                       onClick={clearSearch}
