@@ -1,3 +1,4 @@
+//app/admin_dashboard/system_watchdog/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -275,107 +276,133 @@ export default function SystemWatchdog() {
             </div>
 
             {/* Detailed Panels */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* System Status */}
-              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <ServerStackIcon className="h-5 w-5 text-blue-600" />
-                    System Information
-                  </h3>
-                  <div className="space-y-3">
-                    <InfoRow label="Hostname" value={metrics?.system.hostname} />
-                    <InfoRow label="Platform" value={metrics?.system.platform} />
-                    <InfoRow label="Uptime" value={metrics?.system.uptime} />
-                    <InfoRow label="Architecture" value={metrics?.system.arch} />
-                  </div>
-                </div>
+<div className="space-y-6">
+  {/* First Row: System Information, Network Status, System Health */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {/* System Information */}
+    <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow h-full">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <ServerStackIcon className="h-5 w-5 text-blue-600" />
+        System Information
+      </h3>
+      <div className="space-y-3">
+        <InfoRow label="Hostname" value={metrics?.system.hostname} />
+        <InfoRow label="Platform" value={metrics?.system.platform} />
+        <InfoRow label="Uptime" value={metrics?.system.uptime} />
+        <InfoRow label="Architecture" value={metrics?.system.arch} />
+        <InfoRow label="CPU Cores" value={metrics?.cpu.cores} />
+        <InfoRow label="Load Average" value={metrics?.cpu.loadAverage?.map(l => l.toFixed(2)).join(', ')} />
+      </div>
+    </div>
 
-                <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <WifiIcon className="h-5 w-5 text-indigo-600" />
-                    Network Status
-                  </h3>
-                  <div className="space-y-4">
-                    <TrafficItem label="Upload" value={metrics?.network.upload} color="blue" />
-                    <TrafficItem label="Download" value={metrics?.network.download} color="green" />
-                    <TrafficItem label="Interfaces" value={metrics?.network.interfaces} color="purple" />
-                  </div>
-                </div>
+    {/* Network Status */}
+    <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow h-full">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <WifiIcon className="h-5 w-5 text-indigo-600" />
+        Network Status
+      </h3>
+      <div className="space-y-4">
+        <TrafficItem label="Upload Speed" value={metrics?.network.upload} color="blue" />
+        <TrafficItem label="Download Speed" value={metrics?.network.download} color="green" />
+        <TrafficItem label="Active Connections" value={metrics?.users} color="purple" />
+        <TrafficItem label="Network Interfaces" value={metrics?.network.interfaces} color="indigo" />
+      </div>
+    </div>
 
-                {/* Memory Visualization */}
-                <div className="md:col-span-2 bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Memory Utilization</h3>
-                  <div className="grid grid-cols-2 gap-6">
-                    <MemoryGauge 
-                      label="Used Memory"
-                      value={metrics?.memory.used}
-                      percentage={metrics?.memory.usage}
-                      color="blue"
-                    />
-                    <MemoryGauge 
-                      label="Free Memory"
-                      value={metrics?.memory.free}
-                      percentage={100 - (metrics?.memory.usage || 0)}
-                      color="green"
-                    />
-                  </div>
-                </div>
-              </div>
+    {/* System Health */}
+    <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow h-full">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">System Health</h3>
+      <div className="space-y-4">
+        <HealthIndicator 
+          label="CPU Health" 
+          value={metrics?.cpu.usage} 
+          threshold={85}
+        />
+        <HealthIndicator 
+          label="Memory Health" 
+          value={metrics?.memory.usage} 
+          threshold={85}
+        />
+        <HealthIndicator 
+          label="Disk Health" 
+          value={metrics?.disk.usage} 
+          threshold={90}
+        />
+        <HealthIndicator 
+          label="Error Status" 
+          value={metrics?.logs.errorCount > 0 ? 100 : 0} 
+          threshold={0}
+          invert={true}
+        />
+      </div>
+    </div>
+  </div>
 
-              {/* Health Status */}
-              <div className="space-y-6">
-                <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-6">System Health</h3>
-                  <div className="space-y-6">
-                    <HealthIndicator 
-                      label="CPU Health" 
-                      value={metrics?.cpu.usage} 
-                      threshold={85}
-                    />
-                    <HealthIndicator 
-                      label="Memory Health" 
-                      value={metrics?.memory.usage} 
-                      threshold={85}
-                    />
-                    <HealthIndicator 
-                      label="Disk Health" 
-                      value={metrics?.disk.usage} 
-                      threshold={90}
-                    />
-                    <HealthIndicator 
-                      label="Error Status" 
-                      value={metrics?.logs.errorCount > 0 ? 100 : 0} 
-                      threshold={50}
-                      invert
-                    />
-                  </div>
-                </div>
+  {/* Second Row: Memory Utilization and Performance Summary */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {/* Memory Utilization */}
+    <div className="bg-white rounded border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow h-full">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">Memory Utilization</h3>
+      <div className="grid grid-cols-2 gap-6">
+        <MemoryGauge 
+          label="Used Memory"
+          value={metrics?.memory.used}
+          percentage={metrics?.memory.usage}
+          color="blue"
+        />
+        <MemoryGauge 
+          label="Free Memory"
+          value={metrics?.memory.free}
+          percentage={100 - (metrics?.memory.usage || 0)}
+          color="green"
+        />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4 text-center">
+        <div className="bg-blue-50 rounded p-3">
+          <div className="text-lg font-bold text-blue-600">{metrics?.memory.used}</div>
+          <div className="text-xs text-gray-600">Used</div>
+        </div>
+        <div className="bg-green-50 rounded p-3">
+          <div className="text-lg font-bold text-green-600">{metrics?.memory.free}</div>
+          <div className="text-xs text-gray-600">Available</div>
+        </div>
+      </div>
+    </div>
 
-                {/* Quick Stats */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded border border-blue-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Performance Summary</h3>
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                      <div className="text-2xl font-bold text-blue-600">{metrics?.cpu.cores}</div>
-                      <div className="text-sm text-gray-600">CPU Cores</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-indigo-600">{metrics?.cpu.loadAverage?.[0]?.toFixed(2)}</div>
-                      <div className="text-sm text-gray-600">Load Avg</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-green-600">{metrics?.logs.errorCount}</div>
-                      <div className="text-sm text-gray-600">Errors</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-purple-600">{metrics?.users}</div>
-                      <div className="text-sm text-gray-600">Users</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+    {/* Performance Summary */}
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded border border-blue-200 p-6 h-full">
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">Performance Summary</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="text-center bg-white rounded p-4 shadow-sm">
+          <div className="text-2xl font-bold text-blue-600">{metrics?.cpu.cores}</div>
+          <div className="text-sm text-gray-600 mt-1">CPU Cores</div>
+        </div>
+        <div className="text-center bg-white rounded p-4 shadow-sm">
+          <div className="text-2xl font-bold text-indigo-600">{metrics?.cpu.loadAverage?.[0]?.toFixed(2)}</div>
+          <div className="text-sm text-gray-600 mt-1">Load Avg</div>
+        </div>
+        <div className="text-center bg-white rounded p-4 shadow-sm">
+          <div className="text-2xl font-bold text-green-600">{metrics?.logs.errorCount}</div>
+          <div className="text-sm text-gray-600 mt-1">Errors</div>
+        </div>
+        <div className="text-center bg-white rounded p-4 shadow-sm">
+          <div className="text-2xl font-bold text-purple-600">{metrics?.users}</div>
+          <div className="text-sm text-gray-600 mt-1">Active Users</div>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="text-center bg-white rounded p-3 shadow-sm">
+          <div className="text-lg font-bold text-orange-600">{metrics?.processes?.length || 0}</div>
+          <div className="text-xs text-gray-600">Processes</div>
+        </div>
+        <div className="text-center bg-white rounded p-3 shadow-sm">
+          <div className="text-lg font-bold text-cyan-600">{metrics?.disk.available}</div>
+          <div className="text-xs text-gray-600">Disk Free</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
           </div>
         )}
 
