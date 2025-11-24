@@ -171,7 +171,7 @@ export default function UserDashboard() {
     },
     {
       type: 'todaysRoster',
-      title: 'Today\'s Roster',
+      title: 'My Roster',
       dataKey: 'todaysRoster',
       hideForOps: true,
       hideForIntern: true,
