@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import MediumSpinner from '../../../components/MediumSpinner';
 
 export default function TaskLogPage() {
   const router = useRouter();
@@ -35,22 +36,6 @@ export default function TaskLogPage() {
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-  };
-
-  // Enhanced spinner component
-  const ModernSpinner = ({ size = 'medium', className = '' }) => {
-    const sizeClasses = {
-      small: 'w-4 h-4',
-      medium: 'w-6 h-6',
-      large: 'w-8 h-8',
-      xl: 'w-12 h-12'
-    };
-
-    return (
-      <div className={`inline-flex items-center justify-center ${sizeClasses[size]} ${className}`}>
-        <div className={`${sizeClasses[size]} border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin`}></div>
-      </div>
-    );
   };
 
   // Fetch task log
@@ -297,7 +282,7 @@ export default function TaskLogPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <ModernSpinner size="xl" className="mx-auto mb-4" />
+          <MediumSpinner />
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Loading Task Log</h3>
           <p className="text-gray-600">Preparing comprehensive task history</p>
         </div>
@@ -430,400 +415,400 @@ export default function TaskLogPage() {
         </motion.div>
 
         {/* Main Content */}
-        <div className="bg-white rounded shadow-md p-6 border border-gray-200">
-          {/* Header with Controls */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
-            <div className="flex items-center mb-4 lg:mb-0">
-              <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-600 rounded mr-3 shadow-md">
-                <FaTasks className="text-white text-sm" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Task History</h2>
-                <p className="text-gray-600 text-sm">
-                  {filteredTasks.length} task(s) found
-                  {filterStatus !== 'all' && ` • ${filterStatus.replace('-', ' ')}`}
-                  {filterImportant !== 'all' && ` • ${filterImportant}`}
-                  {filterAssignee !== 'all' && ` • ${filterAssignee}`}
-                  {filterSolvedBy !== 'all' && ` • Solved by: ${filterSolvedBy}`}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-2">
-              {/* Search */}
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs" />
-                <input
-                  type="text"
-                  placeholder="Search tasks..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm w-full sm:w-48"
-                />
-              </div>
+        <div className="bg-white rounded shadow-md p-4 border border-gray-200">
+  {/* Header with Controls */}
+  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4">
+    <div className="flex items-center mb-3 lg:mb-0">
+      <div className="p-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded mr-2 shadow-md">
+        <FaTasks className="text-white text-xs" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">Task History</h2>
+        <p className="text-gray-600 text-xs">
+          {filteredTasks.length} task(s) found
+          {filterStatus !== 'all' && ` • ${filterStatus.replace('-', ' ')}`}
+          {filterImportant !== 'all' && ` • ${filterImportant}`}
+          {filterAssignee !== 'all' && ` • ${filterAssignee}`}
+          {filterSolvedBy !== 'all' && ` • Solved by: ${filterSolvedBy}`}
+        </p>
+      </div>
+    </div>
+    
+    <div className="flex flex-col sm:flex-row gap-2">
+      {/* Search */}
+      <div className="relative">
+        <FaSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs" />
+        <input
+          type="text"
+          placeholder="Search tasks..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-7 pr-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent text-gray-900 text-xs w-full sm:w-40"
+        />
+      </div>
 
-              {/* Filter Toggle */}
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-sm text-gray-700"
-              >
-                <FaFilter className="mr-2 text-gray-600" />
-                Filters
-                {showFilters ? <FaEyeSlash className="ml-1" /> : <FaEye className="ml-1" />}
-              </button>
+      {/* Filter Toggle */}
+      <button
+        onClick={() => setShowFilters(!showFilters)}
+        className="flex items-center px-2 py-1.5 border border-gray-300 rounded hover:bg-gray-50 transition-colors text-xs text-gray-700"
+      >
+        <FaFilter className="mr-1 text-gray-600" />
+        Filters
+        {showFilters ? <FaEyeSlash className="ml-1" /> : <FaEye className="ml-1" />}
+      </button>
 
-              {/* Export Button */}
-              <button
-                onClick={exportToCSV}
-                className="flex items-center px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded hover:shadow-md transition-all duration-200 text-sm font-semibold"
-              >
-                <FaDownload className="mr-2" />
-                Export CSV
-              </button>
+      {/* Export Button */}
+      <button
+        onClick={exportToCSV}
+        className="flex items-center px-2 py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded hover:shadow-md transition-all duration-200 text-xs font-semibold"
+      >
+        <FaDownload className="mr-1" />
+        Export
+      </button>
 
-              {/* Refresh Button */}
-              <button
-                onClick={fetchTaskLog}
-                className="flex items-center px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded hover:shadow-md transition-all duration-200 text-sm font-semibold"
-              >
-                <FaSync className="mr-2" />
-                Refresh
-              </button>
+      {/* Refresh Button */}
+      <button
+        onClick={fetchTaskLog}
+        className="flex items-center px-2 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded hover:shadow-md transition-all duration-200 text-xs font-semibold"
+      >
+        <FaSync className="mr-1" />
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  {/* Advanced Filters */}
+  <AnimatePresence>
+    {showFilters && (
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        className="mb-4 overflow-hidden"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 p-3 bg-gray-50 rounded border border-gray-200">
+          {/* Status Filter */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-800 mb-1">Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+            >
+              <option value="all">All Status</option>
+              <option value="IN-PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+          </div>
+
+          {/* Importance Filter */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-800 mb-1">Priority</label>
+            <select
+              value={filterImportant}
+              onChange={(e) => setFilterImportant(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+            >
+              <option value="all">All Priority</option>
+              <option value="important">Important</option>
+              <option value="normal">Normal</option>
+            </select>
+          </div>
+
+          {/* Assignee Filter */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-800 mb-1">Assignee</label>
+            <select
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+            >
+              <option value="all">All Assignees</option>
+              {uniqueAssignees.map(assignee => (
+                <option key={assignee} value={assignee}>{assignee}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Solved By Filter */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-800 mb-1">Solved By</label>
+            <select
+              value={filterSolvedBy}
+              onChange={(e) => setFilterSolvedBy(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+            >
+              <option value="all">All Solvers</option>
+              <option value="unsolved">Unsolved</option>
+              {uniqueSolvedBy.map(solver => (
+                <option key={solver} value={solver}>{solver}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Range */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-800 mb-1">Date Range</label>
+            <div className="space-y-1">
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+                placeholder="Start Date"
+              />
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 text-xs"
+                placeholder="End Date"
+              />
             </div>
           </div>
 
-          {/* Advanced Filters */}
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-6 overflow-hidden"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-gray-50 rounded border border-gray-200">
-                  {/* Status Filter */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Status</label>
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="IN-PROGRESS">In Progress</option>
-                      <option value="COMPLETED">Completed</option>
-                    </select>
-                  </div>
-
-                  {/* Importance Filter */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Priority</label>
-                    <select
-                      value={filterImportant}
-                      onChange={(e) => setFilterImportant(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                    >
-                      <option value="all">All Priority</option>
-                      <option value="important">Important</option>
-                      <option value="normal">Normal</option>
-                    </select>
-                  </div>
-
-                  {/* Assignee Filter */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Assignee</label>
-                    <select
-                      value={filterAssignee}
-                      onChange={(e) => setFilterAssignee(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                    >
-                      <option value="all">All Assignees</option>
-                      {uniqueAssignees.map(assignee => (
-                        <option key={assignee} value={assignee}>{assignee}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Solved By Filter */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Solved By</label>
-                    <select
-                      value={filterSolvedBy}
-                      onChange={(e) => setFilterSolvedBy(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                    >
-                      <option value="all">All Solvers</option>
-                      <option value="unsolved">Unsolved</option>
-                      {uniqueSolvedBy.map(solver => (
-                        <option key={solver} value={solver}>{solver}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Date Range */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-800 mb-2">Date Range</label>
-                    <div className="space-y-2">
-                      <input
-                        type="date"
-                        value={dateRange.start}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                        placeholder="Start Date"
-                      />
-                      <input
-                        type="date"
-                        value={dateRange.end}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-                        placeholder="End Date"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Reset Filters */}
-                  <div className="md:col-span-2 lg:col-span-5 flex justify-end">
-                    <button
-                      onClick={resetFilters}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-100 transition-colors text-sm font-semibold"
-                    >
-                      Reset All Filters
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Tasks Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('assign_task_id')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Task ID</span>
-                      {sortConfig.key === 'assign_task_id' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('task_title')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Task Details</span>
-                      {sortConfig.key === 'task_title' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Assigned By
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Assigned To
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Status</span>
-                      {sortConfig.key === 'status' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('is_important')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Priority</span>
-                      {sortConfig.key === 'is_important' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('solved_by')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Solved By</span>
-                      {sortConfig.key === 'solved_by' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
-                    onClick={() => handleSort('created_at')}
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Date</span>
-                      {sortConfig.key === 'created_at' ? (
-                        sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
-                      ) : (
-                        <FaSort className="text-gray-400" />
-                      )}
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTasks.length > 0 ? (
-                  filteredTasks.map((task, index) => (
-                    <motion.tr
-                      key={`${task.assign_task_id}-${task.serial}-${index}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={`hover:bg-gray-50 transition-colors ${
-                        task.is_important ? 'bg-yellow-50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900 font-semibold">
-                        {task.assign_task_id}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-start space-x-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center space-x-2 mb-1">
-                              <h3 
-                                className="text-sm font-semibold text-gray-900 break-words max-w-md"
-                                title={task.task_title}
-                              >
-                                {task.task_title}
-                              </h3>
-                              {task.task_type && (
-                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium border border-blue-200 flex-shrink-0">
-                                  {task.task_type}
-                                </span>
-                              )}
-                            </div>
-                            {task.remark && (
-                              <p 
-                                className="text-xs text-gray-600 break-words max-w-md" 
-                                title={task.remark}
-                              >
-                                {task.remark}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <FaUser className="text-gray-400 text-xs" />
-                          <span className="text-sm text-gray-900">{capitalizeName(task.assigned_by)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {task.assigned_to.split(',').map((assignee, idx) => {
-                            const formattedAssignee = capitalizeName(assignee.trim());
-                            return (
-                              <span 
-                                key={`${task.assign_task_id}-assignee-${idx}`}
-                                className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs border border-gray-200 break-words max-w-full"
-                              >
-                                <FaUsers className="mr-1 text-xs flex-shrink-0" />
-                                <span className="truncate">{formattedAssignee}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {getStatusBadge(task.status)}
-                        {task.solved_date && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {formatShortDate(task.solved_date)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {task.is_important ? (
-                          <div className="flex items-center space-x-1">
-                            <FaStar className="text-yellow-500 text-lg" />
-                            <span className="text-xs text-gray-600 font-medium">Important</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-1">
-                            <FaRegStar className="text-gray-400 text-lg" />
-                            <span className="text-xs text-gray-500">Normal</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {task.solved_by ? (
-                          <div className="flex items-center space-x-2">
-                            <FaUserCheck className="text-green-500 text-sm" />
-                            <span className="text-sm text-gray-900">{capitalizeName(task.solved_by)}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-500 italic">Not solved yet</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {formatShortDate(task.created_at)}
-                      </td>
-                    </motion.tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="8" className="px-4 py-8 text-center">
-                      <div className="p-3 bg-gradient-to-br from-gray-50 to-blue-50 rounded border border-gray-200 inline-block mb-3">
-                        <FaTasks className="text-2xl text-gray-400" />
-                      </div>
-                      <h3 className="text-base font-semibold text-gray-700 mb-1">No tasks found</h3>
-                      <p className="text-gray-500 text-sm">
-                        {searchTerm || filterStatus !== 'all' || filterImportant !== 'all' || filterAssignee !== 'all' || filterSolvedBy !== 'all'
-                          ? 'Try adjusting your search or filter criteria'
-                          : 'No task history available'
-                        }
-                      </p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Info */}
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-700">
-            <div>
-              Showing <span className="font-semibold">{filteredTasks.length}</span> of{' '}
-              <span className="font-semibold">{tasks.length}</span> tasks
-            </div>
-            <div className="text-xs text-gray-500">
-              Last updated: {new Date().toLocaleTimeString()}
-            </div>
+          {/* Reset Filters */}
+          <div className="md:col-span-2 lg:col-span-5 flex justify-end">
+            <button
+              onClick={resetFilters}
+              className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded hover:bg-gray-100 transition-colors text-xs font-semibold"
+            >
+              Reset All Filters
+            </button>
           </div>
         </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+
+  {/* Tasks Table */}
+  <div className="overflow-x-auto">
+    <table className="w-full min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('assign_task_id')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Task ID</span>
+              {sortConfig.key === 'assign_task_id' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('task_title')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Task Details</span>
+              {sortConfig.key === 'task_title' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+          <th scope="col" className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Assigned By
+          </th>
+          <th scope="col" className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Assigned To
+          </th>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('status')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Status</span>
+              {sortConfig.key === 'status' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('is_important')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Priority</span>
+              {sortConfig.key === 'is_important' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('solved_by')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Solved By</span>
+              {sortConfig.key === 'solved_by' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+          <th 
+            scope="col" 
+            className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
+            onClick={() => handleSort('created_at')}
+          >
+            <div className="flex items-center space-x-1">
+              <span>Date</span>
+              {sortConfig.key === 'created_at' ? (
+                sortConfig.direction === 'asc' ? <FaSortUp /> : <FaSortDown />
+              ) : (
+                <FaSort className="text-gray-400" />
+              )}
+            </div>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {filteredTasks.length > 0 ? (
+          filteredTasks.map((task, index) => (
+            <motion.tr
+              key={`${task.assign_task_id}-${task.serial}-${index}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: index * 0.05 }}
+              className={`hover:bg-gray-50 transition-colors ${
+                task.is_important ? 'bg-yellow-50' : ''
+              }`}
+            >
+              <td className="px-3 py-2 whitespace-nowrap text-xs font-mono text-gray-900 font-semibold">
+                {task.assign_task_id}
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex items-start space-x-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-1 mb-0.5">
+                      <h3 
+                        className="text-xs font-semibold text-gray-900 break-words max-w-md"
+                        title={task.task_title}
+                      >
+                        {task.task_title}
+                      </h3>
+                      {task.task_type && (
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium border border-blue-200 flex-shrink-0">
+                          {task.task_type}
+                        </span>
+                      )}
+                    </div>
+                    {task.remark && (
+                      <p 
+                        className="text-xs text-gray-600 break-words max-w-md" 
+                        title={task.remark}
+                      >
+                        {task.remark}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                <div className="flex items-center space-x-1">
+                  <FaUser className="text-gray-400 text-xs" />
+                  <span className="text-xs text-gray-900">{capitalizeName(task.assigned_by)}</span>
+                </div>
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap gap-0.5 max-w-xs">
+                  {task.assigned_to.split(',').map((assignee, idx) => {
+                    const formattedAssignee = capitalizeName(assignee.trim());
+                    return (
+                      <span 
+                        key={`${task.assign_task_id}-assignee-${idx}`}
+                        className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 text-gray-800 rounded text-xs border border-gray-200 break-words max-w-full"
+                      >
+                        <FaUsers className="mr-0.5 text-xs flex-shrink-0" />
+                        <span className="truncate">{formattedAssignee}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {getStatusBadge(task.status)}
+                {task.solved_date && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {formatShortDate(task.solved_date)}
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {task.is_important ? (
+                  <div className="flex items-center space-x-1">
+                    <FaStar className="text-yellow-500 text-sm" />
+                    <span className="text-xs text-gray-600 font-medium">Important</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1">
+                    <FaRegStar className="text-gray-400 text-sm" />
+                    <span className="text-xs text-gray-500">Normal</span>
+                  </div>
+                )}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {task.solved_by ? (
+                  <div className="flex items-center space-x-1">
+                    <FaUserCheck className="text-green-500 text-xs" />
+                    <span className="text-xs text-gray-900">{capitalizeName(task.solved_by)}</span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-500 italic">Not solved yet</span>
+                )}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                {formatShortDate(task.created_at)}
+              </td>
+            </motion.tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan="8" className="px-3 py-6 text-center">
+              <div className="p-2 bg-gradient-to-br from-gray-50 to-blue-50 rounded border border-gray-200 inline-block mb-2">
+                <FaTasks className="text-xl text-gray-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-0.5">No tasks found</h3>
+              <p className="text-gray-500 text-xs">
+                {searchTerm || filterStatus !== 'all' || filterImportant !== 'all' || filterAssignee !== 'all' || filterSolvedBy !== 'all'
+                  ? 'Try adjusting your search or filter criteria'
+                  : 'No task history available'
+                }
+              </p>
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  {/* Pagination Info */}
+  <div className="mt-3 flex items-center justify-between text-xs text-gray-700">
+    <div>
+      Showing <span className="font-semibold">{filteredTasks.length}</span> of{' '}
+      <span className="font-semibold">{tasks.length}</span> tasks
+    </div>
+    <div className="text-xs text-gray-500">
+      Last updated: {new Date().toLocaleTimeString()}
+    </div>
+  </div>
+</div>
       </div>
     </div>
   );

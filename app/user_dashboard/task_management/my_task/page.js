@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import MediumSpinner from '../../../components/MediumSpinner';
 
 export default function MyTasksPage() {
   const router = useRouter();
@@ -27,21 +28,6 @@ export default function MyTasksPage() {
   const [filterImportant, setFilterImportant] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
 
-  // Enhanced spinner component
-  const ModernSpinner = ({ size = 'medium', className = '' }) => {
-    const sizeClasses = {
-      small: 'w-4 h-4',
-      medium: 'w-6 h-6',
-      large: 'w-8 h-8',
-      xl: 'w-12 h-12'
-    };
-
-    return (
-      <div className={`inline-flex items-center justify-center ${sizeClasses[size]} ${className}`}>
-        <div className={`${sizeClasses[size]} border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin`}></div>
-      </div>
-    );
-  };
 
   // Fetch user's tasks
   const fetchMyTasks = async () => {
@@ -217,8 +203,8 @@ export default function MyTasksPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <ModernSpinner size="xl" className="mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">Loading Your Tasks</h3>
+          <MediumSpinner />
+          <h3 className="text-xl font-semibold text-gray-800 mb-2 mt-4">Loading Your Tasks</h3>
           <p className="text-gray-600">Preparing your task management interface</p>
         </div>
       </div>
@@ -490,7 +476,7 @@ export default function MyTasksPage() {
                                 className="flex items-center justify-center px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded text-xs font-semibold hover:shadow-md transition-all duration-200 disabled:opacity-50"
                               >
                                 {completingTask === task.assign_task_id ? (
-                                  <ModernSpinner size="small" className="mr-1" />
+                                  <MediumSpinner />
                                 ) : (
                                   <FaCheckCircle className="mr-1 text-xs" />
                                 )}
@@ -710,7 +696,7 @@ export default function MyTasksPage() {
                   >
                     {completingTask ? (
                       <>
-                        <ModernSpinner size="small" className="mr-1" />
+                        <MediumSpinner />
                         Completing...
                       </>
                     ) : (

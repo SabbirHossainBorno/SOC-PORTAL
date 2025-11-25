@@ -15,7 +15,7 @@ import {
 import { toast } from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import SmallSpinner from '../../components/SmallSpinner';
+import MediumSpinner from '../../components/MediumSpinner';
 import { exportDowntimeToExcel } from '../../../lib/exportToExcel';
 
 // Force dynamic rendering to bypass prerendering
@@ -1104,7 +1104,7 @@ const activeFilterCount = Object.values(filters).filter(value =>
           
           {loading && (
             <div className="py-12 text-center">
-              <SmallSpinner />
+              <MediumSpinner />
               <p className="mt-2 text-gray-500">Loading downtime records...</p>
             </div>
           )}
