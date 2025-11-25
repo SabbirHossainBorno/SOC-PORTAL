@@ -1,4 +1,3 @@
-// app/api/user_dashboard/dashboard_card/route.js
 import { query } from '../../../../lib/db';
 import { cookies } from 'next/headers';
 import logger from '../../../../lib/logger';
@@ -39,6 +38,8 @@ export async function GET(request) {
       });
     }
 
+    console.log('🔍 Starting dashboard data fetch for:', { socPortalId, roleType });
+
     // Get user short_name for all authenticated users
     let shortName = null;
     let rosterData = {
@@ -49,6 +50,8 @@ export async function GET(request) {
     const userQuery = 'SELECT short_name FROM user_info WHERE soc_portal_id = $1';
     const userResult = await query(userQuery, [socPortalId]);
     shortName = userResult.rows[0]?.short_name;
+
+    console.log('👤 User info fetched:', { shortName, roleType });
 
     // Only fetch roster for SOC users with valid short_name
     if (roleType === 'SOC' && shortName) {
@@ -82,38 +85,15 @@ export async function GET(request) {
           tomorrow: tomorrowRoster?.shift || 'Not Assigned'
         };
 
-        logger.info('Roster data fetched successfully', {
-          meta: {
-            taskName,
-            shortName,
-            todayRoster: rosterData.today,
-            tomorrowRoster: rosterData.tomorrow
-          }
-        });
+        console.log('📅 Roster data:', rosterData);
       } catch (rosterError) {
-        logger.warn('Roster data not available for user', {
-          meta: {
-            taskName,
-            shortName,
-            error: rosterError.message
-          }
-        });
+        console.warn('Roster data not available:', rosterError.message);
         rosterData = {
           today: 'Not Available',
           tomorrow: 'Not Available'
         };
       }
     }
-
-    logger.info('User info processed', {
-      meta: {
-        taskName,
-        shortName,
-        socPortalId,
-        roleType,
-        hasRoster: roleType === 'SOC'
-      }
-    });
 
     // 1. Downtime Count & Duration - Fixed calculation
     const downtimeQuery = `
@@ -216,22 +196,9 @@ export async function GET(request) {
           byDate: byDate
         };
 
-        logger.info('Mail queue data fetched successfully', {
-          meta: {
-            taskName,
-            roleType,
-            totalMails: mailQueue.total,
-            dateWiseEntries: mailQueue.byDate.length
-          }
-        });
+        console.log('📧 Mail queue data:', { total: mailQueue.total, dates: mailQueue.byDate.length });
       } catch (mailError) {
-        logger.warn('Failed to fetch mail queue data', {
-          meta: {
-            taskName,
-            roleType,
-            error: mailError.message
-          }
-        });
+        console.warn('Failed to fetch mail queue data:', mailError.message);
         mailQueue = {
           total: 0,
           byDate: []
@@ -310,35 +277,13 @@ export async function GET(request) {
             important: parseInt(taskStats.important) || 0
           };
           
-          logger.info('Assigned tasks data fetched successfully', {
-            meta: {
-              taskName,
-              shortName,
-              totalTasks: assignedTaskData.total,
-              completed: assignedTaskData.completed,
-              inProgress: assignedTaskData.in_progress,
-              important: assignedTaskData.important
-            }
-          });
+          console.log('📝 Assigned tasks:', assignedTaskData);
         } else {
           assignedTaskData = getFallbackTaskData(roleType);
-          logger.warn('No assigned tasks data found, using fallback', {
-            meta: {
-              taskName,
-              shortName,
-              roleType
-            }
-          });
+          console.warn('No assigned tasks data found, using fallback');
         }
       } catch (taskError) {
-        logger.warn('Failed to fetch assigned tasks data, using fallback', {
-          meta: {
-            taskName,
-            shortName,
-            error: taskError.message,
-            roleType
-          }
-        });
+        console.warn('Failed to fetch assigned tasks data:', taskError.message);
         assignedTaskData = getFallbackTaskData(roleType);
       }
     } else {
@@ -355,6 +300,8 @@ export async function GET(request) {
 
     if (shortName) {
       try {
+        console.log('🎯 Calculating performance for:', { roleType, shortName });
+        
         let performanceData = {};
         
         if (roleType === 'INTERN') {
@@ -368,6 +315,8 @@ export async function GET(request) {
           performanceData = await calculateSocPerformance(shortName, socPortalId);
         }
 
+        console.log('📊 Performance calculated:', performanceData);
+
         myPerformance = {
           score: performanceData.score,
           grade: performanceData.grade,
@@ -375,39 +324,15 @@ export async function GET(request) {
           metrics: performanceData.metrics
         };
 
-        logger.info('Performance calculated successfully', {
-          meta: {
-            taskName,
-            roleType,
-            shortName,
-            performanceScore: myPerformance.score,
-            grade: myPerformance.grade,
-            level: myPerformance.level
-          }
-        });
-
       } catch (performanceError) {
-        logger.warn('Failed to calculate performance, using fallback', {
-          meta: {
-            taskName,
-            shortName,
-            roleType,
-            error: performanceError.message
-          }
-        });
+        console.error('❌ Performance calculation failed:', performanceError);
         myPerformance = getFallbackPerformance(roleType);
       }
     } else {
       myPerformance = getFallbackPerformance(roleType);
     }
 
-    logger.info('Executing database queries', {
-      meta: {
-        taskName,
-        queries: ['downtime', 'mail', 'document', 'device', 'sim', 'activity', 'assigned_tasks', 'performance'],
-        roleType
-      }
-    });
+    console.log('🚀 Executing database queries in parallel');
 
     // Execute queries in parallel
     const [
@@ -431,21 +356,15 @@ export async function GET(request) {
     const simData = simResult.rows[0] || {};
     const totalActivity = parseInt(activityResult.rows[0]?.count) || 0;
 
-    logger.info('Database queries completed', {
-      meta: {
-        taskName,
-        downtimeCount: downtimeData.total_count,
-        mailQueue: mailQueue.total,
-        documentCount,
-        deviceTotal: deviceData.total,
-        simTotal: simData.total,
-        simActive: simData.active,
-        simInactive: simData.inactive,
-        totalActivity,
-        assignedTasks: assignedTaskData?.total || 0,
-        performanceScore: myPerformance.score,
-        roleType
-      }
+    console.log('✅ Database queries completed:', {
+      downtimeCount: downtimeData.total_count,
+      mailQueue: mailQueue.total,
+      documentCount,
+      deviceTotal: deviceData.total,
+      simTotal: simData.total,
+      totalActivity,
+      assignedTasks: assignedTaskData?.total || 0,
+      performanceScore: myPerformance.score
     });
 
     // Helper function to convert seconds to minutes
@@ -513,24 +432,7 @@ export async function GET(request) {
 
     const duration = Date.now() - startTime;
     
-    logger.info('Dashboard cards data prepared successfully', {
-      meta: {
-        taskName,
-        duration,
-        roleType,
-        dataSummary: {
-          downtimeEvents: responseData.data.downtimeCount.total,
-          totalDuration: responseData.data.duration.total,
-          assignedTasks: responseData.data.assignedTask?.total || 0,
-          mailQueue: responseData.data.mailQueue?.total || 0,
-          documentCount: responseData.data.document,
-          deviceCount: responseData.data.deviceCount.total,
-          simCount: responseData.data.simCount.total,
-          performanceScore: responseData.data.myPerformance.score,
-          cardsReturned: Object.keys(responseData.data).length
-        }
-      }
-    });
+    console.log('🎉 Dashboard cards data prepared successfully in', duration, 'ms');
 
     return new Response(JSON.stringify(responseData), {
       status: 200,
@@ -543,15 +445,8 @@ export async function GET(request) {
   } catch (error) {
     const duration = Date.now() - startTime;
     
-    logger.error('Failed to fetch dashboard cards', {
-      meta: {
-        taskName,
-        duration,
-        error: error.message,
-        errorStack: error.stack,
-        endpoint: '/api/user_dashboard/dashboard_card'
-      }
-    });
+    console.error('❌ Failed to fetch dashboard cards:', error);
+    console.error('Error stack:', error.stack);
 
     return new Response(JSON.stringify({
       success: false,
@@ -564,250 +459,313 @@ export async function GET(request) {
   }
 }
 
-// Performance Calculation Functions
-
-// INTERN: Only assigned tasks (100% weight)
+// INTERN: Only assigned tasks (100% weight) - FIXED
 async function calculateInternPerformance(shortName, socPortalId) {
+  console.log('🎯 Calculating INTERN performance for:', shortName);
+  
   const taskQuery = `
     SELECT 
-      -- Average completion time in hours for completed tasks
-      AVG(EXTRACT(EPOCH FROM (solved_date - created_at))/3600) as avg_completion_hours,
-      
-      -- Tasks completed within 1 day (good)
-      COUNT(CASE WHEN solved_date - created_at <= INTERVAL '1 day' THEN 1 END) as tasks_within_1_day,
-      
-      -- Tasks taking more than 2 days (bad)
-      COUNT(CASE WHEN solved_date - created_at > INTERVAL '2 days' THEN 1 END) as tasks_over_2_days,
-      
-      -- Total completed tasks
-      COUNT(*) as total_completed_tasks,
-      
-      -- In-progress tasks older than 2 days
-      COUNT(CASE WHEN status = 'IN-PROGRESS' AND created_at <= (NOW() - INTERVAL '2 days') THEN 1 END) as stale_tasks,
-      
-      -- Total assigned tasks
-      COUNT(*) as total_assigned_tasks
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as total_completed_tasks,
+      COUNT(*) as total_assigned_tasks,
+      COUNT(CASE WHEN status = 'IN-PROGRESS' THEN 1 END) as in_progress_tasks
     FROM assigned_tasks 
     WHERE assigned_to ILIKE $1 
     AND (solved_by ILIKE $1 OR status = 'IN-PROGRESS')
   `;
 
-  const taskResult = await query(taskQuery, [shortName]);
-  const taskData = taskResult.rows[0] || {};
+  try {
+    const taskResult = await query(taskQuery, [shortName]);
+    const taskData = taskResult.rows[0] || {};
+    
+    console.log('📝 INTERN task data:', taskData);
 
-  // Calculate score based only on tasks (100% weight)
-  let score = calculateTaskScore(taskData);
-  
-  const { grade, level } = getPerformanceGrade(score);
-
-  return {
-    score,
-    grade,
-    level,
-    metrics: {
-      avgCompletionHours: Math.round((taskData.avg_completion_hours || 48) * 10) / 10,
-      tasksWithin1Day: parseInt(taskData.tasks_within_1_day) || 0,
-      tasksOver2Days: parseInt(taskData.tasks_over_2_days) || 0,
-      totalCompletedTasks: parseInt(taskData.total_completed_tasks) || 0,
-      staleTasks: parseInt(taskData.stale_tasks) || 0,
-      totalAssignedTasks: parseInt(taskData.total_assigned_tasks) || 0
+    let score;
+    if (parseInt(taskData.total_assigned_tasks) === 0) {
+      score = 100;
+      console.log('🎯 No tasks assigned, giving 100% score');
+    } else {
+      const completionRate = (parseInt(taskData.total_completed_tasks) / parseInt(taskData.total_assigned_tasks)) * 100;
+      score = Math.min(completionRate, 100);
     }
-  };
+    
+    const { grade, level } = getPerformanceGrade(score);
+
+    const result = {
+      score: Math.round(score),
+      grade,
+      level,
+      metrics: {
+        totalCompletedTasks: parseInt(taskData.total_completed_tasks) || 0,
+        totalAssignedTasks: parseInt(taskData.total_assigned_tasks) || 0,
+        inProgressTasks: parseInt(taskData.in_progress_tasks) || 0
+      }
+    };
+
+    console.log('✅ INTERN performance result:', result);
+    return result;
+
+  } catch (error) {
+    console.error('❌ INTERN performance calculation failed:', error);
+    throw error;
+  }
 }
 
-// OPS: Only mail resolution (100% weight)
+// OPS: Only mail resolution (100% weight) - FIXED
 async function calculateOpsPerformance(shortName, socPortalId) {
+  console.log('🎯 Calculating OPS performance for:', shortName);
+  
   const mailQuery = `
     SELECT 
-      COUNT(*) as solved_mails,
-      COUNT(CASE WHEN task_solve_date - task_raised_date <= INTERVAL '1 day' THEN 1 END) as mails_within_1_day,
-      COUNT(CASE WHEN task_solve_date - task_raised_date > INTERVAL '2 days' THEN 1 END) as mails_over_2_days,
-      COUNT(CASE WHEN status = 'IN-PROGRESS' AND task_raised_date <= CURRENT_DATE - INTERVAL '2 days' THEN 1 END) as pending_mails,
-      AVG(EXTRACT(EPOCH FROM (task_solve_date - task_raised_date))/3600) as avg_resolution_hours
+      COUNT(CASE WHEN status = 'SOLVED' THEN 1 END) as solved_mails,
+      COUNT(*) as total_mails,
+      COUNT(CASE WHEN status = 'IN-PROGRESS' THEN 1 END) as pending_mails,
+      -- Calculate quick mails (solved within 1 day)
+      COUNT(CASE 
+        WHEN status = 'SOLVED' 
+        AND task_solve_date IS NOT NULL 
+        AND task_raised_date IS NOT NULL
+        AND (task_solve_date::date - task_raised_date::date) <= 1 
+        THEN 1 
+      END) as mails_within_1_day,
+      -- Calculate slow mails (took more than 2 days)
+      COUNT(CASE 
+        WHEN status = 'SOLVED' 
+        AND task_solve_date IS NOT NULL 
+        AND task_raised_date IS NOT NULL
+        AND (task_solve_date::date - task_raised_date::date) > 2 
+        THEN 1 
+      END) as mails_over_2_days,
+      -- Average resolution time in days
+      AVG(
+        CASE 
+          WHEN status = 'SOLVED' 
+          AND task_solve_date IS NOT NULL 
+          AND task_raised_date IS NOT NULL
+          THEN (task_solve_date::date - task_raised_date::date) 
+          ELSE NULL 
+        END
+      ) as avg_resolution_days
     FROM mail_tracking 
     WHERE (solved_by ILIKE $1 OR tracked_by ILIKE $1)
-    AND task_raised_date >= CURRENT_DATE - INTERVAL '30 days'
+    AND task_raised_date >= CURRENT_DATE - 30
   `;
 
-  const mailResult = await query(mailQuery, [shortName]);
-  const mailData = mailResult.rows[0] || {};
+  try {
+    const mailResult = await query(mailQuery, [shortName]);
+    const mailData = mailResult.rows[0] || {};
+    
+    console.log('📧 OPS mail data:', mailData);
 
-  // Calculate score based only on mail resolution (100% weight)
-  let score = calculateMailScore(mailData);
+    let score;
+    if (parseInt(mailData.total_mails) === 0) {
+      score = 100;
+      console.log('🎯 No mails handled, giving 100% score');
+    } else {
+      const resolutionRate = (parseInt(mailData.solved_mails) / parseInt(mailData.total_mails)) * 100;
+      const quickRate = (parseInt(mailData.mails_within_1_day) / Math.max(parseInt(mailData.solved_mails), 1)) * 100;
+      
+      // Base score on resolution rate, bonus for quick resolutions
+      score = resolutionRate + (quickRate * 0.3);
+      score = Math.min(score, 100);
+    }
+    
+    const { grade, level } = getPerformanceGrade(score);
+
+    const result = {
+      score: Math.round(score),
+      grade,
+      level,
+      metrics: {
+        solvedMails: parseInt(mailData.solved_mails) || 0,
+        totalMails: parseInt(mailData.total_mails) || 0,
+        pendingMails: parseInt(mailData.pending_mails) || 0,
+        mailsWithin1Day: parseInt(mailData.mails_within_1_day) || 0,
+        mailsOver2Days: parseInt(mailData.mails_over_2_days) || 0,
+        avgResolutionHours: Math.round((mailData.avg_resolution_days || 1.5) * 24)
+      }
+    };
+
+    console.log('✅ OPS performance result:', result);
+    return result;
+
+  } catch (error) {
+    console.error('❌ OPS performance calculation failed:', error);
+    throw error;
+  }
+}
+
+// SOC: Tasks and mail only (50% tasks + 50% mail) - FIXED
+async function calculateSocPerformance(shortName, socPortalId) {
+  console.log('🎯 Calculating SOC performance for:', shortName);
   
+  const taskQuery = `
+    SELECT 
+      COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as total_completed_tasks,
+      COUNT(*) as total_assigned_tasks,
+      COUNT(CASE WHEN status = 'IN-PROGRESS' THEN 1 END) as in_progress_tasks
+    FROM assigned_tasks 
+    WHERE assigned_to ILIKE $1 
+    AND (solved_by ILIKE $1 OR status = 'IN-PROGRESS')
+  `;
+
+  const mailQuery = `
+    SELECT 
+      COUNT(CASE WHEN status = 'SOLVED' THEN 1 END) as solved_mails,
+      COUNT(*) as total_mails,
+      COUNT(CASE WHEN status = 'IN-PROGRESS' THEN 1 END) as pending_mails,
+      -- Calculate quick mails (solved within 1 day)
+      COUNT(CASE 
+        WHEN status = 'SOLVED' 
+        AND task_solve_date IS NOT NULL 
+        AND task_raised_date IS NOT NULL
+        AND (task_solve_date::date - task_raised_date::date) <= 1 
+        THEN 1 
+      END) as mails_within_1_day,
+      -- Calculate slow mails (took more than 2 days)
+      COUNT(CASE 
+        WHEN status = 'SOLVED' 
+        AND task_solve_date IS NOT NULL 
+        AND task_raised_date IS NOT NULL
+        AND (task_solve_date::date - task_raised_date::date) > 2 
+        THEN 1 
+      END) as mails_over_2_days,
+      -- Average resolution time in days
+      AVG(
+        CASE 
+          WHEN status = 'SOLVED' 
+          AND task_solve_date IS NOT NULL 
+          AND task_raised_date IS NOT NULL
+          THEN (task_solve_date::date - task_raised_date::date) 
+          ELSE NULL 
+        END
+      ) as avg_resolution_days
+    FROM mail_tracking 
+    WHERE (solved_by ILIKE $1 OR tracked_by ILIKE $1)
+    AND task_raised_date >= CURRENT_DATE - 30
+  `;
+
+  try {
+    const [taskResult, mailResult] = await Promise.all([
+      query(taskQuery, [shortName]),
+      query(mailQuery, [shortName])
+    ]);
+
+    const taskData = taskResult.rows[0] || {};
+    const mailData = mailResult.rows[0] || {};
+    
+    console.log('📊 SOC performance data:', { taskData, mailData });
+
+    // Calculate task score
+    let taskScore = 0;
+    if (parseInt(taskData.total_assigned_tasks) > 0) {
+      const completionRate = (parseInt(taskData.total_completed_tasks) / parseInt(taskData.total_assigned_tasks)) * 100;
+      taskScore = Math.min(completionRate, 100);
+    } else {
+      taskScore = 100;
+    }
+
+    // Calculate mail score
+    let mailScore = 0;
+    if (parseInt(mailData.total_mails) > 0) {
+      const resolutionRate = (parseInt(mailData.solved_mails) / parseInt(mailData.total_mails)) * 100;
+      const quickRate = (parseInt(mailData.mails_within_1_day) / Math.max(parseInt(mailData.solved_mails), 1)) * 100;
+      
+      mailScore = resolutionRate + (quickRate * 0.3);
+      mailScore = Math.min(mailScore, 100);
+    } else {
+      mailScore = 100;
+    }
+
+    console.log('📈 Individual scores:', { taskScore, mailScore });
+    
+    let weightedScore;
+    if (parseInt(taskData.total_assigned_tasks) === 0 && parseInt(mailData.total_mails) === 0) {
+      weightedScore = 100;
+      console.log('🎯 No tasks or mails, giving 100% score');
+    } else {
+      // Weighted average: 50% tasks + 50% mail
+      weightedScore = (taskScore * 0.5) + (mailScore * 0.5);
+    }
+    
+    const { grade, level } = getPerformanceGrade(weightedScore);
+
+    const result = {
+      score: Math.round(weightedScore),
+      grade,
+      level,
+      metrics: {
+        totalCompletedTasks: parseInt(taskData.total_completed_tasks) || 0,
+        totalAssignedTasks: parseInt(taskData.total_assigned_tasks) || 0,
+        inProgressTasks: parseInt(taskData.in_progress_tasks) || 0,
+        solvedMails: parseInt(mailData.solved_mails) || 0,
+        totalMails: parseInt(mailData.total_mails) || 0,
+        pendingMails: parseInt(mailData.pending_mails) || 0,
+        mailsWithin1Day: parseInt(mailData.mails_within_1_day) || 0,
+        mailsOver2Days: parseInt(mailData.mails_over_2_days) || 0,
+        avgMailHours: Math.round((mailData.avg_resolution_days || 1.5) * 24)
+      }
+    };
+
+    console.log('✅ SOC performance result:', result);
+    return result;
+
+  } catch (error) {
+    console.error('❌ SOC performance calculation failed:', error);
+    throw error;
+  }
+}
+
+// Remove the broken scoring functions since we're calculating directly
+// Remove calculateTaskScore, calculateMailScore functions
+
+// Update fallback performance
+function getFallbackPerformance(roleType) {
+  console.log('🔄 Using fallback performance for:', roleType);
+  
+  let score, metrics;
+
+  if (roleType === 'INTERN') {
+    score = 75;
+    metrics = {
+      totalCompletedTasks: 5,
+      totalAssignedTasks: 8,
+      inProgressTasks: 3
+    };
+  } else if (roleType === 'OPS') {
+    score = 78;
+    metrics = {
+      solvedMails: 8,
+      totalMails: 10,
+      pendingMails: 2,
+      mailsWithin1Day: 5,
+      mailsOver2Days: 2,
+      avgResolutionHours: 28
+    };
+  } else {
+    score = 82;
+    metrics = {
+      totalCompletedTasks: 12,
+      totalAssignedTasks: 15,
+      inProgressTasks: 3,
+      solvedMails: 6,
+      totalMails: 8,
+      pendingMails: 2,
+      mailsWithin1Day: 4,
+      mailsOver2Days: 2,
+      avgMailHours: 24
+    };
+  }
+
   const { grade, level } = getPerformanceGrade(score);
 
   return {
     score,
     grade,
     level,
-    metrics: {
-      solvedMails: parseInt(mailData.solved_mails) || 0,
-      mailsWithin1Day: parseInt(mailData.mails_within_1_day) || 0,
-      mailsOver2Days: parseInt(mailData.mails_over_2_days) || 0,
-      pendingMails: parseInt(mailData.pending_mails) || 0,
-      avgResolutionHours: Math.round((mailData.avg_resolution_hours || 36) * 10) / 10
-    }
+    metrics
   };
 }
 
-// SOC: All metrics (50% tasks, 30% mail, 20% activity)
-async function calculateSocPerformance(shortName, socPortalId) {
-  const performanceQuery = `
-    -- Task Completion Efficiency (50% weight)
-    WITH task_metrics AS (
-      SELECT 
-        AVG(EXTRACT(EPOCH FROM (solved_date - created_at))/3600) as avg_completion_hours,
-        COUNT(CASE WHEN solved_date - created_at <= INTERVAL '1 day' THEN 1 END) as tasks_within_1_day,
-        COUNT(CASE WHEN solved_date - created_at > INTERVAL '2 days' THEN 1 END) as tasks_over_2_days,
-        COUNT(*) as total_completed_tasks,
-        COUNT(CASE WHEN status = 'IN-PROGRESS' AND created_at <= NOW() - INTERVAL '2 days' THEN 1 END) as stale_tasks
-      FROM assigned_tasks 
-      WHERE assigned_to ILIKE $1 
-      AND status = 'COMPLETED'
-      AND solved_by ILIKE $1
-    ),
-    
-    -- Mail Resolution Efficiency (30% weight)
-    mail_metrics AS (
-      SELECT 
-        COUNT(*) as solved_mails,
-        COUNT(CASE WHEN task_solve_date - task_raised_date <= INTERVAL '1 day' THEN 1 END) as mails_within_1_day,
-        COUNT(CASE WHEN task_solve_date - task_raised_date > INTERVAL '2 days' THEN 1 END) as mails_over_2_days
-      FROM mail_tracking 
-      WHERE solved_by ILIKE $1 
-      AND status = 'SOLVED'
-      AND task_raised_date >= CURRENT_DATE - INTERVAL '30 days'
-    ),
-    
-    -- Overall Activity (20% weight)
-    activity_metrics AS (
-      SELECT 
-        COUNT(*) as total_activities,
-        COUNT(CASE WHEN action_time >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as recent_activities
-      FROM user_activity_log 
-      WHERE soc_portal_id = $2
-      AND action_time >= CURRENT_DATE - INTERVAL '30 days'
-    )
-    
-    SELECT 
-      -- Task metrics
-      COALESCE(tm.avg_completion_hours, 48) as avg_completion_hours,
-      COALESCE(tm.tasks_within_1_day, 0) as tasks_within_1_day,
-      COALESCE(tm.tasks_over_2_days, 0) as tasks_over_2_days,
-      COALESCE(tm.total_completed_tasks, 0) as total_completed_tasks,
-      COALESCE(tm.stale_tasks, 0) as stale_tasks,
-      
-      -- Mail metrics
-      COALESCE(mm.solved_mails, 0) as solved_mails,
-      COALESCE(mm.mails_within_1_day, 0) as mails_within_1_day,
-      COALESCE(mm.mails_over_2_days, 0) as mails_over_2_days,
-      
-      -- Activity metrics
-      COALESCE(am.total_activities, 0) as total_activities,
-      COALESCE(am.recent_activities, 0) as recent_activities
-    FROM task_metrics tm, mail_metrics mm, activity_metrics am
-  `;
-
-  const performanceResult = await query(performanceQuery, [shortName, socPortalId]);
-  const perfData = performanceResult.rows[0] || {};
-
-  // Calculate composite score with weights
-  const taskScore = calculateTaskScore(perfData);
-  const mailScore = calculateMailScore(perfData);
-  const activityScore = calculateActivityScore(perfData);
-  
-  // Weighted average: 50% tasks + 30% mail + 20% activity
-  const weightedScore = (taskScore * 0.5) + (mailScore * 0.3) + (activityScore * 0.2);
-  
-  const { grade, level } = getPerformanceGrade(weightedScore);
-
-  return {
-    score: Math.round(weightedScore),
-    grade,
-    level,
-    metrics: {
-      avgCompletionHours: Math.round(perfData.avg_completion_hours * 10) / 10,
-      tasksWithin1Day: parseInt(perfData.tasks_within_1_day) || 0,
-      tasksOver2Days: parseInt(perfData.tasks_over_2_days) || 0,
-      totalCompletedTasks: parseInt(perfData.total_completed_tasks) || 0,
-      staleTasks: parseInt(perfData.stale_tasks) || 0,
-      solvedMails: parseInt(perfData.solved_mails) || 0,
-      mailsWithin1Day: parseInt(perfData.mails_within_1_day) || 0,
-      mailsOver2Days: parseInt(perfData.mails_over_2_days) || 0,
-      totalActivities: parseInt(perfData.total_activities) || 0,
-      recentActivities: parseInt(perfData.recent_activities) || 0
-    }
-  };
-}
-
-// Helper calculation functions
-function calculateTaskScore(taskData) {
-  let score = 50; // Base score
-
-  if (taskData.total_completed_tasks > 0) {
-    // Completion volume (max 20 points)
-    const volumeScore = Math.min(taskData.total_completed_tasks * 2, 20);
-    
-    // Efficiency based on average completion time (max 30 points)
-    let efficiencyScore = 0;
-    const avgHours = taskData.avg_completion_hours || 48;
-    
-    if (avgHours <= 24) efficiencyScore = 30; // Within 1 day
-    else if (avgHours <= 48) efficiencyScore = 25; // Within 2 days
-    else if (avgHours <= 72) efficiencyScore = 20; // Within 3 days
-    else if (avgHours <= 96) efficiencyScore = 15; // Within 4 days
-    else efficiencyScore = 10; // More than 4 days
-
-    // Quick completion bonus (max 20 points)
-    const quickBonus = Math.min(taskData.tasks_within_1_day * 2, 20);
-    
-    // Penalties (max 20 points deduction)
-    const stalePenalty = Math.min(taskData.stale_tasks * 5, 10);
-    const slowPenalty = Math.min(taskData.tasks_over_2_days * 2, 10);
-
-    score = volumeScore + efficiencyScore + quickBonus - stalePenalty - slowPenalty;
-  }
-
-  return Math.max(0, Math.min(100, score));
-}
-
-function calculateMailScore(mailData) {
-  let score = 50; // Base score
-
-  if (mailData.solved_mails > 0) {
-    // Resolution volume (max 30 points)
-    const volumeScore = Math.min(mailData.solved_mails * 3, 30);
-    
-    // Efficiency based on quick resolutions (max 40 points)
-    const quickRatio = mailData.mails_within_1_day / Math.max(mailData.solved_mails, 1);
-    const efficiencyScore = quickRatio * 40;
-    
-    // Penalties for slow resolutions (max 20 points deduction)
-    const slowPenalty = Math.min(mailData.mails_over_2_days * 4, 20);
-
-    score = volumeScore + efficiencyScore - slowPenalty;
-  }
-
-  return Math.max(0, Math.min(100, score));
-}
-
-function calculateActivityScore(activityData) {
-  let score = 50; // Base score
-
-  if (activityData.total_activities > 0) {
-    // Total activity level (max 30 points)
-    const totalScore = Math.min(activityData.total_activities / 2, 30);
-    
-    // Recent activity (max 20 points)
-    const recentRatio = activityData.recent_activities / Math.max(activityData.total_activities, 1);
-    const recentScore = recentRatio * 20;
-
-    score = totalScore + recentScore;
-  }
-
-  return Math.max(0, Math.min(100, score));
-}
 
 function getPerformanceGrade(score) {
   if (score >= 90) {
@@ -825,54 +783,7 @@ function getPerformanceGrade(score) {
   }
 }
 
-function getFallbackPerformance(roleType) {
-  let score, metrics;
-
-  if (roleType === 'INTERN') {
-    score = 75;
-    metrics = {
-      avgCompletionHours: 36,
-      tasksWithin1Day: 3,
-      tasksOver2Days: 2,
-      totalCompletedTasks: 5,
-      staleTasks: 1,
-      totalAssignedTasks: 8
-    };
-  } else if (roleType === 'OPS') {
-    score = 78;
-    metrics = {
-      solvedMails: 8,
-      mailsWithin1Day: 5,
-      mailsOver2Days: 2,
-      pendingMails: 1,
-      avgResolutionHours: 28
-    };
-  } else {
-    score = 82;
-    metrics = {
-      avgCompletionHours: 28,
-      tasksWithin1Day: 8,
-      tasksOver2Days: 1,
-      totalCompletedTasks: 12,
-      staleTasks: 0,
-      solvedMails: 6,
-      mailsWithin1Day: 4,
-      mailsOver2Days: 2,
-      totalActivities: 35,
-      recentActivities: 20
-    };
-  }
-
-  const { grade, level } = getPerformanceGrade(score);
-
-  return {
-    score,
-    grade,
-    level,
-    metrics
-  };
-}
-
+  
 function getFallbackTaskData(roleType) {
   if (roleType === 'SOC') {
     return {

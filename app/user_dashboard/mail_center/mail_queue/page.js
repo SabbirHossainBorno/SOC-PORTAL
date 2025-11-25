@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
+import MediumSpinner from '../../../../app/components/MediumSpinner';
 
 // Force dynamic rendering to bypass prerendering
 export const dynamic = 'force-dynamic';
@@ -381,8 +382,8 @@ export default function MailQueue() {
           {loading ? (
             <div className="flex justify-center items-center py-16">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600 text-sm">Loading mail queue...</p>
+                <MediumSpinner />
+                <p className="text-gray-600 text-sm mt-4">Loading mail queue...</p>
               </div>
             </div>
           ) : filteredMails.length === 0 ? (

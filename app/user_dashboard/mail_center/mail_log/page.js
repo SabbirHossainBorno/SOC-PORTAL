@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import MediumSpinner from '../../../../app/components/MediumSpinner';
 
 // Force dynamic rendering to bypass prerendering
 export const dynamic = 'force-dynamic';
@@ -592,8 +593,8 @@ export default function MailTrackingView() {
           {loading ? (
             <div className="flex justify-center items-center py-16">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600 text-sm">Loading mail log...</p>
+                <MediumSpinner />
+                <p className="text-gray-600 text-sm mt-4">Loading Mail Log...</p>
               </div>
             </div>
           ) : mailData.length === 0 ? (
